@@ -1,8 +1,8 @@
 {
   "latest": "1.3.1",
-  "date": "2026-01-06",
-  "jsxUrl": "https://YOUR-DIRECT-LINK-TO/ShineTools_v1.3_updateTest.jsx",
+  "jsxUrl": "https://github.com/ShineTools1333/ShineTools/releases/download/v1.3.1/ShineTools_v1.3.jsx",
   "notes": [
-    "Test update: script self-replace"
+    "Test update – script self-replace"
   ]
 }
+
