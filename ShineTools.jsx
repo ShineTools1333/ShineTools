@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.7";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5748,13 +5748,41 @@ function _getChangelogHistoryFile() {
                 if (!v) return false;
 
                 var notes = notesArr || [];
-                if (typeof notes === "string") notes = [notes];
+                if (typeof notes === "string") {
+                // Allow server to send either an array OR a single string (optionally newline-separated)
+                if (notes.indexOf("
+") >= 0) {
+                    var _lines = String(notes).split(/?
+/);
+                    var _cleanLines = [];
+                    for (var li = 0; li < _lines.length; li++) {
+                        var _ln = String(_lines[li]).replace(/^\s+|\s+$/g,"");
+                        if (_ln) _cleanLines.push(_ln);
+                    }
+                    notes = _cleanLines;
+                } else {
+                    notes = [notes];
+                }
+            }
                 if (!(notes instanceof Array)) notes = [];
 
                 var hist = _loadChangelogHistory();
                 if (!hist || !hist.entries) hist = { entries: [] };
 
-                if (_historyHasVersion(hist.entries, v)) return true;
+                if (_historyHasVersion(hist.entries, v)) {
+                    // If the version already exists (e.g. notes changed on the server), update it and move it to the top.
+                    for (var hi = 0; hi < hist.entries.length; hi++) {
+                        var hv = String(hist.entries[hi].version || "").replace(/^v\s*/i,"");
+                        if (hv === v) {
+                            hist.entries[hi].date = _formatStamp(new Date());
+                            hist.entries[hi].notes = notes;
+                            var existing = hist.entries.splice(hi, 1)[0];
+                            hist.entries.unshift(existing);
+                            return _saveChangelogHistory(hist);
+                        }
+                    }
+                    return _saveChangelogHistory(hist);
+                }
 
                 hist.entries.unshift({
                     version: v,
@@ -5926,7 +5954,15 @@ function _getChangelogHistoryFile() {
             var currentVer = _getCurrentVersionString();
             _setUpdatesVersion(String(data.latest));
 
-            var notes = data.notes || data.changelog || [];
+            var notes = data.notes || data.changelog || data.releaseNotes || data.release_notes || data.changes || data.notesText || [];
+            if ((!notes || !notes.length) && data && data.notes && typeof data.notes === "object" && !(data.notes instanceof Array)) {
+                // If notes came in as an object, try to flatten its values.
+                try {
+                    var _tmpNotes = [];
+                    for (var _k in data.notes) { if (data.notes.hasOwnProperty(_k)) _tmpNotes.push(String(data.notes[_k])); }
+                    notes = _tmpNotes;
+                } catch (eFlat) {}
+            }
             if (typeof notes === "string") notes = [notes];
             // Changelog is persistent locally and grows over time.
             // When you CHECK FOR UPDATES, we also cache the latest version's notes into the local
