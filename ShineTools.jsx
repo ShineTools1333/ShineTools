@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.5";
+var SHINE_VERSION      = "1.4";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5734,10 +5734,19 @@ function _getChangelogHistoryFile() {
                 var hist = _loadChangelogHistory();
                 var entries = (hist && hist.entries) ? hist.entries : [];
                 if (!entries || !entries.length) {
-                    chBox.text = "—";
-                    _saveChangelogCache(chBox.text);
-                    return;
-                }
+    // No history yet (or couldn't read it). Don't clobber any existing
+    // changelog text that may have been cached from a prior check.
+    try {
+        var cached = _loadChangelogCache();
+        if (cached && cached.length) {
+            chBox.text = cached;
+            return;
+        }
+    } catch (eCache) {}
+    chBox.text = "—";
+    // IMPORTANT: do NOT save "—" into cache, otherwise we erase the last good changelog.
+    return;
+}
 
                 var out = "";
                 for (var i = 0; i < entries.length; i++) {
