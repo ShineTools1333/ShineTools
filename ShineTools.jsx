@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.1";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5145,7 +5145,9 @@ var gfLegendRow = gfRight.add("group");
                         var probe = _readTextFile(outPath);
                         if (probe) {
                             var p = String(probe);
-                            if (/<html|<!doctype/i.test(p)) {
+                            var head = p.substr(0, 600);
+                            // Only treat as HTML if it *starts* like a webpage (avoid false positives if the JSX contains "<html" text).
+                            if (/^\s*<!doctype/i.test(head) || /^\s*<html/i.test(head) || /^\s*<head/i.test(head)) {
                                 return { ok:false, msg:"Got HTML instead of a file. Use a direct RAW (raw.githubusercontent.com) link." };
                             }
                             if (/^\s*404\s*:|^\s*404\s+not\s+found/i.test(p) || /Not\s+Found\s*\(404\)/i.test(p)) {
