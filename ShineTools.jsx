@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.7";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5665,7 +5665,39 @@ function _getChangelogHistoryFile() {
             } catch (e) { return null; }
         }
 
+        function _loadChangelogHistoryFromSettings() {
+            try {
+                if (typeof app !== "undefined" && app.settings) {
+                    if (app.settings.haveSetting("ShineTools", "changelog_history")) {
+                        var raw = app.settings.getSetting("ShineTools", "changelog_history");
+                        if (raw && raw.length) {
+                            var obj = null;
+                            try { obj = JSON.parse(raw); } catch (e) { obj = null; }
+                            if (obj && obj.entries && (obj.entries instanceof Array)) return obj;
+                        }
+                    }
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        function _saveChangelogHistoryToSettings(obj) {
+            try {
+                if (typeof app !== "undefined" && app.settings) {
+                    var data = (obj && obj.entries) ? obj : { entries: [] };
+                    app.settings.saveSetting("ShineTools", "changelog_history", JSON.stringify(data));
+                    return true;
+                }
+            } catch (e) {}
+            return false;
+        }
+
         function _loadChangelogHistory() {
+            // 1) Prefer app.settings (most reliable across permissions / sandboxing)
+            var fromSettings = _loadChangelogHistoryFromSettings();
+            if (fromSettings) return fromSettings;
+
+            // 2) Fallback to file
             var f = _getChangelogHistoryFile();
             if (!f) return { entries: [] };
             try {
@@ -5675,6 +5707,9 @@ function _getChangelogHistoryFile() {
                 var obj = null;
                 try { obj = JSON.parse(raw); } catch (e1) { obj = null; }
                 if (!obj || !obj.entries || !(obj.entries instanceof Array)) return { entries: [] };
+
+                // Cache into settings for next launch (best-effort)
+                try { _saveChangelogHistoryToSettings(obj); } catch (e2) {}
                 return obj;
             } catch (e) {
                 return { entries: [] };
@@ -5682,14 +5717,18 @@ function _getChangelogHistoryFile() {
         }
 
         function _saveChangelogHistory(obj) {
+            var data = (obj && obj.entries) ? obj : { entries: [] };
+
+            // Always save to settings first (this is what makes it persist on your machine)
+            var okSettings = _saveChangelogHistoryToSettings(data);
+
+            // Then attempt file write (nice-to-have)
             try {
                 var f = _getChangelogHistoryFile();
-                if (!f) return false;
-                var data = (obj && obj.entries) ? obj : { entries: [] };
-                return _writeTextFile(f.fsName, JSON.stringify(data, null, 2));
-            } catch (e) {
-                return false;
-            }
+                if (f) _writeTextFile(f.fsName, JSON.stringify(data, null, 2));
+            } catch (e) {}
+
+            return okSettings;
         }
 
         function _historyHasVersion(entries, ver) {
