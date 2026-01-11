@@ -1,4 +1,4 @@
-/*  ShineTools.jsx  (Tabbed UI)
+/*  ShineTools_v1.0.jsx  (Tabbed UI)
     Tabs:
       - MAIN  (your current full tool)
       - TEXT  (Break Apart Text tools)
@@ -14,11 +14,13 @@
 // SHINE TOOLS – VERSION (EDIT THIS ONLY PER RELEASE)
 // =======================================================
 // File name stays: ShineTools.jsx
+// Panel title: ShineTools_vX.Y
+// Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.0";   // ← CHANGE ONLY THIS
-var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;                 // v1.0
-var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineTools_v1.0
+var SHINE_VERSION      = "1.1";
+var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
+var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
 
 
@@ -31,6 +33,67 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
         if (!$.global.__ShineToolsDDStore) $.global.__ShineToolsDDStore = {};
         return $.global.__ShineToolsDDStore;
     }
+
+
+    // ============================================================
+    // 0b) Lightweight helpers (safe, mac-only)
+    // ============================================================
+    // Namespace for debug toggles / shared state (kept global so a docked panel reload can reuse it).
+    var ST = $.global.__ShineToolsNS || ($.global.__ShineToolsNS = { DEBUG: false });
+    function _log(msg) {
+        try { if (ST && ST.DEBUG) $.writeln("[ShineTools] " + String(msg)); } catch (e) {} finally { __GF_RESP_LOCK = false; }
+        }
+
+    function _ddEnsureKey(dd) {
+        try {
+            if (!dd) return null;
+            var store = _ensureDDStore();
+            if (!dd.__shineDDKey) {
+                dd.__shineDDKey = "dd_" + (new Date().getTime()) + "_" + Math.floor(Math.random() * 1000000);
+            }
+            store[dd.__shineDDKey] = dd;
+            return dd.__shineDDKey;
+        } catch (e) {}
+        return null;
+    }
+
+    function _cancelTaskSafe(taskId) {
+        try { if (taskId) app.cancelTask(taskId); } catch (e) {}
+    }
+
+    // ------------------------------------------------------------
+    // app.settings helpers (single choke-point for persistence)
+    // ------------------------------------------------------------
+    function _settingsHas(section, key) {
+        try { return app.settings.haveSetting(section, key); } catch (e) {}
+        return false;
+    }
+    function _settingsGet(section, key, defaultValue) {
+        try {
+            if (app.settings.haveSetting(section, key)) {
+                return app.settings.getSetting(section, key);
+            }
+        } catch (e) {}
+        return defaultValue;
+    }
+    function _settingsSet(section, key, value) {
+        try {
+            app.settings.saveSetting(section, key, String(value));
+            return true;
+        } catch (e) {}
+        return false;
+    }
+    function _settingsGetJSON(section, key, defaultValue) {
+        var raw = _settingsGet(section, key, null);
+        if (raw === null || raw === undefined || raw === "") return defaultValue;
+        try { return JSON.parse(raw); } catch (e) {}
+        return defaultValue;
+    }
+    function _settingsSetJSON(section, key, obj) {
+        try { return _settingsSet(section, key, JSON.stringify(obj)); } catch (e) {}
+        return false;
+    }
+
 
     // Expose a global reset function so app.scheduleTask can call it.
     if (!$.global._shineToolsResetDropdown) {
@@ -74,31 +137,38 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
     // Show a short message inside a dropdown's display area without triggering its onChange behavior.
     // Implementation: temporarily changes item[0] (reserved blank row) text, selects it, then restores.
     function _ddShowTempMessage(dd, message, seconds) {
+        // Show a short message inside a dropdown without firing its onChange.
+        // Uses item[0] as a reserved "blank/message" row, then restores to a space.
         try {
             if (!dd) return;
-            var store = _ensureDDStore();
-            if (!dd.__shineDDKey) {
-                dd.__shineDDKey = 'dd_' + (new Date().getTime()) + '_' + Math.floor(Math.random() * 1000000);
-                store[dd.__shineDDKey] = dd;
-            }
+
+            // Ensure stable key + store ref for scheduleTask callbacks.
+            _ddEnsureKey(dd);
 
             var ms = Math.round((Math.max(0.1, seconds || 1) * 1000));
 
             // Cancel any pending restore for this dropdown
-            try { if (dd.__shineMsgTaskId) app.cancelTask(dd.__shineMsgTaskId); } catch (eCancel) {}
+            _cancelTaskSafe(dd.__shineMsgTaskId);
 
             dd.__shineProgrammatic = true;
             try {
                 if (dd.items && dd.items.length > 0) {
-                    dd.items[0].text = String(message || 'Added');
+                    dd.items[0].text = String(message || "Added");
                     dd.selection = 0;
                     if (dd.window && dd.window.update) dd.window.update();
                 }
             } catch (eSet) {}
 
-            dd.__shineMsgTaskId = app.scheduleTask("$.global._shineToolsRestoreDropdownBlank('" + dd.__shineDDKey + "');", ms, false);
+            dd.__shineMsgTaskId = app.scheduleTask(
+                "$.global._shineToolsRestoreDropdownBlank('" + dd.__shineDDKey + "');",
+                ms,
+                false
+            );
         } catch (e) {}
     }
+
+            
+
 
 
     // Apply an .ffx preset to a text layer (create/select a text layer if needed).
@@ -123,9 +193,9 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
                     return;
                 }
 
-                app.beginUndoGroup("Apply Text Preset");
-
-                // Pick target: selected text layer if available, otherwise create a new text layer.
+                _withUndoGroup("Apply Text Preset", function () {
+                
+                    // Pick target: selected text layer if available, otherwise create a new text layer.
                 var target = null;
                 if (comp.selectedLayers && comp.selectedLayers.length > 0) {
                     var l = comp.selectedLayers[0];
@@ -143,10 +213,9 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
 
                 // Apply preset
                 target.applyPreset(presetFile);
+                });
 
-                app.endUndoGroup();
             } catch (e) {
-                try { app.endUndoGroup(); } catch (e2) {}
                 alert("Could not apply preset.\n\n" + e.toString());
             }
         };
@@ -165,19 +234,18 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
 
             var ms = Math.round((Math.max(1, frames) / fps) * 1000);
 
-            var store = _ensureDDStore();
-            if (!dd.__shineDDKey) {
-                dd.__shineDDKey = "dd_" + (new Date().getTime()) + "_" + Math.floor(Math.random() * 1000000);
-                store[dd.__shineDDKey] = dd;
-            }
+            _ddEnsureKey(dd);
 
             // Cancel any pending reset for this dropdown
-            try { if (dd.__shineDDTaskId) app.cancelTask(dd.__shineDDTaskId); } catch (eCancel) {}
+            _cancelTaskSafe(dd.__shineDDTaskId);
 
-            dd.__shineDDTaskId = app.scheduleTask("$.global._shineToolsResetDropdown('" + dd.__shineDDKey + "');", ms, false);
+            dd.__shineDDTaskId = app.scheduleTask(
+                "$.global._shineToolsResetDropdown('" + dd.__shineDDKey + "');",
+                ms,
+                false
+            );
         } catch (e) {}
     }
-
 
     function _dropdownResetAfterSeconds(dd, seconds) {
         try {
@@ -185,11 +253,8 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
 
             var ms = Math.round((Math.max(0.1, seconds) * 1000));
 
-            var store = _ensureDDStore();
-            if (!dd.__shineDDKey) {
-                dd.__shineDDKey = "dd_" + (new Date().getTime()) + "_" + Math.floor(Math.random() * 1000000);
-                store[dd.__shineDDKey] = dd;
-            }
+            _ddEnsureKey(dd);
+
 
             // Cancel any pending reset for this dropdown
             try { if (dd.__shineDDTaskId) app.cancelTask(dd.__shineDDTaskId); } catch (eCancel) {}
@@ -199,21 +264,33 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
     }
 
 
-    function _isCmdOrCtrlDown() {
+    function _isCmdDown() {
+        // macOS-only: Command key.
         try {
             var ks = ScriptUI.environment.keyboardState;
-            // Mac: Command = metaKey. Windows: Ctrl = ctrlKey.
-            return (ks && (ks.metaKey || ks.ctrlKey)) ? true : false;
+            return (ks && ks.metaKey) ? true : false;
         } catch (e) {}
         return false;
     }
+
+
+    function _withUndoGroup(name, fn) {
+        // Safe Undo wrapper: guarantees endUndoGroup even if fn throws.
+        if (!fn || typeof fn !== "function") return;
+        try { app.beginUndoGroup(String(name || "ShineTools")); } catch (eBegin) {}
+        try { fn(); }
+        catch (eRun) { throw eRun; }
+        finally { try { app.endUndoGroup(); } catch (eEnd) {} }
+    }
+
 
 
     // ============================================================
     // 0) Locate ScriptUI Panels folder + logo
     // ============================================================
     var SCRIPT_FILENAME = "ShineTools.jsx";
-    var SHINE_VERSION_TAG = "v" + SHINE_VERSION; // backward-compatible display
+    // Version comes from top-level SHINE_VERSION / SHINE_VERSION_TAG
+    var SHINE_TOOLS_VERSION = SHINE_VERSION_TAG;
     var LOGO_FILENAME   = "shine_logo.png";
 
     // Unified dropdown "flash then reset" helper (matches MAIN behavior across tabs).
@@ -264,7 +341,7 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
         } catch (e) {}
 
         // Fallback: derive Scripts/ScriptUI Panels from the running AE install path
-        // (Much faster than scanning /Applications and generally works on both macOS and Windows.)
+        // (Much faster than scanning /Applications and generally works reliably.)
         try {
             if (app && app.path) {
                 var scriptsPanels = new Folder(app.path.fsName + "/Scripts/ScriptUI Panels");
@@ -643,7 +720,10 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG; // ShineT
     }
 
     function safeSetName(obj, nm) {
-        try { if (obj && nm && obj.name !== nm) obj.name = nm; } catch (e) {}
+        try {
+            if (!obj || nm === undefined || nm === null) return;
+            if (obj.name !== nm) obj.name = nm;
+        } catch (e) {}
     }
 
     function clearAnchorExpression(layer) {
@@ -1450,42 +1530,103 @@ var FAV_DEFAULT_START_FOLDER_NAME = "LIBRARY ELEMENTS_1"; // preferred start fol
         return out;
     }
 
-    function favLoad() {
+    // ------------------------------------------------------------
+    
+    // ------------------------------------------------------------
+    // File / path helpers (macOS-only)
+    // ------------------------------------------------------------
+    function _pathExists(pathStr) {
+        if (!pathStr) return false;
         try {
-            if (app.settings.haveSetting(FAV_SETTINGS_SECTION, FAV_SETTINGS_KEY)) {
-                var raw = app.settings.getSetting(FAV_SETTINGS_SECTION, FAV_SETTINGS_KEY);
-                var arr = _favParse(raw);
+            var f = new File(pathStr);
+            if (f.exists) return true;
+        } catch (e1) {}
+        try {
+            var d = new Folder(pathStr);
+            if (d.exists) return true;
+        } catch (e2) {}
+        return false;
+    }
 
-                var clean = [];
-                var seen = {};
-                for (var i = 0; i < arr.length; i++) {
-                    var p = String(arr[i] || "");
-                    if (!p) continue;
-                    if (seen[p]) continue;
-                    seen[p] = true;
-                    clean.push(p);
-                    if (clean.length >= FAV_MAX) break;
-                }
-                return clean;
+    function _listPruneMissing(arr) {
+        var out = [];
+        try {
+            for (var i = 0; i < (arr ? arr.length : 0); i++) {
+                var p = String(arr[i] || "");
+                if (!p) continue;
+                if (_pathExists(p)) out.push(p);
             }
+        } catch (e) {}
+        return out;
+    }
+
+// List persistence helpers (dedupe/limit + backwards-compatible parse)
+    // ------------------------------------------------------------
+    function _listParseCompat(raw) {
+        if (!raw) return [];
+        // Prefer JSON (current format)
+        var arr = _favParse(raw);
+        if (arr && arr.length) return arr;
+
+        // Back-compat: older builds may have stored a JS array literal string
+        // e.g. "['/path/a.ffx','/path/b.ffx']"
+        try {
+            // eslint-disable-next-line no-eval
+            var v = eval(raw);
+            if (v && v.length) return v;
         } catch (e) {}
         return [];
     }
 
-    function favSave(arr) {
+    function _listClean(arr, maxLen) {
+        var clean = [];
+        var seen = {};
         try {
-            var clean = [];
-            var seen = {};
             for (var i = 0; i < arr.length; i++) {
                 var p = String(arr[i] || "");
                 if (!p) continue;
                 if (seen[p]) continue;
                 seen[p] = true;
                 clean.push(p);
-                if (clean.length >= FAV_MAX) break;
+                if (maxLen && clean.length >= maxLen) break;
             }
-            app.settings.saveSetting(FAV_SETTINGS_SECTION, FAV_SETTINGS_KEY, _favStringify(clean));
         } catch (e) {}
+        return clean;
+    }
+
+    function _listLoad(section, key, maxLen) {
+        try {
+            var raw = _settingsGet(section, key, "");
+            if (!raw) return [];
+            var arr = _listParseCompat(raw);
+            var clean = _listClean(arr, maxLen);
+
+            // Hygiene: prune missing paths on load (keeps menus clean if files move)
+            var pruned = _listPruneMissing(clean);
+            if (pruned.length !== clean.length) {
+                // Persist the cleaned list so we don't keep re-pruning every launch
+                _settingsSet(section, key, _favStringify(pruned));
+            }
+            return pruned;
+        } catch (e) {}
+        return [];
+    }
+
+    function _listSave(section, key, arr, maxLen) {
+        try {
+            var clean = _listClean(arr || [], maxLen);
+            _settingsSet(section, key, _favStringify(clean));
+            return clean;
+        } catch (e) {}
+        return [];
+    }
+
+    function favLoad() {
+        return _listLoad(FAV_SETTINGS_SECTION, FAV_SETTINGS_KEY, FAV_MAX);
+    }
+
+    function favSave(arr) {
+        _listSave(FAV_SETTINGS_SECTION, FAV_SETTINGS_KEY, arr, FAV_MAX);
     }
 
     function favAddPath(pathStr) {
@@ -1509,31 +1650,11 @@ var FAV_DEFAULT_START_FOLDER_NAME = "LIBRARY ELEMENTS_1"; // preferred start fol
 
 
     function animLoad() {
-        try {
-            if (app.settings.haveSetting(ANIM_SETTINGS_SECTION, ANIM_SETTINGS_KEY)) {
-                var raw = app.settings.getSetting(ANIM_SETTINGS_SECTION, ANIM_SETTINGS_KEY);
-                var arr = [];
-                try { arr = eval(raw); } catch (e1) { arr = []; }
-                if (arr && arr.length) return arr;
-            }
-        } catch (e) {}
-        return [];
+        return _listLoad(ANIM_SETTINGS_SECTION, ANIM_SETTINGS_KEY, ANIM_MAX);
     }
 
     function animSave(arr) {
-        try {
-            var clean = [];
-            var seen = {};
-            for (var i = 0; i < arr.length; i++) {
-                var p = String(arr[i] || "");
-                if (!p) continue;
-                if (seen[p]) continue;
-                seen[p] = true;
-                clean.push(p);
-                if (clean.length >= ANIM_MAX) break;
-            }
-            app.settings.saveSetting(ANIM_SETTINGS_SECTION, ANIM_SETTINGS_KEY, _favStringify(clean));
-        } catch (e) {}
+        _listSave(ANIM_SETTINGS_SECTION, ANIM_SETTINGS_KEY, arr, ANIM_MAX);
     }
 
     function animClear() { animSave([]); }
@@ -2177,11 +2298,6 @@ function favOpenDialogFromDefaultFolder() {
     function isAVLayer(layer) {
         return layer && (layer instanceof AVLayer);
     }
-
-    function safeSetName(item, name) {
-        try { item.name = name; } catch (e) {}
-    }
-
     function ensureEffect(layer, matchName, displayName, defaultValue) {
         try {
             var fx = layer.property("Effects");
@@ -3090,7 +3206,7 @@ function favOpenDialogFromDefaultFolder() {
 
         var pal = (thisObj instanceof Panel)
             ? thisObj
-            : new Window("palette", SHINE_TITLE_TEXT, undefined, { resizeable: true });
+            : new Window("palette", "ShineTools_v" + SHINE_VERSION, undefined, { resizeable: true });
 
         // Focus sink (used to kill blue focus ring on buttons after click)
         function ensureFocusSink() {
@@ -3132,11 +3248,32 @@ tabHeader.spacing       = 0;
 
 var tabBar = tabHeader.add("group");
 tabBar.orientation   = "row";
-tabBar.alignChildren = ["left", "center"];
+tabBar.alignChildren = ["fill", "center"];
 tabBar.alignment     = ["fill", "top"];
 tabBar.margins       = 0;
-tabBar.spacing       = 14;
+tabBar.spacing       = 0;
 
+// Left (MAIN/TEXT)
+var tabBarLeft = tabBar.add("group");
+tabBarLeft.orientation   = "row";
+tabBarLeft.alignChildren = ["left", "center"];
+tabBarLeft.alignment     = ["left", "center"];
+tabBarLeft.margins       = 0;
+tabBarLeft.spacing       = 14;
+
+// Flexible gap (push right tabs to the end)
+var tabBarGap = tabBar.add("group");
+tabBarGap.minimumSize = [0, 0];
+tabBarGap.maximumSize = [10000, 10000];
+tabBarGap.alignment   = ["fill","fill"];
+
+// Right (HELP/REQUESTS + UPDATES pinned far right)
+var tabBarRight = tabBar.add("group");
+tabBarRight.orientation   = "row";
+tabBarRight.alignChildren = ["right", "center"];
+tabBarRight.alignment     = ["right", "center"];
+tabBarRight.margins       = 0;
+tabBarRight.spacing       = 14;
 // Transparent overlay used ONLY for drawing the underline
 var tabUnderlineLayer = tabHeader.add("group");
 tabUnderlineLayer.orientation   = "row";
@@ -3151,18 +3288,27 @@ tabUnderlineLayer.minimumSize   = [10, 6];
 tabUnderlineLayer.preferredSize = [10, 6];
 tabUnderlineLayer.maximumSize   = [10000, 6];
 
-function _makeTopTabLabel(txt) {
-    var st = tabBar.add("statictext", undefined, txt);
-    st.justify = "left";
+function _makeTopTabLabel(txt, host) {
+    if (!host) host = tabBarLeft;
+    var st = host.add("statictext", undefined, txt);
+
+    // Compact, left-justified tabs (do NOT stretch across the whole panel).
+    st.justify = "center";
     st.margins = 0;
-    st.minimumSize = [42, 16];
+
+    // Add a touch of padding without forcing a fixed width.
+    try { st.characters = Math.max(4, (txt || "").length + 1); } catch (e) {}
+
     return st;
 }
 
-var tabLblMain = _makeTopTabLabel("MAIN");
-var tabLblText = _makeTopTabLabel("TEXT");
-var tabLblHelp = _makeTopTabLabel("HELP");
-var tabLblUpdates = _makeTopTabLabel("UPDATES");
+var tabLblMain = _makeTopTabLabel("MAIN", tabBarLeft);
+var tabLblText = _makeTopTabLabel("TEXT", tabBarLeft);
+
+// Pinned (right) tabs: HELP / REQUESTS / UPDATES (UPDATES far right)
+var tabLblHelp = _makeTopTabLabel("HELP", tabBarRight);
+var tabLblRequests = _makeTopTabLabel("REQUESTS", tabBarRight);
+var tabLblUpdates = _makeTopTabLabel("UPDATES", tabBarRight);
 var TAB_LABEL_ACTIVE = [1.0, 0.82, 0.0, 1];  // Shine yellow
 var TAB_LABEL_IDLE   = [0.85, 0.85, 0.85, 1];
 
@@ -3176,75 +3322,49 @@ function _drawTopTabUnderline(g, st, underlineEl) {
     try {
         if (!g || !st || !underlineEl) return;
 
-        // Convert tab label bounds (parent coordinates) into underline element local coordinates
-        var b  = st.bounds;                // [l,t,r,b] in tabBar coords
-        var bb = st.parent ? st.parent.bounds : [0,0,0,0]; // tabBar bounds in tabHeader coords
-        var ub = underlineEl.bounds;       // underline bounds in tabHeader coords
-
-        // Base X in underline local space
-        var baseL = (bb[0] + b[0]) - ub[0];
-        var baseR = (bb[0] + b[2]) - ub[0];
-
-        // Prefer underline width based on the actual text (not the whole tab hit area)
-        // so the line only sits under the word.
-        var pad = 2; // small breathing room
-        var wText = 0;
-        try {
-            var ms = st.graphics.measureString(st.text);
-            wText = (ms && ms.length) ? ms[0] : 0;
-        } catch (eMS) { wText = 0; }
-
-        // Fallback: if measureString fails, use the label bounds
-        if (!wText || wText <= 0) {
-            wText = Math.max(0, (baseR - baseL) - 4);
+        // Compute tab label bounds relative to tabBar (works even if labels live inside nested groups)
+        function _leftInTabBar(ctrl) {
+            var x = 0;
+            try { x = ctrl.bounds[0]; } catch (e) { x = 0; }
+            var p = ctrl.parent;
+            while (p && p !== tabBar) {
+                try { x += p.bounds[0]; } catch (e2) {}
+                p = p.parent;
+            }
+            return x;
+        }
+        function _rightInTabBar(ctrl) {
+            var x = 0;
+            try { x = ctrl.bounds[2]; } catch (e) { x = 0; }
+            var p = ctrl.parent;
+            while (p && p !== tabBar) {
+                try { x += p.bounds[0]; } catch (e2) {}
+                p = p.parent;
+            }
+            return x;
         }
 
-        var labelW = (baseR - baseL);
+        var leftTB  = _leftInTabBar(st);
+        var rightTB = _rightInTabBar(st);
 
-        // "Typographically" friendlier underline placement:
-        // - Avoid hardcoded nudges per-tab
-        // - Estimate the actual glyph start by removing the control's left padding
-        //   and compensating for font-specific left bearing/kerning using measureString.
-        // NOTE: ScriptUI doesn't expose true font metrics, so we approximate via deltas.
+        // Convert to underline element local coordinates (underlineEl bounds are in tabHeader coords)
+        var ub = underlineEl.bounds; // [l,t,r,b] in tabHeader coords
+        var baseL = (tabBar.bounds[0] + leftTB)  - ub[0];
+        var baseR = (tabBar.bounds[0] + rightTB) - ub[0];
+
+        // Underline padding + optical tweaks
+        var pad   = 6;
         var inset = 0;
-        try {
-            var j = (st.justify ? (""+st.justify).toLowerCase() : "");
-            if (j.indexOf("center") >= 0) inset = (labelW - wText) * 0.5;
-            else if (j.indexOf("right") >= 0) inset = (labelW - wText);
-            else inset = 0; // left-justified: start at the control's true left
-        } catch (eJ) { inset = 0; }
+        var wText = Math.max(0, (baseR - baseL));
+        var x1 = baseL + inset + pad;
+        var x2 = x1 + wText - (pad * 2);
 
-        // Approximate left-bearing/kerning at the start of the string.
-        // Measure a stable prefix character and the prefix+text; the delta vs wText
-        // often reveals small horizontal offsets for the first glyph.
-        var lb = 0;
-        try {
-            var wP  = st.graphics.measureString("H");
-            var wPT = st.graphics.measureString("H" + st.text);
-            var wp  = (wP  && wP.length)  ? wP[0]  : 0;
-            var wpt = (wPT && wPT.length) ? wPT[0] : 0;
-            lb = (wpt - wp - wText);
-            if (isNaN(lb) || !isFinite(lb)) lb = 0;
-            // Keep it sane; we only want micro-adjustments.
-            if (lb > 6) lb = 6;
-            if (lb < -6) lb = -6;
-        } catch (eLB) { lb = 0; }
-
-        var x1 = baseL + inset + lb - pad;
-        var x2 = x1 + wText + (pad * 2);
-
-        // Micro-nudge: MAIN underline 2px left (visual optical alignment)
         var _tabTxt = (st && st.text) ? String(st.text) : "";
         if (_tabTxt === "MAIN") { x1 -= 2; x2 -= 2; }
-
-        // Slightly shorten non-MAIN underlines for a tighter optical fit
         if (_tabTxt !== "MAIN") { x1 += 2; x2 -= 2; }
 
-
-        // Draw along the bottom of the underline element itself
         var y  = underlineEl.size[1] - 1;
 
-        // Clamp just in case
         if (x2 < x1) { var tmp = x1; x1 = x2; x2 = tmp; }
         x1 = Math.max(0, x1);
         x2 = Math.min(underlineEl.size[0], x2);
@@ -3263,7 +3383,8 @@ tabUnderlineLayer.onDraw = function () {
         var which = pal.__activeTopTab || "MAIN";
         var st = (which === "TEXT") ? tabLblText :
                  ((which === "UPDATES") ? tabLblUpdates :
-                 ((which === "HELP") ? tabLblHelp : tabLblMain));
+                 ((which === "REQUESTS") ? tabLblRequests :
+                 ((which === "HELP") ? tabLblHelp : tabLblMain)));
         _drawTopTabUnderline(tabUnderlineLayer.graphics, st, tabUnderlineLayer);
     } catch (e) {}
 };
@@ -3284,8 +3405,11 @@ tabUnderlineLayer.onDraw = function () {
         var tabText = tabStack.add("group");
         var tabHelp = tabStack.add("group");
         var tabUpdates = tabStack.add("group");
+        var tabRequests = tabStack.add("group");
         tabHelp.visible = false;
-        tabUpdates.visible = false;// GLOBAL FOOTER (outside tabs)
+        tabUpdates.visible = false;
+        tabRequests.visible = false;
+        // GLOBAL FOOTER (outside tabs)
         // -------------------------
         var globalFooter = pal.add("group");
         globalFooter.orientation   = "row";
@@ -3297,19 +3421,10 @@ tabUnderlineLayer.onDraw = function () {
         var gfLeft = globalFooter.add("group");
         gfLeft.orientation   = "row";
         gfLeft.alignChildren = ["left", "bottom"];
-        gfLeft.alignment     = ["fill", "bottom"];
+        gfLeft.alignment     = ["left", "bottom"];
         gfLeft.margins       = 0;
-        gfLeft.spacing       = 0;
-
-        var gfRight = globalFooter.add("group");
-        gfRight.orientation   = "column";
-        gfRight.alignChildren = ["right", "center"];
-        gfRight.alignment = ["right", "bottom"];
-        gfRight.margins       = 0;
-        gfRight.spacing       = 2;
-
-        // Left text
-        var gfCopy = gfLeft.add("statictext", undefined, "(c) 2025 Shine Creative | " + SHINE_VERSION_TAG);
+        gfLeft.spacing       = 0;        // Left text
+        var gfCopy = gfLeft.add("statictext", undefined, "(c) 2025 Shine Creative | v" + SHINE_VERSION);
         gfCopy.margins = 0;
 
         // flexible gap
@@ -3317,6 +3432,17 @@ tabUnderlineLayer.onDraw = function () {
         gfGap.minimumSize = [0, 0];
         gfGap.maximumSize = [10000, 10000];
         gfGap.alignment   = ["fill","fill"];
+
+
+
+
+        var gfRight = globalFooter.add("group");
+        gfRight.orientation   = "column";
+        gfRight.minimumSize = [180, 0];
+        gfRight.alignChildren = ["right", "center"];
+        gfRight.alignment = ["right", "bottom"];
+        gfRight.margins       = 0;
+        gfRight.spacing       = 2;
 
         // Right status + legend (stacked)
         // Status line sits above the legend:
@@ -3329,13 +3455,14 @@ tabUnderlineLayer.onDraw = function () {
         gfStatusRow.margins       = 0;
         gfStatusRow.spacing       = 4;
 
-        var gfStatusCheck = gfStatusRow.add("statictext", undefined, "✓");
-        gfStatusCheck.margins = 0;
-
-        var gfStatusLabel = gfStatusRow.add("statictext", undefined, "Up to Date");
+        var gfStatusLabel = gfStatusRow.add("statictext", undefined, "Up to date.");
         gfStatusLabel.margins = 0;
+        gfStatusLabel.alignment = ["right","center"];
+        gfStatusLabel.justify = "right";
 
-        var gfLegendRow = gfRight.add("group");
+        
+        gfStatusLabel.characters = 16;
+var gfLegendRow = gfRight.add("group");
         gfLegendRow.orientation   = "row";
         gfLegendRow.alignChildren = ["right", "center"];
         gfLegendRow.alignment     = ["right", "center"];
@@ -3370,12 +3497,11 @@ tabUnderlineLayer.onDraw = function () {
 
         function _setFooterUpdateIndicator(isUpToDate) {
             try {
+                gfStatusRow.visible = true;
                 if (isUpToDate) {
-                    gfStatusCheck.visible = true;
-                    gfStatusLabel.text = "Up to Date";
+                    gfStatusLabel.text = "✓ Up to date.";
                 } else {
-                    gfStatusCheck.visible = false;
-                    gfStatusLabel.text = "Update available";
+                    gfStatusLabel.text = "Update available.";
                 }
                 // Keep right group anchored
                 gfRight.alignment = ["right","bottom"];
@@ -3383,10 +3509,16 @@ tabUnderlineLayer.onDraw = function () {
         }
 
         // Default until the first check runs (auto-check on launch will update quickly)
-        _setFooterUpdateIndicator(true);
+        try {
+            gfStatusRow.visible = false;            gfStatusLabel.text = "";
+        } catch(e) {}
 
         // Keep global footer single-line and avoid clipping on narrow panels
+        var __GF_RESP_LOCK = false;
+
         function applyGlobalFooterResponsive() {
+            if (__GF_RESP_LOCK) return;
+            __GF_RESP_LOCK = true;
             try {
                 var W = 0;
                 try { W = pal.size[0] || 0; } catch (eW) { W = 0; }
@@ -3394,7 +3526,7 @@ tabUnderlineLayer.onDraw = function () {
                 gfLegend.visible = (W === 0) ? true : (W >= 420);
                 // Keep right group anchored
                 gfRight.alignment = ["right","bottom"];
-            } catch (e) {}
+            } catch (e) {} finally { __GF_RESP_LOCK = false; }
         }
         globalFooter.onResizing = function () {
             // Throttle to reduce flicker while dragging
@@ -3426,6 +3558,1082 @@ tabUnderlineLayer.onDraw = function () {
             __ph.alignment = ["fill","top"];
             try { __ph.graphics.foregroundColor = __ph.graphics.newPen(__ph.graphics.PenType.SOLID_COLOR, [0.6,0.6,0.6,1], 1); } catch(ePH) {}
         } catch (ePH2) {}
+
+
+        // ============================================================
+        // REQUESTS + FONT AUDIT (v1.0 additions)
+        // ============================================================
+        function _getLoginName() {
+            try {
+                var u = $.getenv("USER");
+                if (u) return String(u);
+            } catch (e1) {}
+            try {
+                var w = $.getenv("USERNAME");
+                if (w) return String(w);
+            } catch (e2) {}
+            return "unknown";
+        }
+
+        function _timestampForFilename() {
+            function z(n){ return (n < 10 ? "0" : "") + n; }
+            try {
+                var d = new Date();
+                return d.getFullYear() + z(d.getMonth()+1) + z(d.getDate()) + "_" + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds());
+            } catch (e) {}
+            return "timestamp";
+        }
+
+        function _copyToClipboard(txt) {
+            try {
+                var t = String(txt || "");
+                if (!t) return false;
+                var isMac = false;
+                try { isMac = ($.os && $.os.toLowerCase().indexOf("mac") >= 0); } catch (eOS) {}
+                if (isMac) {
+                    // pbcopy expects UTF-8
+                    var cmd = "printf %s " + _shellEscape(t) + " | pbcopy";
+                    system.callSystem(cmd);
+                    return true;
+                } else {
+                    // Windows: clip
+                    // Use cmd /c to run a single command. Avoid newlines breaking echo by using powershell if available.
+                    var cmd2 = 'cmd.exe /c "echo ' + t.replace(/"/g,'""') + ' | clip"';
+                    system.callSystem(cmd2);
+                    return true;
+                }
+            } catch (e) {}
+            return false;
+        }
+
+        function _getInstalledFontsMap() {
+            var map = {};
+            try {
+                if (app && app.fonts && app.fonts.allFonts) {
+                    var af = app.fonts.allFonts;
+                    for (var i = 0; i < af.length; i++) {
+                        var fn = null;
+                        try { fn = af[i].name; } catch (e1) {}
+                        if (!fn) { try { fn = af[i].postScriptName; } catch (e2) {} }
+                        if (!fn) continue;
+                        map[String(fn).toLowerCase()] = true;
+                    }
+                }
+            } catch (e) {}
+            return map;
+        }
+
+        function _collectProjectFonts() {
+            // Returns { rows:[{name,count,installed}], total:int }
+            var counts = {};
+            var total = 0;
+
+            try {
+                if (!app.project) return { rows:[], total:0 };
+
+                for (var i = 1; i <= app.project.numItems; i++) {
+                    var it = app.project.item(i);
+                    if (!(it && (it instanceof CompItem))) continue;
+
+                    for (var l = 1; l <= it.numLayers; l++) {
+                        var lyr = it.layer(l);
+                        if (!lyr) continue;
+
+                        var td = null;
+                        try {
+                            var st = lyr.property("Source Text");
+                            if (st) td = st.value;
+                        } catch (eST) { td = null; }
+
+                        if (td && td.font) {
+                            var fName = String(td.font);
+                            if (!counts[fName]) counts[fName] = 0;
+                            counts[fName] += 1;
+                            total += 1;
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            var installedMap = _getInstalledFontsMap();
+
+            var rows = [];
+            for (var k in counts) {
+                if (!counts.hasOwnProperty(k)) continue;
+                var isInstalled = null; // null = unknown
+                try {
+                    if (installedMap && Object.keys(installedMap).length > 0) {
+                        isInstalled = !!installedMap[String(k).toLowerCase()];
+                    }
+                } catch (e2) {}
+                rows.push({ name:k, count:counts[k], installed:isInstalled });
+            }
+
+            // sort: missing first, then alphabetic
+            rows.sort(function(a,b){
+                var ai = (a.installed === false) ? 0 : 1;
+                var bi = (b.installed === false) ? 0 : 1;
+                if (ai !== bi) return ai - bi;
+                var an = a.name.toLowerCase(), bn = b.name.toLowerCase();
+                if (an < bn) return -1;
+                if (an > bn) return 1;
+                return 0;
+            });
+
+            return { rows: rows, total: total };
+        }
+
+        function _showFontAuditDialog() {
+            try {
+            /*
+              Font Audit Standalone (Minimal) v2.16 FIXED
+
+              Based on user's v2.15 resolver approach:
+                - macOS CoreText JXA resolve (PostScript -> file path)
+                - bounded scan roots (System/User/Adobe/CoreSync/Adobe app Fonts)
+
+              UI:
+                - Legend labels: OK - Resolved, WARN - Ambiguous, MISSING - Font not found
+                - Divider line
+                - List (no box), no header row, no scrollbar
+                - Bottom button: EXPORT FONT LIST (saves font names to .txt and reveals in Finder/Explorer)
+            */
+
+            function __RunFontAuditModal__() {
+
+              // ------------------ Constants ------------------
+              var COL_STATUS = 80;
+              var COL_FONT   = 260;
+              var COL_NOTES  = 420;
+              var LIST_W      = 760;
+              var LIST_H_INIT = 320;
+
+
+
+              function isMac(){ return ($.os && $.os.toLowerCase().indexOf("mac") !== -1); }
+              function trim(s){ return (s||"").replace(/^\s+|\s+$/g,""); }
+              function clip(s, max){ s=(s||""); return (s.length<=max)?s:(s.substring(0, max-1) + "…"); }
+
+              function safeCallSystem(cmd){
+                try{ return system.callSystem(cmd); }catch(e){ return ""; }
+              }
+
+
+              function prettyText(s){
+                try{
+                  if(s === undefined || s === null) return "";
+                  s = String(s);
+
+                  // Manual percent-decoding (safe even if decodeURIComponent would throw)
+                  s = s.replace(/%([0-9A-Fa-f]{2})/g, function(_m, hh){
+                    try{ return String.fromCharCode(parseInt(hh, 16)); }catch(e){ return _m; }
+                  });
+
+                  // Then try decodeURIComponent in case there are still encoded sequences
+                  try{ s = decodeURIComponent(s); }catch(e1){}
+
+                  // Common leftovers
+                  s = s.replace(/%20/g, " ")
+                       .replace(/%5B/gi, "[")
+                       .replace(/%5D/gi, "]")
+                       .replace(/%28/gi, "(")
+                       .replace(/%29/gi, ")")
+                       .replace(/%2C/gi, ",")
+                       .replace(/%26/gi, "&");
+                  return s;
+                }catch(e2){
+                  try{ return String(s); }catch(e3){ return ""; }
+                }
+              }
+
+              function prettyFileName(p){
+                try{
+                  if(!p) return "";
+                  var nm = File(p).name;
+                  try{ nm = decodeURIComponent(nm); }catch(e){}
+                  // Also handle literal %20 etc if decodeURIComponent didn't catch (double-encoded cases)
+                  nm = nm.replace(/%20/g, " ").replace(/%5B/gi,"[").replace(/%5D/gi,"]");
+                  return nm;
+                }catch(e2){ return ""; }
+              }
+
+              function addListItem(list, rawText){
+                var it = list.add("item", prettyText(rawText));
+                it.rawName = rawText;
+                return it;
+              }
+
+
+            function setBold(st, size){
+                try{
+                  st.graphics.font = ScriptUI.newFont(st.graphics.font.name, "Bold", size || st.graphics.font.size);
+                }catch(e){}
+              }
+
+              function fileLooksLikeFontPath(p){ return (p && (/\.(ttf|otf|ttc|otc|dfont)$/i).test(p)); }
+
+              // --- Robust font extraction from text layers ---
+              function tryGetTextDocumentFont(layer){
+                try{
+                  var tp = layer.property("ADBE Text Properties");
+                  if(!tp) return "";
+                  var tdProp = tp.property("ADBE Text Document");
+                  if(!tdProp) return "";
+                  var td = tdProp.value;
+                  if(td && td.font) return td.font;
+                }catch(e){}
+                return "";
+              }
+
+              function uniqueSorted(arr){
+                var m = {};
+                for(var i=0;i<arr.length;i++) m[arr[i]] = true;
+                var out = [];
+                for(var k in m) out.push(k);
+                out.sort();
+                return out;
+              }
+
+              function getFontsInProject(debugOut){
+                var found = [];
+                var comps=0, layers=0, textLayers=0;
+
+                if(!app.project){
+                  if(debugOut) debugOut.noProject = true;
+                  return [];
+                }
+
+                for(var i=1;i<=app.project.numItems;i++){
+                  var item = app.project.item(i);
+                  if(!(item instanceof CompItem)) continue;
+                  comps++;
+                  for(var l=1;l<=item.numLayers;l++){
+                    layers++;
+                    var layer = item.layer(l);
+                    var fn = tryGetTextDocumentFont(layer);
+                    if(fn){
+                      textLayers++;
+                      found.push(fn);
+                    }
+                  }
+                }
+
+                var u = uniqueSorted(found);
+                if(debugOut){
+                  debugOut.compsScanned = comps;
+                  debugOut.layersScanned = layers;
+                  debugOut.textLayersFound = textLayers;
+                  debugOut.uniqueFonts = u.length;
+                }
+                return u;
+              }
+
+              // --- macOS CoreText: PostScript name -> font file path ---
+              function escapeForSingleQuotesBash(s){ return (s||"").replace(/'/g, "'\"'\"'"); }
+
+              function coreTextResolvePath(psName){
+                if(!isMac()) return "";
+                psName = psName || "";
+                if(!psName) return "";
+
+                var jxa =
+                  'ObjC.import("CoreText"); ObjC.import("Foundation");' +
+                  'var env=$.NSProcessInfo.processInfo.environment;' +
+                  'var name=ObjC.unwrap(env.objectForKey("DF_FONTNAME"));' +
+                  'if(!name){$.exit(0);} ' +
+                  'var font=$.CTFontCreateWithName($(name), 12, null);' +
+                  'if(!font){ var alt=name.replace(/-/g," "); font=$.CTFontCreateWithName($(alt), 12, null);} ' +
+                  'if(!font){ var alt2=name.replace(/_/g," "); font=$.CTFontCreateWithName($(alt2), 12, null);} ' +
+                  'if(!font){$.exit(0);} ' +
+                  'var url=$.CTFontCopyAttribute(font, $.kCTFontURLAttribute);' +
+                  'if(!url){$.exit(0);} ' +
+                  'var nsurl=ObjC.wrap(url);' +
+                  'var p=ObjC.unwrap(nsurl.path);' +
+                  'if(p){console.log(p);}';
+
+                var cmd = "bash -lc 'DF_FONTNAME=\"" + escapeForSingleQuotesBash(psName) + "\" osascript -l JavaScript -e \"" +
+                          jxa.replace(/"/g,'\\"') + "\" 2>/dev/null'";
+                var out = trim(safeCallSystem(cmd));
+                return (out && fileLooksLikeFontPath(out)) ? out : "";
+              }
+
+              // --- Scan index ---
+              function pathJoin(a,b){ if(!a) return b; return (a.replace(/\/+$/,"") + "/" + b.replace(/^\/+/,"")); }
+              function folderExists(p){ try{ var f=new Folder(p); return f.exists; }catch(e){ return false; } }
+              function getHomeDir(){ try{ return Folder("~").fsName; }catch(e){ return ""; } }
+
+              function collectFontFiles(rootPath, recurse, out, cap){
+                try{
+                  var folder = new Folder(rootPath);
+                  if(!folder.exists) return;
+                  var files = folder.getFiles();
+                  for(var i=0;i<files.length;i++){
+                    if(cap && out.length>=cap) return;
+                    var f = files[i];
+                    if(f instanceof Folder){
+                      if(recurse) collectFontFiles(f.fsName, recurse, out, cap);
+                    }else{
+                      if((f.name||"").match(/\.(ttf|otf|ttc|otc|dfont)$/i)) out.push(f);
+                    }
+                  }
+                }catch(e){}
+              }
+
+              function buildMacIndex(){
+                var roots = [];
+
+                function addRoot(pth, rec){
+                  if(!pth) return;
+                  if(folderExists(pth)){
+                    roots.push({p:pth, r:rec});
+                  }
+                }
+
+                function findAdobeAppFontRoots(){
+                  var appDirs = ["/Applications"];
+                  var candidates = [];
+
+                  for(var di=0; di<appDirs.length; di++){
+                    var dPath = appDirs[di];
+                    try{
+                      var d = new Folder(dPath);
+                      if(!d.exists) continue;
+                      var kids = d.getFiles();
+                      for(var i=0;i<kids.length;i++){
+                        var k = kids[i];
+                        if(!(k instanceof Folder)) continue;
+                        var nm = (k.name||"");
+                        if(nm.match(/After Effects/i) || nm.match(/Adobe/i) || nm.match(/Media Encoder/i) || nm.match(/Photoshop/i) || nm.match(/Illustrator/i)){
+                          candidates.push(k);
+                          if(candidates.length >= 250) break;
+                        }
+                      }
+                    }catch(e){}
+                  }
+
+                  for(var ci=0; ci<candidates.length; ci++){
+                    try{
+                      var f = candidates[ci];
+                      var base = f.fsName;
+
+                      if((f.name||"").match(/\.app$/i)){
+                        addRoot(base + "/Contents/Resources/Fonts", true);
+                        addRoot(base + "/Contents/Resources/pdfl/Fonts", true);
+                        addRoot(base + "/Contents/Resources/Required/Fonts", true);
+                      }else{
+                        var apps = f.getFiles("*.app");
+                        for(var ai=0; ai<apps.length; ai++){
+                          try{
+                            var a = apps[ai];
+                            if(!(a instanceof Folder)) continue;
+                            var ap = a.fsName;
+                            addRoot(ap + "/Contents/Resources/Fonts", true);
+                            addRoot(ap + "/Contents/Resources/pdfl/Fonts", true);
+                            addRoot(ap + "/Contents/Resources/Required/Fonts", true);
+                          }catch(e2){}
+                        }
+                      }
+                    }catch(e3){}
+                  }
+                }
+
+                roots.push({p:"/System/Library/Fonts", r:true});
+                roots.push({p:"/System/Library/Fonts/Supplemental", r:true});
+                roots.push({p:"/Library/Fonts", r:true});
+
+                var home = getHomeDir();
+                if(home){
+                  roots.push({p:pathJoin(home,"Library/Fonts"), r:true});
+                  roots.push({p:pathJoin(home,"Library/Application Support/Adobe/Fonts"), r:true});
+                  roots.push({p:pathJoin(home,"Library/Application Support/Adobe/CoreSync/plugins/livetype/r"), r:true});
+                  roots.push({p:pathJoin(home,"Library/Application Support/Adobe/CoreSync/plugins/livetype/l"), r:true});
+                  roots.push({p:pathJoin(home,"Library/Application Support/Adobe/TypeSupport"), r:true});
+                }
+
+                roots.push({p:"/Library/Application Support/Adobe/Fonts", r:true});
+                roots.push({p:"/Library/Application Support/Adobe/CoreSync/plugins/livetype/r", r:true});
+                roots.push({p:"/Library/Application Support/Adobe/TypeSupport", r:true});
+
+                findAdobeAppFontRoots();
+
+                var files = [];
+                var existing = [];
+                for(var i=0;i<roots.length;i++){
+                  if(folderExists(roots[i].p)){
+                    existing.push(roots[i].p);
+                    collectFontFiles(roots[i].p, roots[i].r, files);
+                  }
+                }
+                return {files:files, roots:existing};
+              }
+
+              function normalizeTokenForMatch(s){
+                s = (s||"").toLowerCase();
+                s = s.replace(/[^a-z0-9]+/g," ");
+                s = s.replace(/\s+/g," ");
+                return trim(s);
+              }
+
+              function scoreMatch(fontName, fileObj){
+                var fn = normalizeTokenForMatch(fontName);
+                if(!fn) return 0;
+                var base = normalizeTokenForMatch((fileObj.name||"").replace(/\.(ttf|otf|ttc|otc|dfont)$/i,""));
+                if(!base) return 0;
+
+                if(base.indexOf(fn) !== -1) return 100;
+
+                var fnT = fn.split(" ");
+                var bT = base.split(" ");
+                var map = {};
+                for(var i=0;i<bT.length;i++) map[bT[i]] = true;
+                var hits=0;
+                for(var j=0;j<fnT.length;j++) if(map[fnT[j]]) hits++;
+                return hits;
+              }
+
+              function findByScan(fontName, indexFiles){
+                var bestScore = 0;
+                var best = [];
+                var lower = (fontName||"").toLowerCase();
+
+                for(var i=0;i<indexFiles.length;i++){
+                  var f = indexFiles[i];
+                  var n = (f.name||"").toLowerCase();
+                  if(n.indexOf(lower) !== -1) return [{file:f, score:999}];
+                }
+
+                for(var k=0;k<indexFiles.length;k++){
+                  var f2 = indexFiles[k];
+                  var sc = scoreMatch(fontName, f2);
+                  if(sc <= 0) continue;
+                  if(sc > bestScore){
+                    bestScore = sc;
+                    best = [{file:f2, score:sc}];
+                  }else if(sc === bestScore){
+                    best.push({file:f2, score:sc});
+                  }
+                }
+                return best;
+              }
+
+              function swatchColor(status){
+                if(status === "OK") return [0.20, 0.75, 0.25, 1];
+                if(status === "WARN") return [0.95, 0.80, 0.10, 1];
+                return [0.90, 0.25, 0.20, 1];
+              }
+
+              function addSwatchUI(parent, rgba, size){
+                var p = parent.add("panel");
+                size = size || 12;
+                p.preferredSize = [size, size];
+                p.maximumSize = [size, size];
+                p.minimumSize = [size, size];
+                p.onDraw = function(){
+                  try{
+                    var g=p.graphics;
+                    var b=g.newBrush(g.BrushType.SOLID_COLOR, rgba);
+                    g.rectPath(0,0,p.size[0],p.size[1]);
+                    g.fillPath(b);
+                    var pen=g.newPen(g.PenType.SOLID_COLOR,[0.2,0.2,0.2,1],1);
+                    g.strokePath(pen);
+                  }catch(e){}
+                };
+                return p;
+              }
+
+              function sortRows(rows){
+                var order = {"OK":0,"WARN":1,"MISSING":2};
+                rows.sort(function(a,b){
+                  var oa = (order[a.status]!==undefined)?order[a.status]:9;
+                  var ob = (order[b.status]!==undefined)?order[b.status]:9;
+                  if(oa!==ob) return oa-ob;
+                  var an=(a.name||"").toLowerCase(), bn=(b.name||"").toLowerCase();
+                  return an<bn?-1:(an>bn?1:0);
+                });
+                return rows;
+              }
+
+              // ----------------- Build UI -----------------
+              try{
+                if($.global.__FontAuditQuickWin__ && $.global.__FontAuditQuickWin__ instanceof Window){
+                  try{ $.global.__FontAuditQuickWin__.close(); }catch(_e){}
+                }
+              }catch(_e2){}
+
+              var win = new Window("dialog","Font Audit (Standalone v2.16 FIXED)", undefined, {resizeable:true, closeButton:true});
+              win.orientation="column";
+              win.alignChildren=["fill","top"];
+              win.spacing=10;
+              win.margins=[24,14,14,14];
+
+              var top = win.add("group");
+              top.orientation="row";
+              top.alignChildren=["left","center"];
+              top.spacing=18;
+
+              var auditBtn = top.add("button", undefined, "FONT AUDIT");
+              var totalTxt = top.add("statictext", undefined, "Total: 0");
+
+              var spacerTop = win.add("group");
+              spacerTop.preferredSize = [0, 14];
+
+              var legend = win.add("group");
+              legend.orientation="row";
+              legend.alignChildren=["left","center"];
+              legend.spacing=14;
+
+              function legendItem(label, rgba){
+                var g=legend.add("group");
+                g.orientation="row";
+                g.alignChildren=["left","center"];
+                g.spacing=6;
+                addSwatchUI(g, rgba, 12);
+                g.add("statictext", undefined, label);
+              }
+
+              legendItem("OK - Resolved", swatchColor("OK"));
+              legendItem("WARN - Ambiguous", swatchColor("WARN"));
+              legendItem("MISSING - Font not found", swatchColor("MISSING"));
+
+              var dividerLine = win.add("panel");
+              dividerLine.minimumSize.height = 1;
+              dividerLine.maximumSize.height = 1;
+
+
+              // Header row
+              var header = win.add("group");
+              header.orientation = "row";
+              header.alignChildren = ["left","center"];
+              header.spacing = 10;
+
+              var hSpacer = header.add("statictext", undefined, ""); // swatch spacer
+              hSpacer.preferredSize = [12,18];
+              var hStatus = header.add("statictext", undefined, "STATUS");
+              hStatus.preferredSize = [COL_STATUS,18];
+              setBold(hStatus, 11);
+              var hFont = header.add("statictext", undefined, "FONT");
+              hFont.preferredSize = [COL_FONT,18];
+              setBold(hFont, 11);
+              var hNotes = header.add("statictext", undefined, "NOTES");
+              hNotes.preferredSize = [COL_NOTES,18];
+              setBold(hNotes, 11);
+
+              var listGroup = win.add("group");
+              listGroup.orientation="column";
+              listGroup.alignChildren=["fill","top"];
+              listGroup.spacing=6;
+              listGroup.preferredSize=[LIST_W,LIST_H_INIT];
+
+              function clearList(){
+                while(listGroup.children.length) listGroup.remove(listGroup.children[0]);
+              }
+
+              function addRowUI(row){
+                var g = listGroup.add("group");
+                g.orientation="row";
+                g.alignChildren=["left","center"];
+                g.spacing=10;
+
+                addSwatchUI(g, swatchColor(row.status), 12);
+
+                var st = g.add("statictext", undefined, row.status);
+                st.preferredSize=[COL_STATUS,18];
+                if(row.status === "OK") setBold(st, 11);
+
+                var fn = g.add("statictext", undefined, row.name);
+                fn.preferredSize=[COL_FONT,18];
+
+                var note = g.add("statictext", undefined, clip(prettyText(row.note||""), 140));
+                note.preferredSize=[COL_NOTES,18];
+              }
+
+              var spacer = win.add("group");
+              spacer.preferredSize = [0, 12];
+
+              var btns = win.add("group");
+              btns.orientation="row";
+              btns.alignChildren=["left","center"];
+              btns.spacing=10;
+
+              var exportBtn = btns.add("button", undefined, "EXPORT FONT LIST...");
+
+              var getFontsBtn = btns.add("button", undefined, "GET FONTS...");
+
+              var closeBtn = btns.add("button", undefined, "CLOSE");
+              closeBtn.onClick = function(){ try{ win.close(0); }catch(e){ try{ win.close(); }catch(e2){} } };
+              defocusButtonBestEffort(closeBtn);
+            // State
+              var currentRows = [];
+              var currentFonts = [];
+
+              function runAudit(){
+                if(!app.project){ alert("No project is open."); return; }
+
+                var fonts = getFontsInProject({});
+                currentFonts = fonts.slice(0);
+
+                clearList();
+                currentRows = [];
+
+                totalTxt.text = "Total: " + fonts.length;
+
+                if(!fonts.length){
+                  win.layout.layout(true);
+                  return;
+                }
+
+                var indexPack = isMac() ? buildMacIndex() : null;
+
+                for (var i = 0; i < fonts.length; i++) {
+                  var name = fonts[i];
+                  var path = "";
+                  var note = "";
+                  var status = "MISSING";
+
+                  var ctPath = coreTextResolvePath(name);
+                  if (ctPath && fileLooksLikeFontPath(ctPath)) {
+                    path = ctPath;
+                    status = "OK";
+                    note = "Resolved. (" + prettyFileName(path) + ")";
+                  } else if (isMac() && indexPack && indexPack.files && indexPack.files.length) {
+                    var c = findByScan(name, indexPack.files);
+
+                    if (c && c.length === 1) {
+                      path = c[0].file.fsName;
+                      status = "OK";
+                      note = "Resolved. (" + prettyFileName(path) + ")";
+                    } else if (c && c.length > 1) {
+                      status = "WARN";
+                      note = "Ambiguous (multiple matches).";
+                    } else {
+                      status = "MISSING";
+                      note = "Font not found.";
+                    }
+                  } else {
+                    status = "WARN";
+                    note = "Resolver unavailable.";
+                  }
+
+                  if (path && fileLooksLikeFontPath(path)) status = "OK";
+
+                  currentRows.push({name:name, status:status, path:path, note:note});
+                }
+
+                sortRows(currentRows);
+                for(var r=0;r<currentRows.length;r++) addRowUI(currentRows[r]);
+
+                win.layout.layout(true);
+              }
+
+              function exportFontList(){
+                if(!currentFonts || !currentFonts.length){
+                  alert("Nothing to export. Click FONT AUDIT first.");
+                  return;
+                }
+
+                var outFile = File.saveDialog("Save Font List", "Text:*.txt");
+                if(!outFile) return;
+
+                try{
+                  var nm = (outFile.name || "");
+                  if(nm.toLowerCase().indexOf(".txt") === -1){
+                    outFile = new File(outFile.fsName + ".txt");
+                  }
+                }catch(e0){}
+
+                    // Build lines with extension when we have a resolved file path (OK rows)
+                var extByName = {};
+                for (var i=0; i<currentRows.length; i++) {
+                  try {
+                    if (currentRows[i].status === "OK" && currentRows[i].path) {
+                      var nm = currentRows[i].name;
+                      var fn = File(currentRows[i].path).name;
+                      var m = fn.match(/\.([a-z0-9]+)$/i);
+                      if (m && m[1]) extByName[nm] = m[1].toLowerCase();
+                    }
+                  } catch(e) {}
+                }
+
+                var lines = [];
+                for (var j=0; j<currentFonts.length; j++) {
+                  var n = currentFonts[j];
+                  var ext = extByName[n];
+                  lines.push(ext ? (n + "	." + ext) : n);
+                }
+                var text = lines.join("\n");
+            try{
+                  outFile.encoding = "UTF-8";
+                  if(!outFile.open("w")){
+                    alert("Could not open file for writing.");
+                    return;
+                  }
+                  outFile.write(text);
+                  outFile.close();
+
+                  try{
+                    if(isMac()) safeCallSystem('open -R "' + outFile.fsName + '"');
+                    else safeCallSystem('explorer /select,"' + outFile.fsName + '"');
+                  }catch(eR){}
+                }catch(eW){
+                  try{ outFile.close(); }catch(eC){}
+                  alert("Could not write file:\n" + eW.toString());
+                }
+              }
+
+              auditBtn.onClick = function(){
+                try{ runAudit(); }
+                catch(e){ alert("Font Audit error:\n" + e.toString()); }
+              };
+
+
+              // ------------------ Remote font search (network / mounted volumes) ------------------
+              // Notes:
+              // - ExtendScript cannot reliably enumerate "network computers" directly.
+              // - This UI shows a list you can edit. For macOS SMB shares, most are mounted under /Volumes/<ShareName>.
+              // - When you pick a machine, we attempt to locate its Fonts folders under a mounted root. If not found, you'll be prompted to choose the mounted folder.
+
+              function guessMountedRootForComputer(name){
+                if(!isMac()) return "";
+                // common pattern: /Volumes/<ComputerName> or /Volumes/<ShareName>
+                var p = "/Volumes/" + name;
+                try{ if(new Folder(p).exists) return p; }catch(e){}
+                return "";
+              }
+
+              function buildRemoteIndexFromRoot(rootFs){
+                // Build a candidate list of font roots under the remote root, then collect font files.
+                // We reuse collectFontFiles from the local scan code.
+                var roots = [];
+
+                function add(p, rec){
+                  try{
+                    var f = new Folder(p);
+                    if(f.exists) roots.push({p:p, r:rec});
+                  }catch(e){}
+                }
+
+                // If user selects a Mac root, it might be the entire disk or a share containing Users/Library
+                add(rootFs + "/Library/Fonts", true);
+                add(rootFs + "/System/Library/Fonts", true);
+                add(rootFs + "/System/Library/Fonts/Supplemental", true);
+
+                // User fonts: attempt common share layouts
+                add(rootFs + "/Users/Shared", true);
+
+                // If the share is a user home share, these may exist
+                add(rootFs + "/Library/Application Support/Adobe/Fonts", true);
+                add(rootFs + "/Library/Application Support/Adobe/CoreSync/plugins/livetype/r", true);
+                add(rootFs + "/Library/Application Support/Adobe/TypeSupport", true);
+
+                // If share contains "Users/<user>/Library/Fonts"
+                try{
+                  var usersFolder = new Folder(rootFs + "/Users");
+                  if(usersFolder.exists){
+                    var kids = usersFolder.getFiles();
+                    for(var i=0;i<kids.length;i++){
+                      var k = kids[i];
+                      if(k instanceof Folder){
+                        add(k.fsName + "/Library/Fonts", true);
+                        add(k.fsName + "/Library/Application Support/Adobe/Fonts", true);
+                        add(k.fsName + "/Library/Application Support/Adobe/CoreSync/plugins/livetype/r", true);
+                        add(k.fsName + "/Library/Application Support/Adobe/TypeSupport", true);
+                      }
+                    }
+                  }
+                }catch(eU){}
+
+                // Also allow if the root itself IS a Fonts folder
+                add(rootFs, true);
+
+                var files = [];
+                for(var r=0;r<roots.length;r++){
+                  collectFontFiles(roots[r].p, roots[r].r, files);
+                }
+                return {files: files, roots: roots};
+              }
+
+              function resolveMissingFontsFromRemote(indexFiles, remoteLabel){
+                // Only re-check rows that are MISSING or WARN.
+                for(var i=0;i<currentRows.length;i++){
+                  var row = currentRows[i];
+                  if(row.status === "OK") continue;
+
+                  var c = findByScan(row.name, indexFiles);
+                  if(c && c.length === 1){
+                    row.path = c[0].file.fsName;
+                    row.status = "OK";
+                    row.note = "Resolved (remote: " + remoteLabel + "). (" + prettyFileName(row.path) + ")";
+                  }else if(c && c.length > 1){
+                    row.status = "WARN";
+                    row.note = "Ambiguous (remote: " + remoteLabel + ").";
+                  }else{
+                    // keep existing
+                    if(!row.note || row.note === "Font not found.") row.note = "Font not found (remote checked: " + remoteLabel + ").";
+                  }
+                }
+                sortRows(currentRows);
+                clearList();
+                for(var r=0;r<currentRows.length;r++) addRowUI(currentRows[r]);
+                win.layout.layout(true);
+              }
+
+              function showGetFontsDialog(){
+                var d = new Window("dialog", "GET FONTS", undefined, {closeButton:true});
+                d.orientation = "column";
+                d.alignChildren = ["fill","top"];
+                d.margins = 14;
+                d.spacing = 10;
+
+                var info = d.add("statictext", undefined, "Search missing fonts on connected computers (mounted volumes) or saved computers:");
+                info.maximumSize.width = 600;
+
+                // ---- CONNECTED (auto from /Volumes on macOS) ----
+                var connectedLabel = d.add("statictext", undefined, "CONNECTED COMPUTERS (Mounted Volumes)");
+                setBold(connectedLabel, 11);
+
+                var connectedList = d.add("listbox", undefined, [], {multiselect:false});
+                connectedList.preferredSize = [600, 140];
+
+                var lastClicked = "connected";
+                connectedList.onChange = function(){ lastClicked = "connected"; };
+
+                function refreshConnected(){
+                  connectedList.removeAll();
+                  if(!isMac()){
+                    connectedList.add("item", "(Auto-detect supported on macOS only)");
+                    connectedList.selection = 0;
+                    return;
+                  }
+                  var vols = new Folder("/Volumes");
+                  if(!vols.exists){
+                    connectedList.add("item", "(No /Volumes folder found)");
+                    connectedList.selection = 0;
+                    return;
+                  }
+
+                  var kids = [];
+                  try{ kids = vols.getFiles(); }catch(e){ kids = []; }
+
+                  // Filter out obvious local/system mounts
+                  function isNoise(name){
+                    name = (name||"").toLowerCase();
+                    if(!name) return true;
+                    if(name === "macintosh hd" || name === "macintosh hd - data") return true;
+                    if(name.indexOf("time machine") !== -1) return true;
+                    if(name.indexOf("com.apple.timemachine") !== -1) return true;
+                    if(name.indexOf("recovery") !== -1) return true;
+                    if(name.indexOf("preboot") !== -1) return true;
+                    if(name.indexOf("vm") !== -1) return true;
+                    if(name.indexOf("update") !== -1) return true;
+                    return false;
+                  }
+
+                  var names = [];
+                  for(var i=0;i<kids.length;i++){
+                    var k = kids[i];
+                    if(!(k instanceof Folder)) continue;
+                    if(isNoise(k.name)) continue;
+                    names.push(k.name);
+                  }
+                  names.sort();
+
+                  if(!names.length){
+                    connectedList.add("item", "(No mounted network volumes detected)");
+                    connectedList.selection = 0;
+                    return;
+                  }
+
+                  for(var n=0;n<names.length;n++){
+                    var raw = names[n];
+                    addListItem(connectedList, raw);
+                  }
+                  connectedList.selection = 0;
+                }
+
+                refreshConnected();
+
+                // ---- SAVED (manual list) ----
+                var savedLabel = d.add("statictext", undefined, "SAVED COMPUTERS");
+                setBold(savedLabel, 11);
+
+                var savedList = d.add("listbox", undefined, [], {multiselect:false});
+                savedList.preferredSize = [600, 140];
+                savedList.onChange = function(){ lastClicked = "saved"; };
+
+                // Seed list (editable)
+                var machines = [
+                  "SHINE-EDIT-01",
+                  "SHINE-EDIT-02",
+                  "SHINE-EDIT-03",
+                  "SHINE-EDIT-04",
+                  "SHINE-EDIT-05",
+                  "SHINE-EDIT-06",
+                  "SHINE-EDIT-07",
+                  "SHINE-EDIT-08",
+                  "SHINE-EDIT-09",
+                  "SHINE-EDIT-10"
+                ];
+                for(var i=0;i<machines.length;i++){
+                  var rawS = machines[i];
+                  addListItem(savedList, rawS);
+                }
+                if(savedList.items.length) savedList.selection = 0;
+
+                // ---- Controls ----
+                var row = d.add("group");
+                row.orientation = "row";
+                row.alignChildren = ["left","center"];
+                row.spacing = 10;
+
+                var refreshBtn = row.add("button", undefined, "REFRESH");
+                var addBtn = row.add("button", undefined, "ADD...");
+                var removeBtn = row.add("button", undefined, "REMOVE");
+                row.add("statictext", undefined, "   ");
+                var cancelBtn = row.add("button", undefined, "CANCEL");
+                var goBtn = row.add("button", undefined, "SEARCH");
+
+                refreshBtn.onClick = function(){ refreshConnected(); };
+
+                addBtn.onClick = function(){
+                  var name = prompt("Computer / Share name:", "");
+                  if(name){
+                    addListItem(savedList, name);
+                    savedList.selection = savedList.items.length-1;
+                  }
+                };
+
+                removeBtn.onClick = function(){
+                  if(savedList.selection){
+                    var idx = savedList.selection.index;
+                    savedList.remove(idx);
+                    if(savedList.items.length) savedList.selection = Math.max(0, idx-1);
+                  }
+                };
+
+                cancelBtn.onClick = function(){ d.close(0); };
+
+                function getSelectedTarget(){
+                  if(lastClicked === "connected"){
+                    if(connectedList.selection){
+                      var t = connectedList.selection.text;
+                      if(t && t.charAt(0) !== "("){
+                        var rawT = connectedList.selection.rawName || t;
+                        return {label:rawT, kind:"connected"};
+                      }
+                    }
+                  }else{
+                    if(savedList.selection){
+                      var s = savedList.selection.text;
+                      if(s){
+                        var rawS = savedList.selection.rawName || s;
+                        return {label:rawS, kind:"saved"};
+                      }
+                    }
+                  }
+
+                  // Fallbacks
+                  if(connectedList.selection){
+                    var c = connectedList.selection.text;
+                    if(c && c.charAt(0) !== "("){
+                      var rawC = connectedList.selection.rawName || c;
+                      return {label:rawC, kind:"connected"};
+                    }
+                  }
+                  if(savedList.selection){
+                    var s2 = savedList.selection.text;
+                    if(s2){
+                      var rawS2 = savedList.selection.rawName || s2;
+                      return {label:rawS2, kind:"saved"};
+                    }
+                  }
+                  return null;
+                }
+
+                goBtn.onClick = function(){
+                  if(!currentRows || !currentRows.length){
+                    alert("Run FONT AUDIT first.");
+                    return;
+                  }
+
+                  var sel = getSelectedTarget();
+                  if(!sel){
+                    alert("Select a computer/share from CONNECTED or SAVED.");
+                    return;
+                  }
+
+                  var comp = sel.label;
+                  var rootFolder = null;
+
+                  if(sel.kind === "connected" && isMac()){
+                    // Connected volumes are already mounted under /Volumes/<name>
+                    var rootGuess = "/Volumes/" + comp;
+                    rootFolder = new Folder(rootGuess);
+                    if(!rootFolder.exists){
+                      // fallback
+                      rootFolder = null;
+                    }
+                  }else{
+                    // Saved: try guess mount, otherwise prompt
+                    var rootGuess2 = guessMountedRootForComputer(comp);
+                    var tryFolder = rootGuess2 ? new Folder(rootGuess2) : null;
+                    if(tryFolder && tryFolder.exists){
+                      rootFolder = tryFolder;
+                    }
+                  }
+
+                  if(!rootFolder || !rootFolder.exists){
+                    var chosen = Folder.selectDialog("Select the mounted share folder for: " + comp);
+                    if(!chosen) return;
+                    rootFolder = chosen;
+                  }
+
+                  var pack = buildRemoteIndexFromRoot(rootFolder.fsName);
+                  if(!pack.files || pack.files.length === 0){
+                    alert("No font files found under that share.\nChecked root:\n" + rootFolder.fsName);
+                    return;
+                  }
+
+                  resolveMissingFontsFromRemote(pack.files, comp);
+                  d.close(1);
+                };
+
+                d.center();
+                d.show();
+              }
+
+
+
+              getFontsBtn.onClick = function(){
+                try{ showGetFontsDialog(); }
+                catch(e){ alert("GET FONTS error:\n" + e.toString()); }
+              };
+
+              exportBtn.onClick = function(){
+                try{ exportFontList(); }
+                catch(e){ alert("Export error:\n" + e.toString()); }
+              };
+
+              win.onResizing = win.onResize = function(){
+                try{
+                  var winH = (win.size && win.size.height) ? win.size.height : 650;
+                  var reserve = 185;
+                  listGroup.preferredSize.height = Math.max(160, winH - reserve);
+                  this.layout.resize();
+                }catch(e){}
+              };
+
+              $.global.__FontAuditQuickWin__ = win;
+              win.center();
+              win.show();
+
+            }
+
+                __RunFontAuditModal__();
+            } catch (e) {
+                alert("Font Audit error:\n" + String(e));
+            }
+        }
+
 
         function _buildTextTabIfNeeded() {
             if (__textTabBuilt) return;
@@ -3617,8 +4825,8 @@ tabUnderlineLayer.onDraw = function () {
                                     if (!animDD.selection) return;
                                     var sel = animDD.selection;
 
-                                    // Cmd/Ctrl+click removes the item from the saved list (TEXT tab parity with MAIN).
-                                    if (sel && sel.__path && _isCmdOrCtrlDown()) {
+                                    // Cmd+click removes the item from the saved list (TEXT tab parity with MAIN).
+                                    if (sel && sel.__path && _isCmdDown()) {
                                         try {
                                             animRemovePath(sel.__path);
                                             animRebuildDropdown();
@@ -3675,6 +4883,17 @@ tabUnderlineLayer.onDraw = function () {
                     ]);
                 });
 
+                // TEXT TAB: Fonts
+                textAcc.defineSection("FONTS", function(body){
+                    // 2-column grid (placeholder auto-added if odd count)
+                    addGrid2(body, [
+                        {
+                            text: "FONT AUDIT",
+                            onClick: function(){ _showFontAuditDialog(); }
+                        }
+                    ]);
+                });
+
                 // TEXT TAB: Utilities (uses same accordion behavior + layout as MAIN)
                 textAcc.defineSection("UTILITIES", function(body){
                     addGrid2(body, [
@@ -3710,10 +4929,12 @@ tabUnderlineLayer.onDraw = function () {
             var isMain = (which === "MAIN");
             var isText = (which === "TEXT");
             var isUpdates = (which === "UPDATES");
+            var isRequests = (which === "REQUESTS");
             var isHelp = (which === "HELP");
             tabMain.visible = isMain;
             tabText.visible = isText;
             tabUpdates.visible = isUpdates;
+            tabRequests.visible = isRequests;
             tabHelp.visible = isHelp;
 // Build heavy tabs on first use
             if (isText) { try { _buildTextTabIfNeeded(); } catch (eBT) {} }
@@ -3721,6 +4942,7 @@ tabUnderlineLayer.onDraw = function () {
             _setTopTabLabelColor(tabLblMain, isMain ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
             _setTopTabLabelColor(tabLblText, isText ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
             _setTopTabLabelColor(tabLblUpdates, isUpdates ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
+            _setTopTabLabelColor(tabLblRequests, isRequests ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
             _setTopTabLabelColor(tabLblHelp, isHelp ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
 // Force underline redraw without full relayout
             try { tabUnderlineLayer.visible = false; tabUnderlineLayer.visible = true; } catch (eU) {}
@@ -3739,6 +4961,7 @@ tabUnderlineLayer.onDraw = function () {
             tabLblMain.addEventListener("mousedown", function(){ _selectTopTab("MAIN"); });
             tabLblText.addEventListener("mousedown", function(){ _selectTopTab("TEXT"); });
             tabLblUpdates.addEventListener("mousedown", function(){ _selectTopTab("UPDATES"); });
+            tabLblRequests.addEventListener("mousedown", function(){ _selectTopTab("REQUESTS"); });
             tabLblHelp.addEventListener("mousedown", function(){ _selectTopTab("HELP"); });
 } catch (eEvt) {}
 
@@ -3757,6 +4980,12 @@ tabUnderlineLayer.onDraw = function () {
         tabUpdates.alignChildren = ["fill", "top"];
         tabUpdates.margins       = [0, 0, 0, 0];
         tabUpdates.spacing       = 0;
+
+        tabRequests.orientation   = "column";
+        tabRequests.alignChildren = ["fill", "top"];
+        tabRequests.margins       = [0, 0, 0, 0];
+        tabRequests.spacing       = 0;
+
         tabHelp.orientation   = "column";
         tabHelp.alignChildren = ["fill", "top"];
         tabHelp.margins       = 12;
@@ -3787,6 +5016,10 @@ tabUnderlineLayer.onDraw = function () {
         updatesMeta.margins       = 0;
         updatesMeta.spacing       = 4;
 
+        // NOTE: Version is centralized near the top as SHINE_VERSION.
+        // (SHINE_TOOLS_VERSION remains as a derived "vX.Y" display string.)
+        var SHINE_TOOLS_VERSION = "v" + SHINE_VERSION;
+
         function _makeKVRow(k, v) {
             var r = updatesMeta.add("group");
             r.orientation   = "row";
@@ -3803,7 +5036,7 @@ tabUnderlineLayer.onDraw = function () {
             return {row:r, key:kst, val:vst};
         }
 
-        var kvVersion = _makeKVRow("Current version:", SHINE_VERSION_TAG);
+        var kvVersion = _makeKVRow("Current version:", SHINE_TOOLS_VERSION);
         var kvLatest  = _makeKVRow("Latest version:", "—");
         var kvStatus  = _makeKVRow("Status:", "Not checked yet");
         var kvLast    = _makeKVRow("Last checked:", "—");
@@ -3828,23 +5061,14 @@ tabUnderlineLayer.onDraw = function () {
         updatesControls.margins       = 0;
         updatesControls.spacing       = 12;
 
-        var btnCheckUpdates = updatesControls.add("button", undefined, "CHECK FOR UPDATES");
-        var cbAutoCheck     = updatesControls.add("checkbox", undefined, "Auto-check on launch");
+        var btnCheckUpdates  = updatesControls.add("button", undefined, "CHECK FOR UPDATES");
+        var btnInstallUpdate = updatesControls.add("button", undefined, "INSTALL UPDATE");
+        btnInstallUpdate.enabled = false;
+        var cbAutoCheck      = updatesControls.add("checkbox", undefined, "Auto-check on launch");
         cbAutoCheck.value = false;
 
-        // Box.com PKG updater (wired)
-
-        // -------------------------
-        // BOX.COM UPDATE CHECK (PKG workflow)
-        // -------------------------
-        // NOTE:
-        //  - For automated downloads, use GitHub *raw* file links (not the GitHub page URL).
-        //  - One common direct-download pattern for shared links is converting:
-        //      https://app.githubusercontent.com/s/<TOKEN>  =>  https://<your-subdomain>.githubusercontent.com/shared/static/<TOKEN>
-        //    However, that pattern only works when the token is for a FILE direct link.
-        //
-        // Your current GitHub version.json link (provided by Jim):
-        var GITHUB_VERSION_JSON_URL = "https://raw.githubusercontent.com/ShineTools1333/ShineTools/refs/heads/main/version.json";
+        // GitHub update check
+        var GITHUB_VERSION_JSON_URL = "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/version.json";
         // Expected JSON shape (version.json):
         // {
         //   "latest": "1.0.6",
@@ -3856,29 +5080,28 @@ tabUnderlineLayer.onDraw = function () {
         // Where to install (handled by the PKG payload):
         //   /Applications/Adobe After Effects 2025/Scripts/ScriptUI Panels
 
+        // Simple in-memory update state so CHECK does not INSTALL.
+        var __UPDATE_STATE = {
+            checked: false,
+            available: false,
+            latest: null,
+            jsxUrl: null,
+            pkgUrl: null,
+            notes: null
+        };
+
         function _normalizeUpdateUrl(url) {
-            // Normalizes update URLs when needed.
-            // - For GitHub raw URLs: returns unchanged.
-            // - For legacy Box shared links: attempts a conservative conversion to /shared/static/.
+            // Normalize update URLs (GitHub raw only).
+            // Tolerate "/refs/heads/" URLs by converting to canonical raw path.
             try {
                 if (!url) return url;
-
-                // If not Box, do nothing.
-                if (String(url).indexOf("box.com") === -1) return url;
-
-                // If already a shared/static link, leave it.
-                if (url.indexOf("/shared/static/") !== -1) return url;
-
-                // Convert common Box shared link form:
-                //   https://app.box.com/s/<TOKEN>
-                // to:
-                //   https://app.box.com/shared/static/<TOKEN>
-                // Note: Some Box tenants require a different subdomain; if so, paste the true direct link instead.
-                var tokenMatch = url.match(/box\.com\/s\/([A-Za-z0-9]+)/);
-                if (!tokenMatch || !tokenMatch[1]) return url;
-
-                var token = tokenMatch[1];
-                return url.replace(/box\.com\/s\/[A-Za-z0-9]+/, "box.com/shared/static/" + token);
+                var s = String(url);
+                if (s.indexOf("raw.githubusercontent.com") !== -1 && s.indexOf("/refs/heads/") !== -1) {
+                    // https://raw.githubusercontent.com/ORG/REPO/refs/heads/main/file
+                    // -> https://raw.githubusercontent.com/ORG/REPO/main/file
+                    s = s.replace(/\/refs\/heads\//, "/");
+                }
+                return s;
             } catch (e) {
                 return url;
             }
@@ -3886,41 +5109,212 @@ tabUnderlineLayer.onDraw = function () {
 
         function _curlDownload(url, outPath) {
             // Returns { ok:boolean, msg:string }
-            // Uses OS-native downloaders so redirects (GitHub Releases) work reliably.
+            // macOS-only: uses curl with redirects enabled (GitHub).
             try {
                 if (!url) return { ok:false, msg:"Missing URL." };
+
                 var f = new File(outPath);
+
                 // Ensure parent folder exists
-                try { if (f.parent && !f.parent.exists) f.parent.create(); } catch (e) {}
+                try { if (f.parent && !f.parent.exists) f.parent.create(); } catch (e0) {}
 
-                var osStr = ($.os || "").toLowerCase();
+                var curlBin = "/usr/bin/curl";
+                var cmd = curlBin + " -L --fail --silent --show-error "
+                        + _shellEscape(String(url))
+                        + " -o " + _shellEscape(String(outPath))
+                        + " 2>&1";
 
-                if (osStr.indexOf("windows") !== -1) {
-                    // Windows: PowerShell Invoke-WebRequest (follows redirects)
-                    var psUrl = String(url).replace(/'/g, "''");
-                    var psOut = String(outPath).replace(/'/g, "''");
-                    var cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "'
-                            + 'try { Invoke-WebRequest -Uri \''
-                            + psUrl
-                            + '\' -OutFile \''
-                            + psOut
-                            + '\' -UseBasicParsing } catch { exit 1 }"';
-                    var out = system.callSystem(cmd);
-                } else {
-                    // macOS (and most Unix): curl with -L for redirects
-                    var cmd2 = "curl -L --fail --silent --show-error " + _shellEscape(url) + " -o " + _shellEscape(outPath);
-                    var out2 = system.callSystem(cmd2);
+                var msg = String(system.callSystem(cmd) || "");
+
+                // Fallback (some environments don't like absolute curl path)
+                if ((!f.exists || f.length <= 0) && msg) {
+                    try {
+                        var cmd2 = "curl -L --fail --silent --show-error "
+                                + _shellEscape(String(url))
+                                + " -o " + _shellEscape(String(outPath))
+                                + " 2>&1";
+                        msg = String(system.callSystem(cmd2) || msg);
+                    } catch (eFB) {}
                 }
 
                 // Verify file written
-                if (f.exists && f.length > 0) return { ok:true, msg:"" };
-                return { ok:false, msg:"Download failed." };
+                if (f.exists && f.length > 0) {
+
+                    // Detect HTML / 404 bodies (GitHub page, proxy login page, etc.)
+                    try {
+                        var probe = _readTextFile(outPath);
+                        if (probe) {
+                            var p = String(probe);
+                            if (/<html|<!doctype/i.test(p)) {
+                                return { ok:false, msg:"Got HTML instead of a file. Use a direct RAW (raw.githubusercontent.com) link." };
+                            }
+                            if (/^\s*404\s*:|^\s*404\s+not\s+found/i.test(p) || /Not\s+Found\s*\(404\)/i.test(p)) {
+                                return { ok:false, msg:"Got 404 Not Found. Check that the RAW URL path is correct." };
+                            }
+                            if (/rate\s*limit/i.test(p) && /github/i.test(p)) {
+                                return { ok:false, msg:"GitHub rate-limit response. Try again later." };
+                            }
+                        }
+                    } catch (eProbe) {}
+
+                    return { ok:true, msg: msg };
+                }
+
+
+                return { ok:false, msg:(msg || "Download failed.") };
             } catch (e2) {
                 return { ok:false, msg:String(e2) };
             }
         }
 
-        function _runPkgInstaller(pkgPath) {
+        function _shellEscape(s) {
+            // Quote a string so it is safe to pass as a single argument in a macOS shell command.
+            // Implementation: wrap in single quotes and escape embedded single quotes.
+            try {
+                var str = String(s);
+                str = str.replace(/'/g, "'\''");
+                return "'" + str + "'";
+            } catch (e) {
+                return "''";
+            }
+        }
+
+        
+        function _readTextFile(pathOrFile) {
+            // Reads a text file and returns a string (best-effort).
+            // Used only for light probing (e.g., detecting HTML instead of JSON/JSX).
+            var f = null;
+            try {
+                f = (pathOrFile instanceof File) ? pathOrFile : new File(String(pathOrFile));
+                if (!f.exists) return "";
+                if (!f.open("r")) return "";
+                var s = f.read();
+                try { f.close(); } catch (e0) {}
+                return s || "";
+            } catch (e) {
+                try { if (f) f.close(); } catch (e1) {}
+                return "";
+            }
+        }
+
+
+        function _extractJsonValue(jsonText, key) {
+            // Very small helper to extract a top-level string/number value from JSON text.
+            // This avoids relying on JSON.parse in older ExtendScript builds.
+            try {
+                if (!jsonText || !key) return null;
+                var re = new RegExp('\"' + key + '\"\\s*:\\s*(?:"([^"]*)"|([0-9]+(?:\\.[0-9]+)?))', "i");
+                var m = re.exec(String(jsonText));
+                if (!m) return null;
+                return (m[1] !== undefined && m[1] !== null) ? String(m[1]) : ((m[2] !== undefined && m[2] !== null) ? String(m[2]) : null);
+            } catch (e) { return null; }
+        }
+
+        function _extractJsonStringArray(jsonText, key) {
+            // Extract an array of strings from JSON text for a given key, e.g. "notes": ["a","b"]
+            // Returns [] if not found. Avoids JSON.parse for older ExtendScript builds.
+            try {
+                if (!jsonText || !key) return [];
+                var s = String(jsonText);
+
+                // Find the bracketed array after the key
+                var reBlock = new RegExp('\"' + key + '\"\\s*:\\s*\\[([\\s\\S]*?)\\]', 'i');
+                var mb = reBlock.exec(s);
+                if (!mb || mb.length < 2) return [];
+
+                var inside = String(mb[1] || "");
+                var out = [];
+                var reStr = /"([^"\\]*(?:\\.[^"\\]*)*)"/g; // handles basic escaped sequences
+                var m2;
+                while ((m2 = reStr.exec(inside)) !== null) {
+                    var val = String(m2[1] || "");
+                    // Unescape common JSON escapes
+                    val = val.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\"/g, "\"").replace(/\\\\/g, "\\");
+                    if (val !== "") out.push(val);
+                }
+                return out;
+            } catch (e) { return []; }
+        }
+
+
+        function _ensureFolder(pathOrFolder) {
+            // Returns a Folder (created if needed) or null.
+            try {
+                var f = (pathOrFolder instanceof Folder) ? pathOrFolder : new Folder(String(pathOrFolder));
+                if (!f.exists) {
+                    if (!f.create()) return null;
+                }
+                return f;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function _showToast(msg, ms) {
+            // Simple ScriptUI toast: small palette that auto-closes.
+            // Appears only when we install an update successfully.
+            try {
+                ms = (ms == null) ? 2200 : Math.max(800, ms);
+                try { if ($.global.__ShineToolsToastWin) $.global.__ShineToolsToastWin.close(); } catch (e0) {}
+
+                var w = new Window('palette', '', undefined, {closeButton:false});
+                $.global.__ShineToolsToastWin = w;
+                w.orientation = 'column';
+                w.alignChildren = ['fill','top'];
+                w.margins = 14;
+                var st = w.add('statictext', undefined, String(msg || ''), {multiline:true});
+                st.maximumSize = [340, 100];
+                try {
+                    st.graphics.foregroundColor = st.graphics.newPen(st.graphics.PenType.SOLID_COLOR, [0.95,0.95,0.95,1], 1);
+                } catch (e1) {}
+                w.show();
+
+                try {
+                    app.scheduleTask("try{ if($.global.__ShineToolsToastWin) $.global.__ShineToolsToastWin.close(); }catch(e){}", ms, false);
+                } catch (e2) {
+                    // fallback
+                    try { w.close(); } catch (e3) {}
+                }
+            } catch (e) {
+                // Worst-case fallback: alert
+                try { alert(String(msg || '')); } catch (e2) {}
+            }
+        }
+
+        function _promptInstallDialog(latestVer, installedVer) {
+            // Returns true if user clicks Install.
+            try {
+                var d = new Window('dialog', 'ShineTools Update');
+                d.orientation = 'column';
+                d.alignChildren = ['fill','top'];
+                d.margins = 16;
+                d.spacing = 10;
+
+                d.add('statictext', undefined, 'A new update is available.', {multiline:true});
+                d.add('statictext', undefined, 'Installed: v' + installedVer + '\nLatest: v' + latestVer, {multiline:true});
+
+                var btnRow = d.add('group');
+                btnRow.orientation = 'row';
+                btnRow.alignChildren = ['right','center'];
+                btnRow.alignment = ['fill','top'];
+                btnRow.spacing = 10;
+
+                var bCancel = btnRow.add('button', undefined, 'Cancel', {name:'cancel'});
+                var bInstall = btnRow.add('button', undefined, 'Install', {name:'ok'});
+
+                var want = false;
+                bInstall.onClick = function(){ want = true; d.close(1); };
+                bCancel.onClick  = function(){ want = false; d.close(0); };
+
+                d.show();
+                return want;
+            } catch (e) {
+                // fallback
+                return confirm('A new update is available.\n\nInstall now?');
+            }
+        }
+
+function _runPkgInstaller(pkgPath) {
             // Use AppleScript to prompt for admin and run installer.
             // Returns { ok:boolean, msg:string }
             try {
@@ -3973,30 +5367,39 @@ tabUnderlineLayer.onDraw = function () {
         }
 
         function _compareVersions(a, b) {
-            // returns 1 if a>b, -1 if a<b, 0 if equal (simple semver-ish)
+            // returns 1 if a>b, -1 if a<b, 0 if equal (numeric dotted versions)
+            // Handles v1.2.3, 1.2, 1.2.0, 1.10 vs 1.2, etc.
             function norm(v){
-                v = String(v||"").replace(/^v/i,"");
-                var parts = v.split(".");
+                v = String(v||"").replace(/^v\s*/i,"");
+                // Extract all numeric chunks (more robust than split("."), which can fail on "1.0-beta")
+                var m = v.match(/\d+/g);
                 var nums = [];
-                for (var i=0;i<parts.length;i++){
-                    var n = parseInt(parts[i],10);
-                    nums.push(isNaN(n)?0:n);
+                if (m) {
+                    for (var i=0;i<m.length;i++){
+                        var n = parseInt(m[i], 10);
+                        nums.push(isNaN(n)?0:n);
+                    }
                 }
+                // Ensure at least 3 parts (major.minor.patch) for stable comparisons
                 while (nums.length < 3) nums.push(0);
                 return nums;
             }
             var A = norm(a), B = norm(b);
             for (var i=0;i<Math.max(A.length,B.length);i++){
-                var x=A[i]||0, y=B[i]||0;
-                if (x>y) return 1;
-                if (x<y) return -1;
+                var x = (i < A.length) ? A[i] : 0;
+                var y = (i < B.length) ? B[i] : 0;
+                if (x > y) return 1;
+                if (x < y) return -1;
             }
             return 0;
         }
 
         function _getCurrentVersionString() {
+            // Pull from footer if possible, else hardcode.
             try {
-                return String(SHINE_VERSION);
+                var t = (gfCopy && gfCopy.text) ? gfCopy.text : "";
+                var m = t.match(/v(\d+\.\d+(?:\.\d+)?)/i);
+                if (m && m[1]) return m[1];
             } catch (e) {}
             return "1.0";
         }
@@ -4021,7 +5424,7 @@ tabUnderlineLayer.onDraw = function () {
 
             var dl = _curlDownload(versionUrl, versionPath);
             if (!dl.ok) {
-                _setUpdatesStatus("Could not download version.json. (Is this a direct *file* link?)");
+                _setUpdatesStatus("Update check failed: could not download version.json. " + (dl.msg ? ("(" + dl.msg + ")") : ""));
                 return;
             }
 
@@ -4032,10 +5435,37 @@ tabUnderlineLayer.onDraw = function () {
             }
 
             var data = null;
-            try { data = JSON.parse(raw); } catch (eJSON) { data = null; }
+
+            // Harden parsing across different ExtendScript builds:
+            // - strip UTF-8 BOM
+            // - trim whitespace
+            // - attempt JSON.parse when available
+            // - fallback to regex extraction for the keys we need
+            var clean = String(raw).replace(/^\uFEFF/, "").replace(/^\s+|\s+$/g, "");
+
+            try {
+                if (typeof JSON !== "undefined" && JSON && JSON.parse) {
+                    data = JSON.parse(clean);
+                }
+            } catch (eJSON) {
+                data = null;
+            }
+
+            // Minimal fallback if JSON.parse isn't available / fails
+            if (!data) {
+                data = {};
+                data.latest = _extractJsonValue(clean, "latest") || _extractJsonValue(clean, "version");
+                data.jsxUrl  = _extractJsonValue(clean, "jsxUrl");
+                data.pkgUrl  = _extractJsonValue(clean, "pkgUrl");
+                // notes/changelog optional; extract from JSON text when possible
+                data.notes = _extractJsonStringArray(clean, "notes");
+                if (!data.notes || !data.notes.length) data.notes = _extractJsonStringArray(clean, "changelog");
+            }
 
             if (!data || !data.latest) {
-                _setUpdatesStatus("version.json is not valid JSON. Make sure the GitHub link is a direct file link.");
+                var prev = clean;
+                if (prev.length > 140) prev = prev.substring(0, 140);
+                _setUpdatesStatus("version.json could not be parsed or is missing 'latest'. Preview: " + prev);
                 return;
             }
 
@@ -4048,119 +5478,342 @@ tabUnderlineLayer.onDraw = function () {
 
             var cmp = _compareVersions(String(data.latest), String(currentVer));
             if (cmp <= 0) {
+                // Checked and up-to-date
+                __UPDATE_STATE.checked = true;
+                __UPDATE_STATE.available = false;
+                __UPDATE_STATE.latest = String(data.latest);
+                __UPDATE_STATE.jsxUrl = null;
+                __UPDATE_STATE.notes = notes;
+                __UPDATE_STATE.pkgUrl = null;
+
+                btnInstallUpdate.enabled = false;
                 _setFooterUpdateIndicator(true);
-                _setUpdatesStatus("Up to date. (Installed: v" + currentVer + ")");
+                _setUpdatesStatus("You are currently up to date! (Installed: v" + currentVer + ")");
                 return;
             }
 
+            // Update available (but do not install from CHECK)
+            __UPDATE_STATE.checked = true;
+            __UPDATE_STATE.available = true;
+            __UPDATE_STATE.latest = String(data.latest);
+            __UPDATE_STATE.jsxUrl = (data.jsxUrl || data.jsxURL || data.jsx || null);
+            __UPDATE_STATE.pkgUrl = (data.pkgUrl || null);
+            __UPDATE_STATE.notes = notes;
+
+            btnInstallUpdate.enabled = true;
             _setFooterUpdateIndicator(false);
-            _setUpdatesStatus("Update available: v" + data.latest + " (Installed: v" + currentVer + ")");
+            _setUpdatesStatus("Update available: v" + data.latest + " (Installed: v" + currentVer + "). Click INSTALL UPDATE.");
 
-            // If we have a pkgUrl, offer install immediately.
-
-            // JSX self-replace update path (preferred for test updates)
-            var jsxUrl = data.jsxUrl || data.jsxURL || data.jsx || null;
-            if (jsxUrl) {
-                // Download the new .jsx into cache
-                var jsxName = "ShineTools_" + String(data.latest).replace(/[^\w\.\-]/g, "_") + ".jsx";
-                var jsxPath = cacheDir.fsName + "/" + jsxName;
-
-                _setUpdatesStatus("Downloading script update…");
-                var dlJsx = _curlDownload(String(jsxUrl), jsxPath);
-                if (!dlJsx.ok) {
-                    _setUpdatesStatus("Failed to download updated .jsx.");
-                    return;
+            // Optional prompt immediately after check.
+            try {
+                if (_promptInstallDialog(String(data.latest), String(currentVer))) {
+                    _doInstallUpdate();
                 }
-
-                // Basic sanity check: avoid writing HTML to the script location
-                var newRaw = _readTextFile(jsxPath);
-                if (!newRaw || /<html|<!doctype/i.test(newRaw)) {
-                    _setUpdatesStatus("Downloaded file does not look like a .jsx (got HTML). Check the direct download link.");
-                    return;
-                }
-
-                // Determine this running script's path
-                var thisPath = null;
-                try { thisPath = $.fileName ? String($.fileName) : null; } catch (eFN) { thisPath = null; }
-                if (!thisPath) {
-                    _setUpdatesStatus("Could not determine installed .jsx path for self-replace.");
-                    return;
-                }
-
-                var thisFile = new File(thisPath);
-                var newFile = new File(jsxPath);
-
-                // Backup existing script
-                var stamp = (new Date()).getFullYear() + "-" +
-                            ("0" + ((new Date()).getMonth() + 1)).slice(-2) + "-" +
-                            ("0" + (new Date()).getDate()).slice(-2) + "_" +
-                            ("0" + (new Date()).getHours()).slice(-2) +
-                            ("0" + (new Date()).getMinutes()).slice(-2) +
-                            ("0" + (new Date()).getSeconds()).slice(-2);
-
-                var backupPath = thisFile.fsName + ".bak_" + stamp;
-                try {
-                    if (thisFile.exists) thisFile.copy(backupPath);
-                } catch (eBK) {
-                    // If backup fails, continue — install might still succeed.
-                }
-
-                // Overwrite installed file
-                try {
-                    if (thisFile.exists) thisFile.remove();
-                } catch (eRM) {
-                    // ignore; copy might overwrite on some systems
-                }
-
-                var copied = false;
-                try { copied = newFile.copy(thisFile.fsName); } catch (eCP) { copied = false; }
-
-                if (!copied) {
-                    _setUpdatesStatus("Downloaded v" + data.latest + " but couldn't replace the installed .jsx (permissions). Install from your user Scripts folder or run AE as admin.");
-                    return;
-                }
-
-                _setFooterUpdateIndicator(true);
-                _setUpdatesStatus("Installed v" + data.latest + ". Please restart After Effects.");
-                return;
-            }
-
-            if (!data.pkgUrl) {
-                _setFooterUpdateIndicator(false);
-                _setUpdatesStatus("Update available: v" + data.latest + " (Installed: v" + currentVer + "). PKG not published yet.");
-                return;
-            }
-
-            // Download PKG
-            var pkgUrl = String(data.pkgUrl);
-            if (pkgUrl.indexOf("YOUR_PKG_TOKEN") !== -1 || pkgUrl.indexOf("YOUR_PKG") !== -1) {
-                _setUpdatesStatus("Update available: v" + data.latest + " (Installed: v" + currentVer + "). PKG link is still a placeholder.");
-                return;
-            }
-            var pkgName = "ShineTools_" + String(data.latest).replace(/[^\w\.\-]/g,"_") + ".pkg";
-            var pkgPath = cacheDir.fsName + "/" + pkgName;
-
-            _setUpdatesStatus("Downloading installer…");
-            var dlPkg = _curlDownload(pkgUrl, pkgPath);
-            if (!dlPkg.ok) {
-                _setUpdatesStatus("Failed to download PKG.");
-                return;
-            }
-
-            _setUpdatesStatus("Installing (admin password required)…");
-            var res = _runPkgInstaller(pkgPath);
-            if (!res.ok) {
-                _setUpdatesStatus("Install canceled or failed.");
-                return;
-            }
-
-            _setFooterUpdateIndicator(true);
-                _setUpdatesStatus("Installed v" + data.latest + ". Please restart After Effects.");
+            } catch (ePrompt) {}
+            return;
         }
 
-        btnCheckUpdates.onClick = function () {
-            try { _doCheckForUpdates(); } catch (e) { _setUpdatesStatus("Update check failed."); }
+        function _doInstallUpdate() {
+            // Install the pending update (requires __UPDATE_STATE.available === true)
+            try {
+                if (!__UPDATE_STATE || !__UPDATE_STATE.available || !__UPDATE_STATE.latest) {
+                    _setUpdatesStatus("No pending update to install. Run CHECK FOR UPDATES first.");
+                    return;
+                }
+
+                var cacheRoot = Folder.userData.fsName + "/ShineTools";
+                var cacheDir = _ensureFolder(cacheRoot);
+                if (!cacheDir) cacheDir = _ensureFolder(Folder.temp.fsName + "/ShineTools");
+                if (!cacheDir) {
+                    _setUpdatesStatus("Could not create cache folder.");
+                    return;
+                }
+
+                var latest = String(__UPDATE_STATE.latest);
+
+                // Prefer JSX self-replace for now
+                var jsxUrl = __UPDATE_STATE.jsxUrl;
+                if (jsxUrl) {
+                    jsxUrl = _normalizeUpdateUrl(String(jsxUrl));
+                    var jsxName = "ShineTools_" + latest.replace(/[^\w\.\-]/g, "_") + ".jsx";
+                    var jsxPath = cacheDir.fsName + "/" + jsxName;
+
+                    _setUpdatesStatus("Downloading script update…");
+                    var dlJsx = _curlDownload(jsxUrl, jsxPath);
+                    if (!dlJsx.ok) {
+                        _setUpdatesStatus("Failed to download updated .jsx." + (dlJsx.msg ? (" (" + dlJsx.msg + ")") : ""));
+                        return;
+                    }
+
+                    var newRaw = _readTextFile(jsxPath);
+                    if (!newRaw || /<html|<!doctype/i.test(newRaw)) {
+                        _setUpdatesStatus("Downloaded file does not look like a .jsx (got HTML). Check the direct RAW link.");
+                        return;
+                    }
+
+                    // Determine this running script's path
+                    var thisPath = null;
+                    try { thisPath = $.fileName ? String($.fileName) : null; } catch (eFN) { thisPath = null; }
+                    if (!thisPath) {
+                        _setUpdatesStatus("Could not determine installed .jsx path for self-replace.");
+                        return;
+                    }
+
+                    var thisFile = new File(thisPath);
+                    var newFile = new File(jsxPath);
+
+                    // Backup existing script
+                    var d = new Date();
+                    var stamp = d.getFullYear() + "-" + _pad2(d.getMonth()+1) + "-" + _pad2(d.getDate()) + "_" + _pad2(d.getHours()) + _pad2(d.getMinutes()) + _pad2(d.getSeconds());
+                    var backupPath = thisFile.fsName + ".bak_" + stamp;
+                    try { if (thisFile.exists) thisFile.copy(backupPath); } catch (eBK) {}
+
+                    // Overwrite installed file
+                    try { if (thisFile.exists) thisFile.remove(); } catch (eRM) {}
+                    var copied = false;
+                    try { copied = newFile.copy(thisFile.fsName); } catch (eCP) { copied = false; }
+
+                    if (!copied) {
+                        _setUpdatesStatus("Downloaded v" + latest + " but couldn't replace the installed .jsx (permissions). Try installing from a user Scripts folder or run AE as admin.");
+                        return;
+                    }
+
+                    // Mark as installed (still requires restart for the UI to show new version)
+                    __UPDATE_STATE.available = false;
+                    btnInstallUpdate.enabled = false;
+                    _setFooterUpdateIndicator(true);
+                    _setUpdatesStatus("Update successful, please restart After Effects.");
+                    _showToast("Update successful, please restart After Effects.");
+                    return;
+                }
+
+                // Optional PKG path (future)
+                if (__UPDATE_STATE.pkgUrl) {
+                    var pkgUrl = _normalizeUpdateUrl(String(__UPDATE_STATE.pkgUrl));
+                    var pkgName = "ShineTools_" + latest.replace(/[^\w\.\-]/g,"_") + ".pkg";
+                    var pkgPath = cacheDir.fsName + "/" + pkgName;
+
+                    _setUpdatesStatus("Downloading installer…");
+                    var dlPkg = _curlDownload(pkgUrl, pkgPath);
+                    if (!dlPkg.ok) {
+                        _setUpdatesStatus("Failed to download PKG." + (dlPkg.msg ? (" (" + dlPkg.msg + ")") : ""));
+                        return;
+                    }
+
+                    _setUpdatesStatus("Installing (admin password required)…");
+                    var res = _runPkgInstaller(pkgPath);
+                    if (!res.ok) {
+                        _setUpdatesStatus("Install canceled or failed." + (res.msg ? (" (" + res.msg + ")") : ""));
+                        return;
+                    }
+
+                    __UPDATE_STATE.available = false;
+                    btnInstallUpdate.enabled = false;
+                    _setFooterUpdateIndicator(true);
+                    _setUpdatesStatus("Update successful, please restart After Effects.");
+                    _showToast("Update successful, please restart After Effects.");
+                    return;
+                }
+
+                _setUpdatesStatus("Update is available, but no downloadable installer/script URL was provided in version.json.");
+            } catch (e) {
+                _setUpdatesStatus("Install failed: " + String(e));
+            }
+        }
+
+        btnInstallUpdate.onClick = function () {
+            try {
+                if (!__UPDATE_STATE || !__UPDATE_STATE.checked) {
+                    _setUpdatesStatus("Run CHECK FOR UPDATES first.");
+                    return;
+                }
+                if (!__UPDATE_STATE.available) {
+                    _setUpdatesStatus("You are currently up to date!");
+                    _setFooterUpdateIndicator(true);
+                    return;
+                }
+                var currentVer = _getCurrentVersionString();
+                if (_promptInstallDialog(String(__UPDATE_STATE.latest), String(currentVer))) {
+                    _doInstallUpdate();
+                }
+            } catch (e) {
+                _setUpdatesStatus("Install prompt failed: " + String(e));
+            }
         };
+
+        btnCheckUpdates.onClick = function () {
+            try { _doCheckForUpdates(); }
+            catch (e) {
+                _setUpdatesStatus("Update check failed: " + String(e));
+            }
+        };
+
+
+
+        // -------------------------
+        // REQUESTS TAB CONTENT
+        // -------------------------
+        var reqWrap = tabRequests.add("group");
+        reqWrap.orientation   = "column";
+        reqWrap.alignChildren = ["fill", "top"];
+        reqWrap.alignment     = ["fill", "top"];
+        reqWrap.margins       = [12, 10, 12, 10];
+        reqWrap.spacing       = 10;
+
+        var reqTitle = reqWrap.add("statictext", undefined, "Requests");
+        reqTitle.justify = "left";
+        try {
+            reqTitle.graphics.font = reqTitle.graphics.newFont(reqTitle.graphics.font.name, ScriptUI.FontStyle.BOLD, reqTitle.graphics.font.size + 2);
+        } catch(eRF) {}
+
+        var reqMeta = reqWrap.add("group");
+        reqMeta.orientation   = "column";
+        reqMeta.alignChildren = ["fill", "top"];
+        reqMeta.margins       = 0;
+        reqMeta.spacing       = 6;
+
+        function _makeReqRow(label, value, isEditable) {
+            var r = reqMeta.add("group");
+            r.orientation = "row";
+            r.alignChildren = ["left","center"];
+            r.margins = 0;
+            r.spacing = 8;
+
+            var k = r.add("statictext", undefined, label);
+            k.minimumSize = [120, 18];
+            k.maximumSize = [120, 18];
+
+            if (isEditable) {
+                var et = r.add("edittext", undefined, value || "");
+                et.alignment = ["fill","center"];
+                try {
+                    var f = et.graphics.font;
+                    var bigger = ScriptUI.newFont(f.name, f.style, f.size + 2);
+                    et.graphics.font = bigger;
+                    et.font = bigger;
+                } catch(eF) {}
+                return { row:r, key:k, field:et };
+            } else {
+                var st = r.add("statictext", undefined, value || "");
+                st.alignment = ["fill","center"];
+                return { row:r, key:k, field:st };
+            }
+        }
+
+        var loginName = _getLoginName();
+
+        var rowUser    = _makeReqRow("User:", loginName, false);
+        var rowTypeGrp = reqMeta.add("group");
+        rowTypeGrp.orientation = "row";
+        rowTypeGrp.alignChildren = ["left","center"];
+        rowTypeGrp.margins = 0;
+        rowTypeGrp.spacing = 8;
+
+        var rowTypeLbl = rowTypeGrp.add("statictext", undefined, "Type:");
+        rowTypeLbl.minimumSize = [120, 18];
+        rowTypeLbl.maximumSize = [120, 18];
+
+        var ddType = rowTypeGrp.add("dropdownlist", undefined, ["Bug", "Feature Request"]);
+        ddType.alignment = ["left","center"];
+        ddType.selection = 0;
+
+        var rowVersion = _makeReqRow("ShineTools:", ("v" + SHINE_VERSION), false);
+        var rowName    = _makeReqRow("Name:", "", true);
+
+        var msgLabel = reqWrap.add("statictext", undefined, "Message:");
+        msgLabel.justify = "left";
+
+        var msgBox = reqWrap.add("edittext", undefined, "", {multiline:true});
+        msgBox.alignment     = ["fill","top"];
+        msgBox.minimumSize   = [10, 170];
+        msgBox.preferredSize = [10, 170];
+        try {
+            var mf = msgBox.graphics.font;
+            var biggerMsg = ScriptUI.newFont(mf.name, mf.style, mf.size + 2);
+            msgBox.graphics.font = biggerMsg;
+            msgBox.font = biggerMsg;
+        } catch(eMF) {}
+
+        var reqBtns = reqWrap.add("group");
+        reqBtns.orientation = "row";
+        reqBtns.alignChildren = ["left","center"];
+        reqBtns.alignment = ["fill","top"];
+        reqBtns.margins = 0;
+        reqBtns.spacing = 12;
+
+        var btnSaveReq = reqBtns.add("button", undefined, "SAVE REQUEST");
+        var btnCopyReq = reqBtns.add("button", undefined, "COPY TO CLIPBOARD");
+        var reqSpacer  = reqBtns.add("group"); reqSpacer.alignment=["fill","fill"]; reqSpacer.minimumSize=[0,0]; reqSpacer.maximumSize=[10000,10000];
+
+        var reqStatus = reqWrap.add("statictext", undefined, " ");
+        reqStatus.justify = "left";
+
+        function _buildRequestText() {
+            var nm = "";
+            try { nm = String(rowName.field.text || ""); } catch(eN) { nm = ""; }
+            var typ = "";
+            try { typ = ddType.selection ? String(ddType.selection.text) : "Bug"; } catch(eT) { typ = "Bug"; }
+            var msg = "";
+            try { msg = String(msgBox.text || ""); } catch(eM) { msg = ""; }
+
+            var lines = [];
+            lines.push("USER: " + loginName);
+            lines.push("NAME: " + (nm ? nm : "(blank)"));
+            lines.push("TYPE: " + typ);
+            lines.push("SHINETOOLS: v" + SHINE_VERSION);
+            lines.push("");
+            lines.push("MESSAGE:");
+            lines.push(msg ? msg : "(blank)");
+            lines.push("");
+            return lines.join("\n");
+        }
+
+        btnCopyReq.onClick = function() {
+            try {
+                var t = _buildRequestText();
+                if (_copyToClipboard(t)) reqStatus.text = "Copied to clipboard.";
+                else reqStatus.text = "Could not copy to clipboard.";
+                try { pal.update(); } catch(eU) {}
+            } catch(e) {
+                reqStatus.text = "Copy failed: " + String(e);
+            }
+        };
+
+        btnSaveReq.onClick = function() {
+            try {
+                var folder = null;
+                try {
+                    folder = Folder.selectDialog("Choose where to save your request (.txt)");
+                } catch(eFD) { folder = null; }
+
+                if (!folder) {
+                    reqStatus.text = "Save canceled.";
+                    return;
+                }
+
+                var nm = "";
+                try { nm = String(rowName.field.text || ""); } catch(eN2) { nm = ""; }
+                nm = nm.replace(/[\\\/\:\*\?\"\<\>\|]/g, "_"); // safe file chars
+
+                var base = "ShineTools_Request_" + (nm ? nm + "_" : "") + _timestampForFilename() + ".txt";
+                var outFile = new File(folder.fsName + "/" + base);
+
+                outFile.encoding = "UTF-8";
+                outFile.lineFeed = "Unix";
+                if (!outFile.open("w")) {
+                    reqStatus.text = "Could not write file.";
+                    return;
+                }
+                outFile.write(_buildRequestText());
+                outFile.close();
+
+                reqStatus.text = "Saved: " + outFile.name;
+                try { pal.update(); } catch(eU2) {}
+            } catch(e) {
+                reqStatus.text = "Save failed: " + String(e);
+            }
+        };
+
 
 
         // HELP TAB DUMMY CONTENT (placeholder)
@@ -4903,8 +6556,8 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
     function loadOrder() {
         if (!orderSettingsKeyOrNull) return [];
         try {
-            if (app.settings.haveSetting(ORDER_SETTINGS_SECTION, orderSettingsKeyOrNull)) {
-                var raw = app.settings.getSetting(ORDER_SETTINGS_SECTION, orderSettingsKeyOrNull);
+                    var raw = _settingsGet(ORDER_SETTINGS_SECTION, orderSettingsKeyOrNull, "");
+                    if (raw) {
                 var arr = JSON.parse(raw);
                 if (arr && arr.length) return arr;
             }
@@ -4913,7 +6566,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
     }
     function saveOrder(arr) {
         if (!orderSettingsKeyOrNull) return;
-        try { app.settings.saveSetting(ORDER_SETTINGS_SECTION, orderSettingsKeyOrNull, JSON.stringify(arr)); } catch (e) {}
+        _settingsSetJSON(ORDER_SETTINGS_SECTION, orderSettingsKeyOrNull, arr);
     }
 
     var defs = [];            // {title:String, buildFn:Function}
@@ -4927,7 +6580,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
     }
 
     // ---- internal build (creates UI in correct order) ----
-    function buildUI() {
+    function _buildAccordionUI() {
         // snapshot collapsed state
         try {
             for (var k = 0; k < defs.length; k++) {
@@ -4991,7 +6644,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
             _blinkSeq++;
             _blinkTitle = title;
 
-            buildUI();
+            _buildAccordionUI();
             if (relayoutFn) try { relayoutFn(); } catch (eRL) {}
         }
 
@@ -5171,10 +6824,10 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
                 var ks = null;
                 try { ks = ScriptUI.environment.keyboardState; } catch (eKS) {}
 
-                var isCmdOrCtrl = !!(ks && (ks.ctrlKey || ks.metaKey));
+                var isCmdOrCtrl = !!(ks && ks.metaKey);
                 var isShift     = !!(ks && ks.shiftKey);
 
-                // Cmd/Ctrl + Click = Collapse All
+                // Cmd + Click = Collapse All
                 if (isCmdOrCtrl) {
                     collapseAllSections();
                     try { var fs = ensureFocusSink(); if (fs) fs.active = true; } catch (eFS) {}
@@ -5232,7 +6885,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
     // Public API
     var api = {
         defineSection: function(title, buildFn) { defs.push({ title: title, buildFn: buildFn }); },
-        build: function() { buildUI(); },
+        build: function() { _buildAccordionUI(); },
         collapseAll: function() { try { collapseAllNow(); } catch (e) {} }
     };
 
@@ -5372,7 +7025,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
                     var ks = null;
                     try { ks = ScriptUI.environment.keyboardState; } catch (eKs) {}
                     var doImport = false;
-                    try { doImport = !!(ks && (ks.metaKey || ks.ctrlKey)); } catch (eDo) {}
+                    try { doImport = !!(ks && ks.metaKey); } catch (eDo) {}
 
                     var picked = favOpenDialogFromDefaultFolder(); // multi-select enabled
                     if (!picked) return;
@@ -5388,7 +7041,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
                     }
                     favRebuildDropdown();
                     try { _ddShowTempMessage(favDD, 'Added', 1.0); } catch(eMsg) {}
-                    // Cmd/Ctrl+click = add to list AND import into bin + active comp timeline.
+                    // Cmd+click = add to list AND import into bin + active comp timeline.
                     if (doImport) {
                         for (var j = 0; j < picked.length; j++) {
                             var ff = picked[j];
@@ -5406,8 +7059,8 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
 
                     var item = favDD.selection;
 
-                    // Cmd/Ctrl+click (modified selection) removes the item from the list.
-                    if (item && item._path && _isCmdOrCtrlDown()) {
+                    // Cmd+click (modified selection) removes the item from the list.
+                    if (item && item._path && _isCmdDown()) {
                         try {
                             favRemovePath(item._path);
                             favRebuildDropdown();
@@ -5656,7 +7309,7 @@ if (myPal instanceof Window) {
     myPal.center();
     myPal.show();
 
-    // Windows usually lay out fine, but do a quick extra pass just in case.
+    // Final layout pass after show (helps ScriptUI settle bounds).
     try { $.global.__ShineToolsKickLayout(); } catch (e7) {}
     try { app.scheduleTask("__ShineToolsKickLayout()", 30, false); } catch (e8) {}
     try { app.scheduleTask("__ShineToolsKickLayout()", 120, false); } catch (e9) {}
