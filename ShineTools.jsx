@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.0";
+var SHINE_VERSION      = "1.7";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5752,7 +5752,8 @@ function _getChangelogHistoryFile() {
                 // Allow server to send either an array OR a single string (optionally newline-separated)
                 if (notes.indexOf("
 ") >= 0) {
-                    var _lines = String(notes).split(/?
+                    var _lines = String(notes).split(/
+?
 /);
                     var _cleanLines = [];
                     for (var li = 0; li < _lines.length; li++) {
