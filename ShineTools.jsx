@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.7";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -4680,7 +4680,9 @@ var gfLegendRow = gfRight.add("group");
               };
 
               $.global.__FontAuditQuickWin__ = win;
-              win.center();
+        try { _primeUpdatesOnLaunch(); } catch (e) {}
+
+        win.center();
               win.show();
 
             }
@@ -5150,9 +5152,6 @@ btnInstallUpdate.enabled = false;
         chBox.preferredSize = [10, 340];
 
 
-
-        // Render local changelog history on load
-        try { _renderChangelogFromHistory(); } catch (eInitCH) {}
         // GitHub update check
         var GITHUB_VERSION_JSON_URL = "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/version.json";
         // Expected JSON shape (version.json):
@@ -5450,29 +5449,6 @@ function _looksLikeHtml(s){
             }
         }
 
-        function _writeTextFile(pathOrFile, contents) {
-            // Writes a UTF-8 text file. Returns true/false.
-            var f = null;
-            try {
-                f = (pathOrFile instanceof File) ? pathOrFile : new File(String(pathOrFile));
-
-                // Ensure parent folder exists
-                try {
-                    var parent = f.parent;
-                    if (parent && !parent.exists) parent.create();
-                } catch (eP) {}
-
-                try { f.encoding = "UTF-8"; } catch (eEnc) {}
-                if (!f.open("w")) return false;
-                f.write(String(contents || ""));
-                try { f.close(); } catch (e0) {}
-                return true;
-            } catch (e) {
-                try { if (f) f.close(); } catch (e1) {}
-                return false;
-            }
-        }
-
 
         function _extractJsonValue(jsonText, key) {
             // Very small helper to extract a top-level string/number value from JSON text.
@@ -5629,223 +5605,65 @@ function _runPkgInstaller(pkgPath) {
             try { kvLatest.val.text = ver || "—"; } catch (e) {}
         }
 
-        
-        // ------------------------------------------------------------
-        // Persistent changelog history (local, grows over time)
-        //   Stores: Folder.userData/ShineTools/changelog_history.json
-        //   Shape: { entries:[ {version:"1.0.8", date:"01/11/2026", notes:[...]} ] }
-        // ------------------------------------------------------------
-        
-        // Persistent changelog cache (fallback) using app.settings (survives AE restarts)
-        function _saveChangelogCache(str) {
+        function _setUpdatesChangelog(linesArr) {
             try {
-                if (typeof app !== "undefined" && app.settings) {
-                    app.settings.saveSetting("ShineTools", "changelog_cache", String(str || ""));
+                if (!linesArr || !linesArr.length) {
+                    chBox.text = "—";
+                    return;
                 }
+                var s = "";
+                for (var i=0; i<linesArr.length; i++) {
+                    s += "• " + linesArr[i] + "\n";
+                }
+                chBox.text = s.replace(/\n$/, "");
             } catch (e) {}
         }
-        function _loadChangelogCache() {
+
+
+        function _setUpdatesChangelogFromHistory(historyArr, fallbackNotes) {
             try {
-                if (typeof app !== "undefined" && app.settings) {
-                    if (app.settings.haveSetting("ShineTools", "changelog_cache")) {
-                        return app.settings.getSetting("ShineTools", "changelog_cache");
-                    }
+                if (!historyArr || !historyArr.length) {
+                    _setUpdatesChangelog(fallbackNotes || []);
+                    return;
                 }
-            } catch (e) {}
-            return "";
-        }
 
-function _getChangelogHistoryFile() {
-            try {
-                var root = Folder.userData.fsName + "/ShineTools";
-                var dir = _ensureFolder(root);
-                if (!dir) dir = _ensureFolder(Folder.temp.fsName + "/ShineTools");
-                if (!dir) return null;
-                return new File(dir.fsName + "/changelog_history.json");
-            } catch (e) { return null; }
-        }
+                var s = "";
+                for (var i = 0; i < historyArr.length; i++) {
+                    var it = historyArr[i];
+                    if (!it) continue;
 
-        function _loadChangelogHistoryFromSettings() {
-            try {
-                if (typeof app !== "undefined" && app.settings) {
-                    if (app.settings.haveSetting("ShineTools", "changelog_history")) {
-                        var raw = app.settings.getSetting("ShineTools", "changelog_history");
-                        if (raw && raw.length) {
-                            var obj = null;
-                            try { obj = JSON.parse(raw); } catch (e) { obj = null; }
-                            if (obj && obj.entries && (obj.entries instanceof Array)) return obj;
+                    var v = it.version || it.ver || it.v || "";
+                    v = String(v || "").replace(/^v\s*/i, "");
+                    if (!v) continue;
+
+                    var d = it.date || it.when || it.timestamp || "";
+                    if (d) s += v + " — " + d + "\n";
+                    else   s += v + "\n";
+
+                    var notes = it.notes || it.changes || it.items || [];
+                    if (typeof notes === "string") notes = [notes];
+
+                    if (notes && notes.length) {
+                        for (var n = 0; n < notes.length; n++) {
+                            s += "• " + notes[n] + "\n";
                         }
+                    } else {
+                        s += "• (no notes)\n";
                     }
+
+                    s += "\n";
                 }
-            } catch (e) {}
-            return null;
-        }
 
-        function _saveChangelogHistoryToSettings(obj) {
-            try {
-                if (typeof app !== "undefined" && app.settings) {
-                    var data = (obj && obj.entries) ? obj : { entries: [] };
-                    app.settings.saveSetting("ShineTools", "changelog_history", JSON.stringify(data));
-                    return true;
+                s = s.replace(/\n+$/, "");
+                if (!s) {
+                    _setUpdatesChangelog(fallbackNotes || []);
+                    return;
                 }
-            } catch (e) {}
-            return false;
-        }
-
-        function _loadChangelogHistory() {
-            // 1) Prefer app.settings (most reliable across permissions / sandboxing)
-            var fromSettings = _loadChangelogHistoryFromSettings();
-            if (fromSettings) return fromSettings;
-
-            // 2) Fallback to file
-            var f = _getChangelogHistoryFile();
-            if (!f) return { entries: [] };
-            try {
-                if (!f.exists) return { entries: [] };
-                var raw = _readTextFile(f.fsName);
-                if (!raw) return { entries: [] };
-                var obj = null;
-                try { obj = JSON.parse(raw); } catch (e1) { obj = null; }
-                if (!obj || !obj.entries || !(obj.entries instanceof Array)) return { entries: [] };
-
-                // Cache into settings for next launch (best-effort)
-                try { _saveChangelogHistoryToSettings(obj); } catch (e2) {}
-                return obj;
+                chBox.text = s;
             } catch (e) {
-                return { entries: [] };
+                _setUpdatesChangelog(fallbackNotes || []);
             }
         }
-
-        function _saveChangelogHistory(obj) {
-            var data = (obj && obj.entries) ? obj : { entries: [] };
-
-            // Always save to settings first (this is what makes it persist on your machine)
-            var okSettings = _saveChangelogHistoryToSettings(data);
-
-            // Then attempt file write (nice-to-have)
-            try {
-                var f = _getChangelogHistoryFile();
-                if (f) _writeTextFile(f.fsName, JSON.stringify(data, null, 2));
-            } catch (e) {}
-
-            return okSettings;
-        }
-
-        function _historyHasVersion(entries, ver) {
-            try {
-                if (!entries || !entries.length) return false;
-                var v = String(ver || "").replace(/^v\s*/i,"");
-                for (var i = 0; i < entries.length; i++) {
-                    if (String(entries[i].version || "").replace(/^v\s*/i,"") === v) return true;
-                }
-            } catch (e) {}
-            return false;
-        }
-
-        function _addToChangelogHistory(ver, notesArr) {
-            try {
-                var v = String(ver || "").replace(/^v\s*/i,"");
-                if (!v) return false;
-
-                var notes = notesArr || [];
-                if (typeof notes === "string") {
-                // Allow server to send either an array OR a single string (optionally newline-separated)
-                var _s = String(notes);
-                if (_s.indexOf("\n") >= 0 || _s.indexOf("\r") >= 0) {
-                    var _lines = _s.split(/\r?\n/);
-                    var _cleanLines = [];
-                    for (var li = 0; li < _lines.length; li++) {
-                        var _ln = String(_lines[li]).replace(/^\s+|\s+$/g,"");
-                        if (_ln) _cleanLines.push(_ln);
-                    }
-                    notes = _cleanLines;
-                } else {
-                    notes = [notes];
-                }
-            }
-                if (!(notes instanceof Array)) notes = [];
-
-                var hist = _loadChangelogHistory();
-                if (!hist || !hist.entries) hist = { entries: [] };
-
-                if (_historyHasVersion(hist.entries, v)) {
-                    // If the version already exists (e.g. notes changed on the server), update it and move it to the top.
-                    for (var hi = 0; hi < hist.entries.length; hi++) {
-                        var hv = String(hist.entries[hi].version || "").replace(/^v\s*/i,"");
-                        if (hv === v) {
-                            hist.entries[hi].date = _formatStamp(new Date());
-                            hist.entries[hi].notes = notes;
-                            var existing = hist.entries.splice(hi, 1)[0];
-                            hist.entries.unshift(existing);
-                            return _saveChangelogHistory(hist);
-                        }
-                    }
-                    return _saveChangelogHistory(hist);
-                }
-
-                hist.entries.unshift({
-                    version: v,
-                    date: _formatStamp(new Date()),
-                    notes: notes
-                });
-
-                return _saveChangelogHistory(hist);
-            } catch (e) {
-                return false;
-            }
-        }
-
-        function _renderChangelogFromHistory() {
-            try {
-                var hist = _loadChangelogHistory();
-                var entries = (hist && hist.entries) ? hist.entries : [];
-                if (!entries || !entries.length) {
-    // No history yet (or couldn't read it). Don't clobber any existing
-    // changelog text that may have been cached from a prior check.
-    try {
-        var cached = _loadChangelogCache();
-        if (cached && cached.length) {
-            chBox.text = cached;
-            return;
-        }
-    } catch (eCache) {}
-    chBox.text = "—";
-    // IMPORTANT: do NOT save "—" into cache, otherwise we erase the last good changelog.
-    return;
-}
-
-                var out = "";
-                for (var i = 0; i < entries.length; i++) {
-                    var e = entries[i] || {};
-                    var ver = String(e.version || "").replace(/^v\s*/i,"");
-                    var dt  = String(e.date || "");
-                    if (ver) {
-                        out += "v" + ver + (dt ? (" — " + dt) : "") + "\n";
-                    }
-                    var n = e.notes || [];
-                    if (typeof n === "string") n = [n];
-                    if (n && n.length) {
-                        for (var j = 0; j < n.length; j++) {
-                            out += "• " + n[j] + "\n";
-                        }
-                    }
-                    if (i < entries.length - 1) out += "\n";
-                }
-                chBox.text = out.replace(/\n$/, "");
-                _saveChangelogCache(chBox.text);
-            } catch (e) {}
-        }
-
-        // _INIT_RENDER_CHANGELOG_ON_LOAD
-        // Populate changelog immediately on panel load (no need to click Check)
-        try { _renderChangelogFromHistory(); } catch (eInitCH) {}
-        try {
-            if (String(chBox.text || "") === "—") {
-                var _cached = _loadChangelogCache();
-                if (_cached && _cached.length) chBox.text = _cached;
-            }
-        } catch (eInitCache) {}
-
 
         function _compareVersions(a, b) {
             // returns 1 if a>b, -1 if a<b, 0 if equal (numeric dotted versions)
@@ -5953,44 +5771,14 @@ function _getChangelogHistoryFile() {
             var currentVer = _getCurrentVersionString();
             _setUpdatesVersion(String(data.latest));
 
-            var notes = data.notes || data.changelog || data.releaseNotes || data.release_notes || data.changes || data.notesText || [];
-            if ((!notes || !notes.length) && data && data.notes && typeof data.notes === "object" && !(data.notes instanceof Array)) {
-                // If notes came in as an object, try to flatten its values.
-                try {
-                    var _tmpNotes = [];
-                    for (var _k in data.notes) { if (data.notes.hasOwnProperty(_k)) _tmpNotes.push(String(data.notes[_k])); }
-                    notes = _tmpNotes;
-                } catch (eFlat) {}
-            }
+            var notes = data.notes || data.changelog || [];
             if (typeof notes === "string") notes = [notes];
-            // Changelog is persistent locally and grows over time.
-            // When you CHECK FOR UPDATES, we also cache the latest version's notes into the local
-            // history (deduped by version). This ensures the changelog box populates immediately
-            // after a check, even before installing.
-            try {
-                if (notes && notes.length) {
-                    _addToChangelogHistory(String(data.latest), notes);
-                }
-            } catch (eHistOnCheck) {}
 
-            try { _renderChangelogFromHistory(); } catch(eCH) {}
+            // New: prefer continuous JSON history when present
+            var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
+            _setUpdatesChangelogFromHistory(historyArr, notes);
 
-// Fallback: if history couldn't be written/read for any reason, at least show the
-// current remote notes immediately so the box never stays as "—".
-try {
-    var __tmp = String(chBox.text || "");
-    if (__tmp === "—" || __tmp.replace(/\s+/g,"") === "") {
-        var __dt = _formatStamp(new Date());
-        var __out = "v" + String(data.latest).replace(/^v\s*/i,"") + " — " + __dt + "\n";
-        if (notes && notes.length) {
-            for (var __i = 0; __i < notes.length; __i++) __out += "• " + notes[__i] + "\n";
-        }
-        chBox.text = __out.replace(/\n$/, "");
-        try { _saveChangelogCache(chBox.text); } catch (eSaveCH2) {}
-    }
-} catch (eFallback) {}
-
-var cmp = _compareVersions(String(data.latest), String(currentVer));
+            var cmp = _compareVersions(String(data.latest), String(currentVer));
             if (cmp <= 0) {
                 // Checked and up-to-date
                 __UPDATE_STATE.checked = true;
@@ -6158,11 +5946,7 @@ if (downloadedVer && installedVer && (downloadedVer === installedVer)) {
                     
                     try { relayoutScoped(tabUpdates); } catch (eRL0) {}
                     _setFooterUpdateIndicator(true);
-                                        // Persist changelog entry locally (only the version.json notes for this version)
-                    try { _addToChangelogHistory(latest, __UPDATE_STATE.notes || []); } catch(eHist) {}
-                    try { _renderChangelogFromHistory(); } catch(eHistR) {}
-
-_setUpdatesStatus("Update successful, please restart After Effects.");
+                    _setUpdatesStatus("Update successful, please restart After Effects.");
 return;
                 }
 
@@ -6218,6 +6002,44 @@ _setFooterUpdateIndicator(true);
                 _setUpdatesStatus("Install failed: " + String(e));
             }
         };
+
+        function _primeUpdatesOnLaunch() {
+            // Populate changelog from version.json on panel load (no last-checked stamp, no status changes).
+            try {
+                var cacheRoot = Folder.userData.fsName + "/ShineTools";
+                var cacheDir = _ensureFolder(cacheRoot);
+                if (!cacheDir) cacheDir = _ensureFolder(Folder.temp.fsName + "/ShineTools");
+                if (!cacheDir) return;
+
+                var versionUrl = _normalizeUpdateUrl(GITHUB_VERSION_JSON_URL);
+                var versionPath = cacheDir.fsName + "/version.json";
+
+                var dl = _downloadWithRetries(versionUrl, versionPath, 2);
+                if (!dl.ok) return;
+
+                var raw = _readTextFile(versionPath);
+                if (!raw) return;
+
+                var clean = String(raw).replace(/^\uFEFF/, "").replace(/^\s+|\s+$/g, "");
+
+                var data = null;
+                try {
+                    if (typeof JSON !== "undefined" && JSON && JSON.parse) data = JSON.parse(clean);
+                } catch (eJSON) { data = null; }
+
+                if (!data) return;
+
+                if (data.latest) _setUpdatesVersion(String(data.latest));
+
+                var notes = data.notes || data.changelog || [];
+                if (typeof notes === "string") notes = [notes];
+
+                var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
+                _setUpdatesChangelogFromHistory(historyArr, notes);
+            } catch (e) {}
+        }
+
+
         btnCheckUpdates.onClick = function () {
             try { _doCheckForUpdates(); }
             catch (e) {
