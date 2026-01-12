@@ -9,6 +9,13 @@
 
   "history": [
     {
+      "version": "1.5",
+      "notes": [
+        "This is weird.",
+        "Improved updater stability"
+      ]
+    },
+    {
       "version": "1.4",
       "notes": [
         "Bug fixes 2.",
