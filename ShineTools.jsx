@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.7";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5723,12 +5723,14 @@ function _runPkgInstaller(pkgPath) {
 
                 if (cn && cn.length) {
                     for (var i=0; i<cn.length; i++) {
-                        s += "• " + _upperForBoldish(cn[i]) + "\n";
+                        s += "• " + String(cn[i]) + "\n";
                     }
                 } else {
                     s += "• (NO RELEASE NOTES)\n";
                 }
 
+                s += "\n";
+                s += "----------------------------------------\n";
                 s += "\n";
                 s += "PREVIOUS RELEASES\n";
 
