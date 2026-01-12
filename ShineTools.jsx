@@ -4023,7 +4023,20 @@ var gfLegendRow = gfRight.add("group");
               top.alignChildren=["left","center"];
               top.spacing=18;
 
-              var auditBtn = top.add("button", undefined, "FONT AUDIT");
+              // FONT AUDIT button (use same 2x2 grid cell architecture to avoid macOS focus ring artifacts)
+              var hFA = clippedBtnH();
+              var auditCell = top.add("group");
+              auditCell.orientation   = "stack";
+              auditCell.alignChildren = ["fill","fill"];
+              auditCell.margins       = 0;
+
+              var auditBtn = auditCell.add("button", undefined, "FONT AUDIT");
+              auditBtn.alignment     = ["fill","top"];
+              auditBtn.preferredSize = [0, hFA];
+              auditBtn.minimumSize   = [110, hFA];
+              auditBtn.maximumSize   = [10000, hFA];
+              defocusButtonBestEffort(auditBtn);
+
               var totalTxt = top.add("statictext", undefined, "Total: 0");
 
               var spacerTop = win.add("group");
@@ -4101,20 +4114,47 @@ var gfLegendRow = gfRight.add("group");
 
               var spacer = win.add("group");
               spacer.preferredSize = [0, 12];
-
               var btns = win.add("group");
-              btns.orientation="row";
-              btns.alignChildren=["left","center"];
-              btns.spacing=10;
+              btns.orientation   = "row";
+              btns.alignChildren = ["left","center"];
+              btns.spacing       = 10;
 
-              var exportBtn = btns.add("button", undefined, "EXPORT FONT LIST...");
+              // Match the MAIN-tab 2x2 grid button architecture (stack cell + sizing + defocus).
+              // Keep EXPORT FONT LIST and GET FONTS hidden until the font list is populated.
+              var __dlgBtnH   = clippedBtnH();
+              var __dlgMinW   = 110;
 
-              var getFontsBtn = btns.add("button", undefined, "GET FONTS...");
+              function __makeDialogCellButton__(parent, label) {
+                var cell = parent.add("group");
+                cell.orientation   = "stack";
+                cell.alignChildren = ["fill","fill"];
+                cell.alignment     = ["left","center"];
+                cell.margins       = 0;
 
-              var closeBtn = btns.add("button", undefined, "CLOSE");
+                var b = cell.add("button", undefined, label);
+                b.alignment     = ["fill","center"];
+                b.preferredSize = [0, __dlgBtnH];
+                b.minimumSize   = [__dlgMinW, __dlgBtnH];
+                b.maximumSize   = [10000, __dlgBtnH];
+
+                try { defocusButtonBestEffort(b); } catch (eDF) {}
+                return { cell: cell, btn: b };
+              }
+
+              var __export = __makeDialogCellButton__(btns, "EXPORT FONT LIST");
+              var exportCell = __export.cell;
+              var exportBtn  = __export.btn;
+              exportCell.visible = false;
+
+              var __get = __makeDialogCellButton__(btns, "GET FONTS");
+              var getFontsCell = __get.cell;
+              var getFontsBtn  = __get.btn;
+              getFontsCell.visible = false;
+
+              var __close = __makeDialogCellButton__(btns, "CLOSE");
+              var closeBtn = __close.btn;
               closeBtn.onClick = function(){ try{ win.close(0); }catch(e){ try{ win.close(); }catch(e2){} } };
-              defocusButtonBestEffort(closeBtn);
-            // State
+// State
               var currentRows = [];
               var currentFonts = [];
 
@@ -4126,6 +4166,9 @@ var gfLegendRow = gfRight.add("group");
 
                 clearList();
                 currentRows = [];
+
+                // Hide action buttons until we have results
+                try { exportCell.visible = false; getFontsCell.visible = false; } catch(eVis0) {}
 
                 totalTxt.text = "Total: " + fonts.length;
 
@@ -4173,6 +4216,9 @@ var gfLegendRow = gfRight.add("group");
 
                 sortRows(currentRows);
                 for(var r=0;r<currentRows.length;r++) addRowUI(currentRows[r]);
+
+                // Reveal action buttons after list is populated
+                try { exportCell.visible = true; getFontsCell.visible = true; } catch(eVis1) {}
 
                 win.layout.layout(true);
               }
@@ -4977,7 +5023,7 @@ var gfLegendRow = gfRight.add("group");
         updatesWrap.orientation   = "column";
         updatesWrap.alignChildren = ["fill", "top"];
         updatesWrap.alignment     = ["fill", "top"];
-        updatesWrap.margins       = [12, 10, 12, 10];
+        updatesWrap.margins       = [12, 18, 12, 10];
         updatesWrap.spacing       = 10;
 
         // Title
@@ -5047,11 +5093,26 @@ var kvStatus = _makeKVRow("Status:", "Not checked yet");
         updatesControlsRow.margins       = 0;
         updatesControlsRow.spacing       = 12;
 
-        var btnCheckUpdates   = updatesControlsRow.add("button", undefined, __UPD_LABELS.BTN_CHECK);
+        // Button cells (stack groups) to match MAIN tab grid button architecture
+        var checkCell = updatesControlsRow.add("group");
+        checkCell.orientation   = "stack";
+        checkCell.alignChildren = ["fill","fill"];
+        checkCell.alignment     = ["left","center"];
+        checkCell.margins       = 0;
+
+        var btnCheckUpdates = checkCell.add("button", undefined, __UPD_LABELS.BTN_CHECK);
+        try { defocusButtonBestEffort(btnCheckUpdates); } catch(eDFu1) {}
 
         // These only appear AFTER a newer version is detected.
-        var btnInstallUpdate  = updatesControlsRow.add("button", undefined, __UPD_LABELS.BTN_INSTALL);
-        // Start hidden (only CHECK is visible on load).
+        var installCell = updatesControlsRow.add("group");
+        installCell.orientation   = "stack";
+        installCell.alignChildren = ["fill","fill"];
+        installCell.alignment     = ["left","center"];
+        installCell.margins       = 0;
+
+        var btnInstallUpdate = installCell.add("button", undefined, __UPD_LABELS.BTN_INSTALL);
+        try { defocusButtonBestEffort(btnInstallUpdate); } catch(eDFu2) {}
+// Start hidden (only CHECK is visible on load).
         btnInstallUpdate.visible = false;
 btnInstallUpdate.enabled = false;
         // Changelog
@@ -6039,7 +6100,7 @@ _setFooterUpdateIndicator(true);
         reqWrap.orientation   = "column";
         reqWrap.alignChildren = ["fill", "top"];
         reqWrap.alignment     = ["fill", "top"];
-        reqWrap.margins       = [12, 10, 12, 10];
+        reqWrap.margins       = [12, 18, 12, 10];
         reqWrap.spacing       = 10;
 
         var reqMeta = reqWrap.add("group");
@@ -6125,7 +6186,16 @@ _setFooterUpdateIndicator(true);
         reqBtns.margins = 0;
         reqBtns.spacing = 12;
 
-        var btnSaveReq = reqBtns.add("button", undefined, "SUBMIT");
+        // SUBMIT button (use same architecture as MAIN tab grid buttons to avoid macOS blue focus ring)
+        var submitCell = reqBtns.add("group");
+        submitCell.orientation   = "stack";
+        submitCell.alignChildren = ["fill","fill"];
+        submitCell.alignment     = ["left","center"];
+        submitCell.margins       = 0;
+
+        var btnSaveReq = submitCell.add("button", undefined, "SUBMIT");
+        try { defocusButtonBestEffort(btnSaveReq); } catch(eDF) {}
+
         var reqSpacer  = reqBtns.add("group"); reqSpacer.alignment=["fill","fill"]; reqSpacer.minimumSize=[0,0]; reqSpacer.maximumSize=[10000,10000];
 
         var reqStatus = reqWrap.add("statictext", undefined, " ");
@@ -6192,7 +6262,7 @@ _setFooterUpdateIndicator(true);
         var helpWrap = tabHelp.add("group");
         helpWrap.orientation = "column";
         helpWrap.alignChildren = ["fill", "top"];
-        helpWrap.margins = 0;
+        helpWrap.margins = [12, 18, 12, 10];
         helpWrap.spacing = 0;
 
         var helpText = "Welcome to Shine Tools v" + SHINE_VERSION + "!\n\nThere are two main tabs on the top, MAIN and TEXT.\n\nThe top bar of each section allows you to import files and text animation presets and store them in a list for easy one click access later. Click the + button to import a file which will import it into the project bin and timeline. It will also remain stored in the dropdown list. Just select any stored file in the list and it will immediately add it to the project. You can CMD+Click any saved file to delete it from the list.\n\nYou can expand / collapse each section by clicking on the name or the arrow.\n- SHIFT+Click will expand multiple sections\n- CMD+Click will collapse all sections.\n\nYou can re-order the sections by the hidden UP and DOWN arrows on the right side of the section.\n\nSome buttons have a yellow dot which indicates the button has multiple options by normal clicking or OPTION clicking. If you hover over the buttons a tool tip will tell you your options.";
