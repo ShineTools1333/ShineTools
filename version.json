@@ -1,34 +1,10 @@
 {
-  "latest": "1.8",
+  "latest": "1.0",
   "jsxUrl": "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/ShineTools.jsx",
 
   "notes": [
-    "Added font audit tool",
-    "Improved update performance"
+    "Initial release."
   ],
 
-  "history": [
-    {
-      "version": "1.5",
-      "notes": [
-        "This is weird.",
-        "Improved updater stability"
-      ]
-    },
-    {
-      "version": "1.4",
-      "notes": [
-        "Bug fixes 2.",
-        "Improved updater stability"
-      ]
-    },
-    {
-      "version": "1.3",
-      "notes": [
-        "UI cleanup in UPDATES tab",
-        "Removed cancel button",
-        "Improved status messaging"
-      ]
-    }
-  ]
+  "history": []
 }
