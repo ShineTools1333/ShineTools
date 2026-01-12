@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.7";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5779,7 +5779,19 @@ function _runPkgInstaller(pkgPath) {
                 data = null;
             }
 
-            // Minimal fallback if JSON.parse isn't available / fails
+            // ExtendScript on some AE builds can be flaky with JSON.parse (or missing altogether).
+            // As a controlled fallback (our own GitHub JSON), eval can correctly parse arrays/objects (incl. history).
+            if (!data) {
+                try {
+                    // Ensure we eval a single expression object
+                    data = eval("(" + clean + ")");
+                } catch (eEVAL) {
+                    data = null;
+                }
+            }
+
+            // Minimal fallback if parsing isn't available / fails (notes only)
+
             if (!data) {
                 data = {};
                 data.latest = _extractJsonValue(clean, "latest") || _extractJsonValue(clean, "version");
