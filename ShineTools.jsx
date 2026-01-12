@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.7";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5619,51 +5619,80 @@ function _runPkgInstaller(pkgPath) {
             } catch (e) {}
         }
 
+        function _upperForBoldish(s){
+            // ScriptUI edittext can't do mixed bold, so we "fake bold" by uppercasing current notes.
+            try { return String(s||"").toUpperCase(); } catch(e){ return String(s); }
+        }
 
-        function _setUpdatesChangelogFromHistory(historyArr, fallbackNotes) {
+        function _setUpdatesChangelogStructured(latestVer, currentNotes, historyArr) {
+            // Visual separation:
+            //   CURRENT VERSION (bold-ish notes)
+            //   PREVIOUS RELEASES (history list)
             try {
-                if (!historyArr || !historyArr.length) {
-                    _setUpdatesChangelog(fallbackNotes || []);
-                    return;
+                var s = "";
+
+                var vLatest = String(latestVer || "").replace(/^v\s*/i, "");
+                var today = _formatStamp(new Date());
+
+                // Current section
+                if (vLatest) {
+                    s += "CURRENT VERSION (" + vLatest + ") — " + today + "\n";
+                } else {
+                    s += "CURRENT VERSION — " + today + "\n";
                 }
 
-                var s = "";
-                for (var i = 0; i < historyArr.length; i++) {
-                    var it = historyArr[i];
-                    if (!it) continue;
+                var cn = currentNotes || [];
+                if (typeof cn === "string") cn = [cn];
 
-                    var v = it.version || it.ver || it.v || "";
-                    v = String(v || "").replace(/^v\s*/i, "");
-                    if (!v) continue;
-
-                    var d = it.date || it.when || it.timestamp || "";
-                    if (d) s += v + " — " + d + "\n";
-                    else   s += v + "\n";
-
-                    var notes = it.notes || it.changes || it.items || [];
-                    if (typeof notes === "string") notes = [notes];
-
-                    if (notes && notes.length) {
-                        for (var n = 0; n < notes.length; n++) {
-                            s += "• " + notes[n] + "\n";
-                        }
-                    } else {
-                        s += "• (no notes)\n";
+                if (cn && cn.length) {
+                    for (var i=0; i<cn.length; i++) {
+                        s += "• " + _upperForBoldish(cn[i]) + "\n";
                     }
+                } else {
+                    s += "• (NO RELEASE NOTES)\n";
+                }
 
+                s += "\n";
+                s += "PREVIOUS RELEASES\n";
+
+                // History section
+                if (historyArr && historyArr.length) {
                     s += "\n";
+                    for (var h = 0; h < historyArr.length; h++) {
+                        var it = historyArr[h];
+                        if (!it) continue;
+
+                        var v = it.version || it.ver || it.v || "";
+                        v = String(v || "").replace(/^v\s*/i, "");
+                        if (!v) continue;
+
+                        var d = it.date || it.when || it.timestamp || "";
+                        if (d) s += v + " — " + d + "\n";
+                        else   s += v + "\n";
+
+                        var notes = it.notes || it.changes || it.items || [];
+                        if (typeof notes === "string") notes = [notes];
+
+                        if (notes && notes.length) {
+                            for (var n = 0; n < notes.length; n++) {
+                                s += "• " + notes[n] + "\n";
+                            }
+                        } else {
+                            s += "• (no notes)\n";
+                        }
+                        s += "\n";
+                    }
+                } else {
+                    s += "\n• (no previous releases)\n";
                 }
 
                 s = s.replace(/\n+$/, "");
-                if (!s) {
-                    _setUpdatesChangelog(fallbackNotes || []);
-                    return;
-                }
-                chBox.text = s;
+                chBox.text = s || "—";
             } catch (e) {
-                _setUpdatesChangelog(fallbackNotes || []);
+                try { chBox.text = "—"; } catch(_e) {}
             }
         }
+
 
         function _compareVersions(a, b) {
             // returns 1 if a>b, -1 if a<b, 0 if equal (numeric dotted versions)
@@ -5776,7 +5805,7 @@ function _runPkgInstaller(pkgPath) {
 
             // New: prefer continuous JSON history when present
             var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
-            _setUpdatesChangelogFromHistory(historyArr, notes);
+            _setUpdatesChangelogStructured(data.latest, notes, historyArr);
 
             var cmp = _compareVersions(String(data.latest), String(currentVer));
             if (cmp <= 0) {
@@ -6035,7 +6064,7 @@ _setFooterUpdateIndicator(true);
                 if (typeof notes === "string") notes = [notes];
 
                 var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
-                _setUpdatesChangelogFromHistory(historyArr, notes);
+                _setUpdatesChangelogStructured(data.latest, notes, historyArr);
             } catch (e) {}
         }
 
