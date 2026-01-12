@@ -40,9 +40,6 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
     // ============================================================
     // Namespace for debug toggles / shared state (kept global so a docked panel reload can reuse it).
     var ST = $.global.__ShineToolsNS || ($.global.__ShineToolsNS = { DEBUG: false });
-    function _log(msg) {
-        try { if (ST && ST.DEBUG) $.writeln("[ShineTools] " + String(msg)); } catch (e) {} finally { __GF_RESP_LOCK = false; }
-        }
 
     function _ddEnsureKey(dd) {
         try {
@@ -64,10 +61,6 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
     // ------------------------------------------------------------
     // app.settings helpers (single choke-point for persistence)
     // ------------------------------------------------------------
-    function _settingsHas(section, key) {
-        try { return app.settings.haveSetting(section, key); } catch (e) {}
-        return false;
-    }
     function _settingsGet(section, key, defaultValue) {
         try {
             if (app.settings.haveSetting(section, key)) {
@@ -82,12 +75,6 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
             return true;
         } catch (e) {}
         return false;
-    }
-    function _settingsGetJSON(section, key, defaultValue) {
-        var raw = _settingsGet(section, key, null);
-        if (raw === null || raw === undefined || raw === "") return defaultValue;
-        try { return JSON.parse(raw); } catch (e) {}
-        return defaultValue;
     }
     function _settingsSetJSON(section, key, obj) {
         try { return _settingsSet(section, key, JSON.stringify(obj)); } catch (e) {}
@@ -247,21 +234,7 @@ var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
         } catch (e) {}
     }
 
-    function _dropdownResetAfterSeconds(dd, seconds) {
-        try {
-            if (!dd) return;
 
-            var ms = Math.round((Math.max(0.1, seconds) * 1000));
-
-            _ddEnsureKey(dd);
-
-
-            // Cancel any pending reset for this dropdown
-            try { if (dd.__shineDDTaskId) app.cancelTask(dd.__shineDDTaskId); } catch (eCancel) {}
-
-            dd.__shineDDTaskId = app.scheduleTask("$.global._shineToolsResetDropdown('" + dd.__shineDDKey + "');", ms, false);
-        } catch (e) {}
-    }
 
 
     function _isCmdDown() {
@@ -3641,27 +3614,7 @@ var gfLegendRow = gfRight.add("group");
             return "timestamp";
         }
 
-        function _copyToClipboard(txt) {
-            try {
-                var t = String(txt || "");
-                if (!t) return false;
-                var isMac = false;
-                try { isMac = ($.os && $.os.toLowerCase().indexOf("mac") >= 0); } catch (eOS) {}
-                if (isMac) {
-                    // pbcopy expects UTF-8
-                    var cmd = "printf %s " + _shellEscape(t) + " | pbcopy";
-                    system.callSystem(cmd);
-                    return true;
-                } else {
-                    // Windows: clip
-                    // Use cmd /c to run a single command. Avoid newlines breaking echo by using powershell if available.
-                    var cmd2 = 'cmd.exe /c "echo ' + t.replace(/"/g,'""') + ' | clip"';
-                    system.callSystem(cmd2);
-                    return true;
-                }
-            } catch (e) {}
-            return false;
-        }
+
 
         function _getInstalledFontsMap() {
             var map = {};
@@ -3680,65 +3633,7 @@ var gfLegendRow = gfRight.add("group");
             return map;
         }
 
-        function _collectProjectFonts() {
-            // Returns { rows:[{name,count,installed}], total:int }
-            var counts = {};
-            var total = 0;
 
-            try {
-                if (!app.project) return { rows:[], total:0 };
-
-                for (var i = 1; i <= app.project.numItems; i++) {
-                    var it = app.project.item(i);
-                    if (!(it && (it instanceof CompItem))) continue;
-
-                    for (var l = 1; l <= it.numLayers; l++) {
-                        var lyr = it.layer(l);
-                        if (!lyr) continue;
-
-                        var td = null;
-                        try {
-                            var st = lyr.property("Source Text");
-                            if (st) td = st.value;
-                        } catch (eST) { td = null; }
-
-                        if (td && td.font) {
-                            var fName = String(td.font);
-                            if (!counts[fName]) counts[fName] = 0;
-                            counts[fName] += 1;
-                            total += 1;
-                        }
-                    }
-                }
-            } catch (e) {}
-
-            var installedMap = _getInstalledFontsMap();
-
-            var rows = [];
-            for (var k in counts) {
-                if (!counts.hasOwnProperty(k)) continue;
-                var isInstalled = null; // null = unknown
-                try {
-                    if (installedMap && Object.keys(installedMap).length > 0) {
-                        isInstalled = !!installedMap[String(k).toLowerCase()];
-                    }
-                } catch (e2) {}
-                rows.push({ name:k, count:counts[k], installed:isInstalled });
-            }
-
-            // sort: missing first, then alphabetic
-            rows.sort(function(a,b){
-                var ai = (a.installed === false) ? 0 : 1;
-                var bi = (b.installed === false) ? 0 : 1;
-                if (ai !== bi) return ai - bi;
-                var an = a.name.toLowerCase(), bn = b.name.toLowerCase();
-                if (an < bn) return -1;
-                if (an > bn) return 1;
-                return 0;
-            });
-
-            return { rows: rows, total: total };
-        }
 
         function _showFontAuditDialog() {
             try {
@@ -5053,6 +4948,30 @@ var gfLegendRow = gfRight.add("group");
 
         // -------------------------
         // UPDATES TAB CONTENT (UI only for now)
+        // Centralized labels/status strings (reduce repeated literals)
+        var __UPD_LABELS = {
+            BTN_CHECK: "CHECK FOR UPDATES",
+            BTN_INSTALL: "INSTALL UPDATE"
+        };
+
+        var __UPD_STATUS = {
+            CHECKING: "Checking updates…",
+            UP_TO_DATE: "Up to date.",
+            UPDATE_AVAILABLE: "Update available.",
+            RUN_CHECK_FIRST: "Run CHECK FOR UPDATES first.",
+            NO_PENDING: "No pending update to install. Run CHECK FOR UPDATES first.",
+            NO_URL: "Update is available, but no downloadable installer/script URL was provided in version.json.",
+            DL_INSTALLER: "Downloading installer…",
+            DL_SCRIPT: "Downloading script update…",
+            INSTALLING_ADMIN: "Installing (admin password required)…",
+            SUCCESS_RESTART: "Update successful, please restart After Effects.",
+            READ_FAIL: "Downloaded version.json but couldn't read it.",
+            MKDIR_FAIL: "Could not create cache folder.",
+            SELF_PATH_FAIL: "Could not determine installed .jsx path for self-replace.",
+            HTML_RETRY_CDN: "Primary download returned HTML. Retrying via CDN…",
+            HTML_RETRY_MEDIA: "Still getting HTML. Retrying via media endpoint…"
+        };
+
         // -------------------------
         var updatesWrap = tabUpdates.add("group");
         updatesWrap.orientation   = "column";
@@ -5128,10 +5047,10 @@ var kvStatus = _makeKVRow("Status:", "Not checked yet");
         updatesControlsRow.margins       = 0;
         updatesControlsRow.spacing       = 12;
 
-        var btnCheckUpdates   = updatesControlsRow.add("button", undefined, "CHECK FOR UPDATES");
+        var btnCheckUpdates   = updatesControlsRow.add("button", undefined, __UPD_LABELS.BTN_CHECK);
 
         // These only appear AFTER a newer version is detected.
-        var btnInstallUpdate  = updatesControlsRow.add("button", undefined, "INSTALL UPDATE");
+        var btnInstallUpdate  = updatesControlsRow.add("button", undefined, __UPD_LABELS.BTN_INSTALL);
         // Start hidden (only CHECK is visible on load).
         btnInstallUpdate.visible = false;
 btnInstallUpdate.enabled = false;
@@ -5153,9 +5072,16 @@ btnInstallUpdate.enabled = false;
 
         var __UPD_SETTINGS_SECTION = "ShineToolsUpdates";
 
+        var __UPD_KEYS = {
+            CHANGELOG_TEXT: "changelogText",
+            LAST_CHECKED: "lastChecked",
+            CACHED_PAYLOAD: "cachedPayload"
+        };
+
+
         // Populate Changelog immediately on launch from cached data (no need to click CHECK).
         try {
-            var cachedCL = _settingsGet(__UPD_SETTINGS_SECTION, "changelogText", "");
+            var cachedCL = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CHANGELOG_TEXT, "");
             if (cachedCL && cachedCL.length) {
                 chBox.text = cachedCL;
             } else {
@@ -5169,7 +5095,7 @@ btnInstallUpdate.enabled = false;
                 }
             }
 
-            var cachedLast = _settingsGet(__UPD_SETTINGS_SECTION, "lastChecked", "");
+            var cachedLast = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.LAST_CHECKED, "");
             if (cachedLast && cachedLast.length) {
                 kvLast.val.text = cachedLast;
             }
@@ -5178,13 +5104,19 @@ btnInstallUpdate.enabled = false;
 
         // GitHub update check
         var GITHUB_VERSION_JSON_URL = "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/version.json";
-        // Expected JSON shape (version.json):
-        // {
-        //   "latest": "1.0.6",
-        //   "date": "2026-01-05",
-        //   "pkgUrl": "https://<subdomain>.githubusercontent.com/shared/static/<token>.pkg",
-        //   "notes": ["...", "..."]
-        // }
+
+
+// --- version.json format (single source of truth) ---
+// Required:
+//   "latest": "1.5"
+//   "jsxUrl": "https://raw.githubusercontent.com/.../ShineTools.jsx"
+//   "notes": ["Current release note 1", "Current release note 2"]
+// Optional:
+//   "history": [ { "version": "1.4", "notes": ["Older note"] }, ... ]
+// Notes:
+//   - Do NOT prefix versions with "v" (UI formatting handles labels).
+//   - Dates are optional; the panel displays today's date for CURRENT VERSION.
+// -----------------------------------------------
         //
         // Where to install (handled by the PKG payload):
         //   /Applications/Adobe After Effects 2025/Scripts/ScriptUI Panels
@@ -5207,7 +5139,7 @@ btnInstallUpdate.enabled = false;
                 if (t === undefined || t === null) return;
                 // Never cache placeholder dash
                 if (String(t).replace(/\s+/g,"") === "—") return;
-                _settingsSet(__UPD_SETTINGS_SECTION, "changelogText", String(t));
+                _settingsSet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CHANGELOG_TEXT, String(t));
             } catch (e) {}
         }
 
@@ -5222,13 +5154,13 @@ btnInstallUpdate.enabled = false;
                 } else {
                     s = String(obj);
                 }
-                _settingsSet(__UPD_SETTINGS_SECTION, "cachedPayload", s);
+                _settingsSet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CACHED_PAYLOAD, s);
             } catch (e) {}
         }
 
         function _loadCachedPayloadSafe() {
             try {
-                var raw = _settingsGet(__UPD_SETTINGS_SECTION, "cachedPayload", "");
+                var raw = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CACHED_PAYLOAD, "");
                 if (!raw || !raw.length) return null;
 
                 // Try JSON.parse first
@@ -5575,69 +5507,9 @@ function _looksLikeHtml(s){
             }
         }
 
-        function _showToast(msg, ms) {
-            // Simple ScriptUI toast: small palette that auto-closes.
-            // Appears only when we install an update successfully.
-            try {
-                ms = (ms == null) ? 2200 : Math.max(800, ms);
-                try { if ($.global.__ShineToolsToastWin) $.global.__ShineToolsToastWin.close(); } catch (e0) {}
 
-                var w = new Window('palette', '', undefined, {closeButton:false});
-                $.global.__ShineToolsToastWin = w;
-                w.orientation = 'column';
-                w.alignChildren = ['fill','top'];
-                w.margins = 14;
-                var st = w.add('statictext', undefined, String(msg || ''), {multiline:true});
-                st.maximumSize = [340, 100];
-                try {
-                    st.graphics.foregroundColor = st.graphics.newPen(st.graphics.PenType.SOLID_COLOR, [0.95,0.95,0.95,1], 1);
-                } catch (e1) {}
-                w.show();
 
-                try {
-                    app.scheduleTask("try{ if($.global.__ShineToolsToastWin) $.global.__ShineToolsToastWin.close(); }catch(e){}", ms, false);
-                } catch (e2) {
-                    // fallback
-                    try { w.close(); } catch (e3) {}
-                }
-            } catch (e) {
-                // Worst-case fallback: alert
-                try { alert(String(msg || '')); } catch (e2) {}
-            }
-        }
 
-        function _promptInstallDialog(latestVer, installedVer) {
-            // Returns true if user clicks Install.
-            try {
-                var d = new Window('dialog', 'ShineTools Update');
-                d.orientation = 'column';
-                d.alignChildren = ['fill','top'];
-                d.margins = 16;
-                d.spacing = 10;
-
-                d.add('statictext', undefined, 'A new update is available.', {multiline:true});
-                d.add('statictext', undefined, 'Installed: v' + installedVer + '\nLatest: v' + latestVer, {multiline:true});
-
-                var btnRow = d.add('group');
-                btnRow.orientation = 'row';
-                btnRow.alignChildren = ['right','center'];
-                btnRow.alignment = ['fill','top'];
-                btnRow.spacing = 10;
-
-                var bCancel = btnRow.add('button', undefined, 'Cancel', {name:'cancel'});
-                var bInstall = btnRow.add('button', undefined, 'Install', {name:'ok'});
-
-                var want = false;
-                bInstall.onClick = function(){ want = true; d.close(1); };
-                bCancel.onClick  = function(){ want = false; d.close(0); };
-
-                d.show();
-                return want;
-            } catch (e) {
-                // fallback
-                return confirm('A new update is available.\n\nInstall now?');
-            }
-        }
 
 function _runPkgInstaller(pkgPath) {
             // Use AppleScript to prompt for admin and run installer.
@@ -5669,7 +5541,7 @@ function _runPkgInstaller(pkgPath) {
         function _setUpdatesLastChecked(d) {
             try {
                 kvLast.val.text = _formatStamp(d || new Date());
-                _settingsSet(__UPD_SETTINGS_SECTION, "lastChecked", kvLast.val.text);
+                _settingsSet(__UPD_SETTINGS_SECTION, __UPD_KEYS.LAST_CHECKED, kvLast.val.text);
             } catch (e) {}
         }
 
@@ -5681,25 +5553,9 @@ function _runPkgInstaller(pkgPath) {
             try { kvLatest.val.text = ver || "—"; } catch (e) {}
         }
 
-        function _setUpdatesChangelog(linesArr) {
-            try {
-                if (!linesArr || !linesArr.length) {
-                    chBox.text = "—";
-                    return;
-                }
-                var s = "";
-                for (var i=0; i<linesArr.length; i++) {
-                    s += "• " + linesArr[i] + "\n";
-                }
-                chBox.text = s.replace(/\n$/, "");
-                _cacheChangelogTextSafe(chBox.text);
-            } catch (e) {}
-        }
 
-        function _upperForBoldish(s){
-            // ScriptUI edittext can't do mixed bold, so we "fake bold" by uppercasing current notes.
-            try { return String(s||"").toUpperCase(); } catch(e){ return String(s); }
-        }
+
+
 
         function _setUpdatesChangelogStructured(latestVer, currentNotes, historyArr) {
             // Visual separation:
@@ -5770,7 +5626,7 @@ function _runPkgInstaller(pkgPath) {
                 _cacheChangelogTextSafe(chBox.text);
             } catch (e) {
                 try {
-                    var cached = _settingsGet(__UPD_SETTINGS_SECTION, "changelogText", "");
+                    var cached = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CHANGELOG_TEXT, "");
                     if (cached && cached.length) chBox.text = cached;
                     else chBox.text = "—";
                 } catch(_e) { try { chBox.text = "—"; } catch(__e) {} }
@@ -5821,13 +5677,13 @@ function _runPkgInstaller(pkgPath) {
             var cacheDir = _ensureFolder(cacheRoot);
             if (!cacheDir) cacheDir = _ensureFolder(Folder.temp.fsName + "/ShineTools");
             if (!cacheDir) {
-                _setUpdatesStatus("Could not create cache folder.");
+                _setUpdatesStatus(__UPD_STATUS.MKDIR_FAIL);
                 return;
             }
 
             _setUpdatesLastChecked(new Date());
 
-            _setUpdatesStatus("Checking updates…");
+            _setUpdatesStatus(__UPD_STATUS.CHECKING);
 
             // IMPORTANT: GITHUB_VERSION_JSON_URL must ultimately point to a *file* direct link for version.json.
             // If it's a folder link, GitHub will return HTML if the URL isn't raw and JSON.parse will fail.
@@ -5842,7 +5698,7 @@ function _runPkgInstaller(pkgPath) {
 
             var raw = _readTextFile(versionPath);
             if (!raw) {
-                _setUpdatesStatus("Downloaded version.json but couldn't read it.");
+                _setUpdatesStatus(__UPD_STATUS.READ_FAIL);
                 return;
             }
 
@@ -5920,7 +5776,7 @@ function _runPkgInstaller(pkgPath) {
                     
                     try { relayoutScoped(tabUpdates); } catch (eRL0) {}
                     _setFooterUpdateIndicator(true);
-                _setUpdatesStatus("Up to date.");
+                _setUpdatesStatus(__UPD_STATUS.UP_TO_DATE);
                 return;
             }
 
@@ -5936,7 +5792,7 @@ function _runPkgInstaller(pkgPath) {
             try { btnInstallUpdate.visible = true; } catch (eV2) {}
 try { relayoutScoped(tabUpdates); } catch (eRL1) {}
             _setFooterUpdateIndicator(false);
-            _setUpdatesStatus("Update available.");
+            _setUpdatesStatus(__UPD_STATUS.UPDATE_AVAILABLE);
             return;
         }
 
@@ -5944,7 +5800,7 @@ try { relayoutScoped(tabUpdates); } catch (eRL1) {}
             // Install the pending update (requires __UPDATE_STATE.available === true)
             try {
                 if (!__UPDATE_STATE || !__UPDATE_STATE.available || !__UPDATE_STATE.latest) {
-                    _setUpdatesStatus("No pending update to install. Run CHECK FOR UPDATES first.");
+                    _setUpdatesStatus(__UPD_STATUS.NO_PENDING);
                     return;
                 }
 
@@ -5952,7 +5808,7 @@ try { relayoutScoped(tabUpdates); } catch (eRL1) {}
                 var cacheDir = _ensureFolder(cacheRoot);
                 if (!cacheDir) cacheDir = _ensureFolder(Folder.temp.fsName + "/ShineTools");
                 if (!cacheDir) {
-                    _setUpdatesStatus("Could not create cache folder.");
+                    _setUpdatesStatus(__UPD_STATUS.MKDIR_FAIL);
                     return;
                 }
 
@@ -5966,7 +5822,7 @@ try { relayoutScoped(tabUpdates); } catch (eRL1) {}
                     var jsxName = "ShineTools_" + latest.replace(/[^\w\.\-]/g, "_") + ".jsx";
                     var jsxPath = cacheDir.fsName + "/" + jsxName;
 
-                    _setUpdatesStatus("Downloading script update…");
+                    _setUpdatesStatus(__UPD_STATUS.DL_SCRIPT);
                     var dlJsx = _curlDownload(jsxUrl, jsxPath);
                     if (!dlJsx.ok) {
                         _setUpdatesStatus("Failed to download updated .jsx." + (dlJsx.msg ? (" (" + dlJsx.msg + ")") : ""));
@@ -5984,7 +5840,7 @@ try { relayoutScoped(tabUpdates); } catch (eRL1) {}
                         try {
                             var alt1 = _toJsDelivrRaw(baseJsxUrl);
                             if (alt1) {
-                                _setUpdatesStatus("Primary download returned HTML. Retrying via CDN…");
+                                _setUpdatesStatus(__UPD_STATUS.HTML_RETRY_CDN);
                                 try { $.sleep(1200); } catch (_sl1) {}
                                 alt1 = _appendCacheBuster(alt1);
                                 var dlAlt1 = _curlDownload(alt1, jsxPath);
@@ -6001,7 +5857,7 @@ try { relayoutScoped(tabUpdates); } catch (eRL1) {}
                             try {
                                 var alt2 = _toMediaGithubusercontent(baseJsxUrl);
                                 if (alt2) {
-                                    _setUpdatesStatus("Still getting HTML. Retrying via media endpoint…");
+                                    _setUpdatesStatus(__UPD_STATUS.HTML_RETRY_MEDIA);
                                     try { $.sleep(1200); } catch (_sl2) {}
                                     alt2 = _appendCacheBuster(alt2);
                                     var dlAlt2 = _curlDownload(alt2, jsxPath);
@@ -6042,7 +5898,7 @@ if (downloadedVer && installedVer && (downloadedVer === installedVer)) {
                     var thisPath = null;
                     try { thisPath = $.fileName ? String($.fileName) : null; } catch (eFN) { thisPath = null; }
                     if (!thisPath) {
-                        _setUpdatesStatus("Could not determine installed .jsx path for self-replace.");
+                        _setUpdatesStatus(__UPD_STATUS.SELF_PATH_FAIL);
                         return;
                     }
 
@@ -6073,7 +5929,7 @@ if (downloadedVer && installedVer && (downloadedVer === installedVer)) {
                     
                     try { relayoutScoped(tabUpdates); } catch (eRL0) {}
                     _setFooterUpdateIndicator(true);
-                    _setUpdatesStatus("Update successful, please restart After Effects.");
+                    _setUpdatesStatus(__UPD_STATUS.SUCCESS_RESTART);
 return;
                 }
 
@@ -6083,14 +5939,14 @@ return;
                     var pkgName = "ShineTools_" + latest.replace(/[^\w\.\-]/g,"_") + ".pkg";
                     var pkgPath = cacheDir.fsName + "/" + pkgName;
 
-                    _setUpdatesStatus("Downloading installer…");
+                    _setUpdatesStatus(__UPD_STATUS.DL_INSTALLER);
                     var dlPkg = _curlDownload(pkgUrl, pkgPath);
                     if (!dlPkg.ok) {
                         _setUpdatesStatus("Failed to download PKG." + (dlPkg.msg ? (" (" + dlPkg.msg + ")") : ""));
                         return;
                     }
 
-                    _setUpdatesStatus("Installing (admin password required)…");
+                    _setUpdatesStatus(__UPD_STATUS.INSTALLING_ADMIN);
                     var res = _runPkgInstaller(pkgPath);
                     if (!res.ok) {
                         _setUpdatesStatus("Install canceled or failed." + (res.msg ? (" (" + res.msg + ")") : ""));
@@ -6103,11 +5959,11 @@ return;
                     
                     try { relayoutScoped(tabUpdates); } catch (eRL0) {}
                     _setFooterUpdateIndicator(true);
-                    _setUpdatesStatus("Update successful, please restart After Effects.");
+                    _setUpdatesStatus(__UPD_STATUS.SUCCESS_RESTART);
 return;
                 }
 
-                _setUpdatesStatus("Update is available, but no downloadable installer/script URL was provided in version.json.");
+                _setUpdatesStatus(__UPD_STATUS.NO_URL);
             } catch (e) {
                 _setUpdatesStatus("Install failed: " + String(e));
             }
@@ -6116,11 +5972,11 @@ return;
         btnInstallUpdate.onClick = function () {
             try {
                 if (!__UPDATE_STATE || !__UPDATE_STATE.checked) {
-                    _setUpdatesStatus("Run CHECK FOR UPDATES first.");
+                    _setUpdatesStatus(__UPD_STATUS.RUN_CHECK_FIRST);
                     return;
                 }
                 if (!__UPDATE_STATE.available) {
-                    _setUpdatesStatus("Up to date.");
+                    _setUpdatesStatus(__UPD_STATUS.UP_TO_DATE);
 _setFooterUpdateIndicator(true);
                     return;
                 }
@@ -6651,32 +6507,7 @@ function relayout() {
             });
         }
 
-        function addBtnClippedFixedLeft(parent, text, width, handler) {
-    var wrap = parent.add("group");
-    wrap.orientation   = "column";
-    wrap.alignChildren = ["left", "top"];
-    wrap.alignment     = ["left", "top"];
-    wrap.margins       = 0;
-    wrap.spacing       = 0;
 
-    var h = clippedBtnH();
-    wrap.minimumSize = [width, h];
-    wrap.maximumSize = [width, h];
-
-    var b = wrap.add("button", undefined, text);
-    b.alignment     = ["left", "top"];
-    b.preferredSize = [width, h];
-    b.minimumSize   = [width, h];
-    b.maximumSize   = [width, h];
-    b.helpTip       = text;
-
-    if (handler) b.onClick = handler;
-
-    // Best-effort: prevent "stuck focus" artifacts
-    try { defocusButtonBestEffort(b); } catch (e) {}
-
-    return b;
-}
 
 // -------------------------
 // PLUS glyph button (no box, hover turns PLUS yellow)
@@ -6777,33 +6608,6 @@ function addDropdownHeader(col, text, insetPx) {
 // Button wrapper that clips the RIGHT edge to hide the blue focus ring.
 
         // The real button is slightly wider than the wrapper; the wrapper's fixed width crops the ring.
-        function addBtnClipRight(parent, label, visualW, onClick) {
-            var wrap = parent.add("group");
-            wrap.orientation   = "column";
-            wrap.alignChildren = ["left", "top"];
-            wrap.alignment     = ["left", "top"];
-            wrap.margins       = 0;
-            wrap.spacing       = 0;
-
-            var h = clippedBtnH();
-            wrap.minimumSize = [visualW, h];
-            wrap.maximumSize = [visualW, h];
-
-            var realW = visualW + 14;
-
-            var b = wrap.add("button", undefined, label);
-            b.alignment     = ["left", "top"];
-            b.preferredSize = [realW, h];
-            b.minimumSize   = [realW, h];
-            b.maximumSize   = [realW, h];
-            b.helpTip       = label;
-
-            if (onClick) b.onClick = onClick;
-
-            // Best-effort: prevent "stuck focus" artifacts
-            try { defocusButtonBestEffort(b); } catch (e) {}
-            return b;
-        }
 
         // Hover + Option label engine (3-state)
         var _hoverBtn = null;
@@ -6987,45 +6791,6 @@ function _hoverClearInternal() {
         // Footer responsiveness (prevents legend clipping on narrow panels)
         // ------------------------- (prevents legend clipping on narrow panels)
         // -------------------------
-        function makeFooterResponsive(footerCol, footerRow, footerLeft, footerRight, legendTextCtrl) {
-            // Single-line footer only. When narrow, hide legend text to avoid clipping.
-            if (!footerRow) return;
-
-            function apply() {
-                var W = 0;
-                try { W = footerRow.size[0] || (footerRow.parent && footerRow.parent.size[0]) || 0; } catch (e) { W = 0; }
-
-                try {
-                    // Always keep row layout (single line)
-                    if (footerRow.orientation !== "row") footerRow.orientation = "row";
-                    footerRow.alignChildren = ["fill", "bottom"];
-                    if (footerLeft)  footerLeft.alignment  = ["left", "center"];
-                    if (footerRight) footerRight.alignment = ["fill", "center"];
-                    if (footerRight) footerRight.alignChildren = ["right", "center"];
-
-                    // Hide legend label when too narrow so nothing clips.
-                    if (legendTextCtrl) {
-                        var showLegend = (W === 0) ? true : (W >= 420);
-                        legendTextCtrl.visible = showLegend;
-                    }
-
-                    // Keep footer height constant
-                    footerRow.minimumSize = [0, 18];
-                    footerRow.maximumSize = [10000, 18];
-                    if (footerCol) { footerCol.minimumSize = [0, 34]; footerCol.maximumSize = [10000, 34]; }
-                } catch (e2) {}
-            }
-
-            footerRow.onResizing = function () {
-                var now = +new Date();
-                if (!footerRow.__lastTick || (now - footerRow.__lastTick) >= 60) {
-                    footerRow.__lastTick = now;
-                    apply();
-                }
-            };
-            footerRow.onResize   = function () { apply(); };
-            try { apply(); } catch (e3) {}
-        }
 
 // -------------------------
         // Custom twirl control
