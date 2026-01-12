@@ -18,7 +18,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.7";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 
@@ -5151,6 +5151,30 @@ btnInstallUpdate.enabled = false;
         chBox.minimumSize   = [10, 340];
         chBox.preferredSize = [10, 340];
 
+        var __UPD_SETTINGS_SECTION = "ShineToolsUpdates";
+
+        // Populate Changelog immediately on launch from cached data (no need to click CHECK).
+        try {
+            var cachedCL = _settingsGet(__UPD_SETTINGS_SECTION, "changelogText", "");
+            if (cachedCL && cachedCL.length) {
+                chBox.text = cachedCL;
+            } else {
+                // If no cached text, try cached payload (offline friendly)
+                var cp = _loadCachedPayloadSafe();
+                if (cp && cp.latest) {
+                    var _n = cp.notes || cp.changelog || [];
+                    if (typeof _n === "string") _n = [_n];
+                    var _h = cp.history || cp.changelogHistory || cp.releaseHistory || null;
+                    _setUpdatesChangelogStructured(cp.latest, _n, _h);
+                }
+            }
+
+            var cachedLast = _settingsGet(__UPD_SETTINGS_SECTION, "lastChecked", "");
+            if (cachedLast && cachedLast.length) {
+                kvLast.val.text = cachedLast;
+            }
+        } catch (eCacheInit) {}
+
 
         // GitHub update check
         var GITHUB_VERSION_JSON_URL = "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/version.json";
@@ -5174,6 +5198,55 @@ btnInstallUpdate.enabled = false;
             pkgUrl: null,
             notes: null
         };
+
+        // ------------------------------------------------------------
+        // Updates tab persistence (simple cache so Changelog survives AE restart)
+        // ------------------------------------------------------------
+        function _cacheChangelogTextSafe(t) {
+            try {
+                if (t === undefined || t === null) return;
+                // Never cache placeholder dash
+                if (String(t).replace(/\s+/g,"") === "—") return;
+                _settingsSet(__UPD_SETTINGS_SECTION, "changelogText", String(t));
+            } catch (e) {}
+        }
+
+        function _cacheUpdatesPayloadSafe(obj) {
+            // Optional: persist last good parsed JSON for offline launch
+            try {
+                var s = null;
+                if (typeof JSON !== "undefined" && JSON && JSON.stringify) {
+                    s = JSON.stringify(obj);
+                } else if (obj && obj.toSource) {
+                    s = obj.toSource();
+                } else {
+                    s = String(obj);
+                }
+                _settingsSet(__UPD_SETTINGS_SECTION, "cachedPayload", s);
+            } catch (e) {}
+        }
+
+        function _loadCachedPayloadSafe() {
+            try {
+                var raw = _settingsGet(__UPD_SETTINGS_SECTION, "cachedPayload", "");
+                if (!raw || !raw.length) return null;
+
+                // Try JSON.parse first
+                try {
+                    if (typeof JSON !== "undefined" && JSON && JSON.parse) {
+                        return JSON.parse(raw);
+                    }
+                } catch (eJSON) {}
+
+                // Fallback to eval for ExtendScript
+                try {
+                    return eval("(" + raw + ")");
+                } catch (eE) {}
+
+            } catch (e) {}
+            return null;
+        }
+
 
         function _normalizeUpdateUrl(url) {
             // Normalize update URLs (GitHub raw only).
@@ -5594,7 +5667,10 @@ function _runPkgInstaller(pkgPath) {
 }
 
         function _setUpdatesLastChecked(d) {
-            try { kvLast.val.text = _formatStamp(d || new Date()); } catch (e) {}
+            try {
+                kvLast.val.text = _formatStamp(d || new Date());
+                _settingsSet(__UPD_SETTINGS_SECTION, "lastChecked", kvLast.val.text);
+            } catch (e) {}
         }
 
         function _setUpdatesStatus(msg) {
@@ -5616,6 +5692,7 @@ function _runPkgInstaller(pkgPath) {
                     s += "• " + linesArr[i] + "\n";
                 }
                 chBox.text = s.replace(/\n$/, "");
+                _cacheChangelogTextSafe(chBox.text);
             } catch (e) {}
         }
 
@@ -5688,8 +5765,13 @@ function _runPkgInstaller(pkgPath) {
 
                 s = s.replace(/\n+$/, "");
                 chBox.text = s || "—";
+                _cacheChangelogTextSafe(chBox.text);
             } catch (e) {
-                try { chBox.text = "—"; } catch(_e) {}
+                try {
+                    var cached = _settingsGet(__UPD_SETTINGS_SECTION, "changelogText", "");
+                    if (cached && cached.length) chBox.text = cached;
+                    else chBox.text = "—";
+                } catch(_e) { try { chBox.text = "—"; } catch(__e) {} }
             }
         }
 
@@ -5818,6 +5900,8 @@ function _runPkgInstaller(pkgPath) {
             // New: prefer continuous JSON history when present
             var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
             _setUpdatesChangelogStructured(data.latest, notes, historyArr);
+            _cacheUpdatesPayloadSafe(data);
+            _cacheChangelogTextSafe(chBox.text);
 
             var cmp = _compareVersions(String(data.latest), String(currentVer));
             if (cmp <= 0) {
