@@ -718,7 +718,7 @@ function _withUndoGroup(name, fn) {
     // ============================================================
     // 0) Locate ScriptUI Panels folder + logo
     // ============================================================
-    var SCRIPT_FILENAME = "ShineTools.jsx";
+    var SCRIPT_FILENAME = "ShineTools_v1.0.jsx";
     // Version comes from top-level SHINE_VERSION / SHINE_VERSION_TAG
     var SHINE_TOOLS_VERSION = SHINE_VERSION_TAG;
     var LOGO_FILENAME   = "shinetools_logo.png";
@@ -8219,7 +8219,7 @@ function _buildTextTabIfNeeded() {
     // Validate downloaded script looks like ShineTools (signature check)
     if (!newRaw || !_looksLikeShineToolsJsx(newRaw)) {
         var why = _classifyDownloadBody(newRaw);
-        _setUpdatesStatus("Install failed: downloaded file does not look like ShineTools.jsx. " + (why.reason ? ("(" + why.reason + ")") : ""));
+        _setUpdatesStatus("Install failed: downloaded file does not look like ShineTools_v1.0.jsx. " + (why.reason ? ("(" + why.reason + ")") : ""));
         return;
     }
 
