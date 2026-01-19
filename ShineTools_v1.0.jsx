@@ -8590,9 +8590,10 @@ function _buildTextTabIfNeeded() {
             helpWrap.margins = [12, 8, 12, 10];
             helpWrap.spacing = 0;
 
-            var helpText = "Welcome to Shine Tools v" + SHINE_VERSION + "!\n\nThere are two main tabs on the top, MAIN and TEXT.\n\nThe top bar of each section allows you to import files and text animation presets and store them in a list for easy one click access later. Click the + button to import a file which will import it into the project bin and timeline. It will also remain stored in the dropdown list. Just select any stored file in the list and it will immediately add it to the project. You can CMD+Click any saved file to delete it from the list.\n\nYou can expand / collapse each section by clicking on the name or the arrow.\n- SHIFT+Click will expand multiple sections\n- CMD+Click will collapse all sections.\n\nYou can re-order the sections by the hidden UP and DOWN arrows on the right side of the section.\n\nSome buttons have a yellow line indicator which means the button has multiple options by normal clicking or OPTION clicking. If you hover over the buttons a tool tip will tell you your options.";
-            var helpTitle = helpWrap.add("statictext", undefined, helpText, {multiline:true});
-            
+            var helpText = "Navigating the ShineTools Interface\n----------------------------------\n\nSECTIONS\n• Single-click a section name to expand or collapse it\n• SHIFT-click a section name to expand multiple sections\n• CMD-click a section name to collapse all sections\n\n• Hidden arrows on the right side of each section allow you to reorder sections\n• OPTION-click on a section name to reorder the buttons within that section\n\nBUTTONS & MODIFIERS\n• Buttons with a yellow indicator support modifier keys\n  (CMD, OPTION, or SHIFT for alternate actions)\n\nFAVORITES & IMPORTS\n• Single-click the PLUS (+) icon to add files to your Favorites\n• CMD-click the PLUS (+) icon to add files to your Favorites and timeline\n\n• In the Favorites list:\n  – CMD-click a file to remove it from the list\n\nREQUIRED SETTINGS\n• Enable \"Allow Scripts to Write Files and Access Network\"\n• File > Project Settings > Expressions must be set to JavaScript";
+var helpTitle = helpWrap.add("statictext", undefined, helpText, {multiline:true});
+try { helpTitle.alignment = ["fill","top"]; } catch(e) {}
+try { helpTitle.maximumSize = [10000, 10000]; } catch(e) {}
 
             // PASS 13: DEBUG INFO (bottom of HELP tab, hidden by default; toggled via CMD-click HELP)
             try {
