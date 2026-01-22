@@ -1353,8 +1353,8 @@ function _withUndoGroup(name, fn) {
     var DEFAULT_TEXT_STRING = "enter text";
 
     // Highlight defaults
-    var DEFAULT_HIGHLIGHT_ON = 0;
-    var HIGHLIGHT_FRAMES = 20;
+    var DEFAULT_ANIMATE_ON = 0;
+    var ANIMATE_FRAMES = 30;
 
     // Watch cadence
     var WATCH_INTERVAL_MS = 200;
@@ -1681,11 +1681,11 @@ function syncNamesForPrecompLayer(precompLayer) {
     }
 
     // ----- Highlight / Reveal helpers -----
-    function getHighlightCheckboxValue(boxLayer) {
+    function getAnimateCheckboxValue(boxLayer) {
         try {
             var fx = boxLayer.property("ADBE Effect Parade");
             if (!fx) return 0;
-            var eff = fx.property("HIGHLIGHT");
+            var eff = fx.property("ANIMATE");
             if (!eff) return 0;
             return eff.property(1).value;
         } catch (e) { return 0; }
@@ -1701,7 +1701,7 @@ function syncNamesForPrecompLayer(precompLayer) {
         } catch (e) { return null; }
     }
 
-    function ensureHighlightState(boxLayer) {
+    function ensureAnimateState(boxLayer) {
         try {
             if (!boxLayer || !isShapeLayer(boxLayer)) return;
             var comp = boxLayer.containingComp;
@@ -1710,19 +1710,19 @@ function syncNamesForPrecompLayer(precompLayer) {
             var reveal = getRevealSlider(boxLayer);
             if (!reveal) return;
 
-            var on = (getHighlightCheckboxValue(boxLayer) === 1);
+            var on = (getAnimateCheckboxValue(boxLayer) === 1);
 
             var id = "L" + String(boxLayer.id);
-            if (!mod.__hlState) mod.__hlState = {};
-            var prev = (mod.__hlState[id] === undefined) ? -1 : mod.__hlState[id];
+            if (!mod.__animState) mod.__animState = {};
+            var prev = (mod.__animState[id] === undefined) ? -1 : mod.__animState[id];
 
             if (on) {
                 // Only rebuild keys when we newly turned on, or keys are missing
                 if (prev !== 1 || reveal.numKeys < 2) {
                     if (reveal.numKeys > 0) removeAllKeys(reveal);
 
-                    var t0 = comp.time;
-                    var t1 = t0 + (HIGHLIGHT_FRAMES / comp.frameRate);
+                    var t0 = Math.max(comp.time, boxLayer.inPoint);
+                    var t1 = t0 + (ANIMATE_FRAMES / comp.frameRate);
 
                     reveal.setValueAtTime(t0, 0);
                     reveal.setValueAtTime(t1, 100);
@@ -1738,7 +1738,7 @@ function syncNamesForPrecompLayer(precompLayer) {
                 try { reveal.setValue(100); } catch (eSet) {}
             }
 
-            mod.__hlState[id] = on ? 1 : 0;
+            mod.__animState[id] = on ? 1 : 0;
         } catch (e) {}
     }
 
@@ -1777,7 +1777,7 @@ function syncNamesForPrecompLayer(precompLayer) {
                 "var sr = thisLayer.parent.sourceRectAtTime(time,false);",
                 "var fullW = sr.width + px*2;",
                 "var fullH = sr.height + py*2;",
-                "var on = effect(\"HIGHLIGHT\")(\"Checkbox\");",
+                "var on = effect(\"ANIMATE\")(\"Checkbox\");",
                 "var p = 1; try { p = effect(\"Reveal %\")(\"Slider\")/100; } catch (err) { p = 1; }",
                 "var w = (on==1) ? (fullW*p) : fullW;",
                 "[w, fullH];"
@@ -1788,7 +1788,7 @@ function syncNamesForPrecompLayer(precompLayer) {
                 "var px = effect(\"Padding\")(\"Point\")[0];",
                 "var sr = thisLayer.parent.sourceRectAtTime(time,false);",
                 "var fullW = sr.width + px*2;",
-                "var on = effect(\"HIGHLIGHT\")(\"Checkbox\");",
+                "var on = effect(\"ANIMATE\")(\"Checkbox\");",
                 "var p = 1; try { p = effect(\"Reveal %\")(\"Slider\")/100; } catch (err) { p = 1; }",
                 "var w = (on==1) ? (fullW*p) : fullW;",
                 "[-(fullW - w)/2, 0];"
@@ -1864,7 +1864,80 @@ function syncNamesForPrecompLayer(precompLayer) {
                 // Center the text+box inside the new precomp (box follows text via parenting)
                 try { centerTextBoxInPrecomp(pc); } catch (eCenter) {}
 
-                try { pc.openInViewer(); } catch (eOpen) {}
+                // AE will often select the newly-created precomp item in the Project panel (especially when docked).
+                // Goal: end with the SHAPE layer named "TEXT BOX" selected INSIDE the TEXT BOX precomp.
+                //
+                // Strategy:
+                //  1) Try selecting inside the precomp directly (works when panel is run as a script).
+                //  2) For docked panels, first activate the parent comp viewer, select the new precomp layer,
+                //     run "Open Layer" (like double-clicking the layer), then select "TEXT BOX" inside.
+                try {
+                    var _pcId = pc.id;
+                    var _parentId = parentCompId;
+                    var _layerIndex = insertAt;
+
+                    // Select "TEXT BOX" layer inside a given comp
+                                        var _cmdSelectInside = "try{"
+                        + "var c=app.project.itemByID(" + _pcId + ");"
+                        + "if(c && (c instanceof CompItem)){"
+                        + "try{c.openInViewer();}catch(eV){}"
+                        + "try{app.project.activeItem=c;}catch(eA){}"
+                        + "try{c.openInViewer();}catch(eV2){}"
+                        + "try{if(app.activeViewer&&app.activeViewer.setActive){app.activeViewer.setActive();}}catch(eAV){}"
+                        + "try{if(app.activeViewer&&app.activeViewer.source&&app.activeViewer.source.id!==" + _pcId + "){try{c.openInViewer();}catch(eV3){}}}catch(eChk){}"
+                        + "try{for(var i=1;i<=c.numLayers;i++){try{c.layer(i).selected=false;}catch(e0){}}}catch(eD){}"
+                        + "var t=null;"
+                        + "for(var i2=1;i2<=c.numLayers;i2++){"
+                        + "  try{var L=c.layer(i2);"
+                        + "      if(L && L.matchName && String(L.matchName)==='ADBE Vector Layer'){"
+                        + "         var nm=String(L.name||'');"
+                        + "         if(nm==='TEXT BOX'){t=L;break;}"
+                        + "         try{if(String(L.comment||'')==='SHINE_TEXT_BOX_BOX_LAYER'){t=L;break;}}catch(eC){}"
+                        + "      }"
+                        + "  }catch(eX){}"
+                        + "}"
+                        + "if(!t){try{t=c.layer(2);}catch(eY){}}"
+                        + "if(t){try{t.selected=true;}catch(eS){} }"
+                        + "}"
+                        + "}catch(e){}";
+
+                    // Docked-panel reliable path (v4): open the NEW TEXT BOX precomp directly (do NOT re-open parent comp)
+                                        var _cmdOpenPrecompAndSelect = "try{"
+                        + "var c=app.project.itemByID(" + _pcId + ");"
+                        + "if(c && (c instanceof CompItem)){"
+                        + "try{c.openInViewer();}catch(eV){}"
+                        + "try{app.project.activeItem=c;}catch(eA){}"
+                        + "try{c.openInViewer();}catch(eV2){}"
+                        + "try{if(app.activeViewer&&app.activeViewer.setActive){app.activeViewer.setActive();}}catch(eAV){}"
+                        + "try{if(app.activeViewer&&app.activeViewer.source&&app.activeViewer.source.id!==" + _pcId + "){try{c.openInViewer();}catch(eV3){}}}catch(eChk){}"
+                        + "try{for(var j=1;j<=c.numLayers;j++){try{c.layer(j).selected=false;}catch(e0){}}}catch(eD){}"
+                        + "var t=null;"
+                        + "for(var k=1;k<=c.numLayers;k++){"
+                        + "  try{var L=c.layer(k);"
+                        + "      if(L && L.matchName && String(L.matchName)==='ADBE Vector Layer'){"
+                        + "         var nm=String(L.name||'');"
+                        + "         if(nm==='TEXT BOX'){t=L;break;}"
+                        + "         try{if(String(L.comment||'')==='SHINE_TEXT_BOX_BOX_LAYER'){t=L;break;}}catch(eC){}"
+                        + "      }"
+                        + "  }catch(eX){}"
+                        + "}"
+                        + "if(!t){try{t=c.layer(2);}catch(eY){}}"
+                        + "if(t){try{t.selected=true;}catch(eS){} }"
+                        + "}"
+                        + "}catch(e){}";
+
+                    // Run a few passes to outlast AE focus switching — but ONLY targeting the precomp.
+                    app.scheduleTask(_cmdOpenPrecompAndSelect, 80, false);
+                    app.scheduleTask(_cmdOpenPrecompAndSelect, 180, false);
+                    app.scheduleTask(_cmdOpenPrecompAndSelect, 420, false);
+                    app.scheduleTask(_cmdOpenPrecompAndSelect, 700, false);
+
+                    // Re-assert selection INSIDE the TEXT BOX precomp
+                    app.scheduleTask(_cmdSelectInside, 520, false);
+                    app.scheduleTask(_cmdSelectInside, 920, false);
+                    app.scheduleTask(_cmdSelectInside, 1300, false);
+ } catch (eDockSel) {}
+
             }
 
             mod.ensureWatcherRunning();
@@ -2078,7 +2151,7 @@ function syncNamesForPrecompLayer(precompLayer) {
 // Only run automation behaviors after edit pause window
             if (now >= mod.__watcher.editPauseUntil) {
                 var boxes = findBoxLayersInComp(comp);
-                for (var b=0; b<boxes.length; b++) ensureHighlightState(boxes[b]);
+                for (var b=0; b<boxes.length; b++) ensureAnimateState(boxes[b]);
 
 
                 // Bounds-based precomp anchor recenter (runs every tick, lightweight via cached sig)
@@ -2210,7 +2283,7 @@ function syncNamesForPrecompLayer(precompLayer) {
         addSlider(fx, "Stroke Width", DEFAULT_STROKE_W);
         addColor(fx, "Stroke Color", DEFAULT_STROKE_COL);
 
-        addCheck(fx, "HIGHLIGHT", DEFAULT_HIGHLIGHT_ON);
+        addCheck(fx, "ANIMATE", DEFAULT_ANIMATE_ON);
         addSlider(fx, "Reveal %", 100);
 
         // Shape contents
@@ -3070,6 +3143,74 @@ function favOpenDialogFromDefaultFolder() {
     // ============================================================
     // 5) LAYERS
     // ============================================================
+    // ------------------------------------------------------------
+    // SOLIDS folder canonicalization (root-level)
+    // Ensures there is exactly one root folder named "SOLIDS" (all caps).
+    // Merges variants like "Solids", "SOLIDS.", "solids " into the primary folder.
+    // ------------------------------------------------------------
+    function _stGetOrCreateCanonicalSolidsFolderRoot(){
+        if (!app.project) return null;
+        var proj = app.project;
+        var root = proj.rootFolder;
+
+        function _isFolder(it){ return (it && (it instanceof FolderItem)); }
+        function _normName(nm){
+            return String(nm || "")
+                .replace(/^[\s]+/g, "")
+                .replace(/[\s\.]+$/g, "")   // trim spaces + trailing dots
+                .toLowerCase();
+        }
+        function _moveAll(fromFolder, toFolder){
+            try{
+                for (var j = fromFolder.numItems; j >= 1; j--){
+                    var child = fromFolder.item(j);
+                    if (child) child.parentFolder = toFolder;
+                }
+            }catch(e){}
+        }
+
+        var candidates = [];
+        for (var i = 1; i <= proj.numItems; i++){
+            var it = proj.item(i);
+            if (!_isFolder(it)) continue;
+            if (it.parentFolder !== root) continue;
+            if (_normName(it.name) === "solids") candidates.push(it);
+        }
+
+        var primary = null;
+        if (candidates.length === 0){
+            primary = proj.items.addFolder("SOLIDS");
+            primary.parentFolder = root;
+            return primary;
+        }
+
+        primary = candidates[0];
+        for (var k = 0; k < candidates.length; k++){
+            if (String(candidates[k].name) === "SOLIDS"){ primary = candidates[k]; break; }
+        }
+
+        for (var m2 = 0; m2 < candidates.length; m2++){
+            var other = candidates[m2];
+            if (other === primary) continue;
+            _moveAll(other, primary);
+            try { if (other.numItems === 0) other.remove(); } catch(eRem){}
+        }
+
+        try { primary.name = "SOLIDS"; } catch(eRen){}
+        return primary;
+    }
+
+    function _stPlaceLayerSourceInSolidsFolder(layer){
+        try{
+            if (!layer) return;
+            var src = layer.source;
+            if (src && (src instanceof FootageItem)){
+                var f = _stGetOrCreateCanonicalSolidsFolderRoot();
+                if (f) src.parentFolder = f;
+            }
+        }catch(e){}
+    }
+
     function addSolidNativePrompt() {
         var c = requireComp();
         if (!c) return;
@@ -3115,12 +3256,32 @@ function favOpenDialogFromDefaultFolder() {
             }
 
             if (!newestSolid) return;
+            // Ensure SOLIDS folder exists (canonical all-caps) and place the new solid into it.
+            try{
+                var _solidsFolder = _stGetOrCreateCanonicalSolidsFolderRoot();
+                if (_solidsFolder) newestSolid.parentFolder = _solidsFolder;
+            }catch(eFolder){}
 
             var col = [1, 1, 1];
             try { col = safeColor01(newestSolid.mainSource.color); } catch (eC) {}
 
-            var newLayer = c.layers.addSolid(col, newestSolid.name, c.width, c.height, c.pixelAspect, c.duration);
-            try { newLayer.selected = true; } catch (eSel) {}
+            // Place the newly-created Solid footage into the comp WITHOUT creating a second solid.
+            // app.executeCommand("Solid...") creates the FootageItem; adding via addSolid() would duplicate it.
+            // Instead, add the FootageItem as a layer.
+            try {                // Put the newly-created solid footage into the canonical SOLIDS folder.
+                try{
+                    var solidsFolder = _stGetOrCreateCanonicalSolidsFolderRoot();
+                    if (solidsFolder) newestSolid.parentFolder = solidsFolder;
+                }catch(eSF){}
+
+                var newLayer = null;
+                try { newLayer = c.layers.add(newestSolid); } catch (eAdd) { newLayer = null; }
+                if (newLayer) {
+                    try { newLayer.selected = true; } catch (eSel) {}
+                }
+            } catch (eAddOuter) {}
+
+            return;
 
         } catch (err) {
             warn("Error running Solid command:\n" + err.toString());
@@ -3168,7 +3329,10 @@ function favOpenDialogFromDefaultFolder() {
             var name = "WHITE SOLID";
             var lay = c.layers.addSolid(white, name, c.width, c.height, c.pixelAspect, c.duration);
             try { lay.selected = true; } catch (eSel) {}
-        } catch (err) {
+        
+            // Ensure the underlying solid footage item lives in SOLIDS (all caps)
+            _stPlaceLayerSourceInSolidsFolder(lay);
+} catch (err) {
             warn("Error: " + err.toString());
         } finally {
             app.endUndoGroup();
@@ -3182,7 +3346,10 @@ function favOpenDialogFromDefaultFolder() {
         try {
             var nul = c.layers.addNull();
             try { nul.selected = true; } catch (eSel) {}
-        } catch (err) {
+        
+            // Ensure the null's solid source footage item lives in SOLIDS (all caps)
+            _stPlaceLayerSourceInSolidsFolder(nul);
+} catch (err) {
             warn("Error: " + err.toString());
         } finally {
             app.endUndoGroup();
@@ -3206,9 +3373,15 @@ function favOpenDialogFromDefaultFolder() {
 
             if (cmd) {
                 app.executeCommand(cmd);
+                // The command creates a solid-source FootageItem; move it into canonical SOLIDS.
+                try {
+                    var sel = c.selectedLayers;
+                    if (sel && sel.length) _stPlaceLayerSourceInSolidsFolder(sel[0]);
+                } catch (eAdjCmd) {}
             } else {
                 var adj = c.layers.addSolid([1, 1, 1], "Adjustment Layer", c.width, c.height, c.pixelAspect, c.duration);
                 adj.adjustmentLayer = true;
+                _stPlaceLayerSourceInSolidsFolder(adj);
             }
         } catch (err) {
             warn("Error: " + err.toString());
@@ -4475,6 +4648,23 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
         function isComp(it) { return (it && (it instanceof CompItem)); }
         function isFootage(it) { return (it && (it instanceof FootageItem)); }
 
+        // Solid detection (robust): catches true solids, nulls/adjustments (solid-source),
+        // even if AE returns unusual mainSource objects on some versions.
+        function isSolidFootageSafe(it){
+            try{
+                if (!isFootage(it)) return false;
+                // Preferred: SolidSource
+                try{ if (typeof isSolidFootageItem === "function" && isSolidFootageItem(it)) return true; }catch(e0){}
+                var ms = it.mainSource;
+                if (ms && (ms instanceof SolidSource)) return true;
+                // Fallback heuristic: no file + has color/width/height
+                if (!it.file && ms){
+                    if (ms.hasOwnProperty("color") && ms.hasOwnProperty("width") && ms.hasOwnProperty("height")) return true;
+                }
+            }catch(e){}
+            return false;
+        }
+
         function normExt(e) {
             if (!e) return "";
             e = String(e).toLowerCase();
@@ -4556,28 +4746,51 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
         // Target folders (created if missing)
         // ------------------------------------------------------------
         var fFootage = findOrCreateRootFolder("FOOTAGE");
+        // SOLIDS folder: create/merge case-insensitively (e.g., "Solids", "SOLIDS.")
+function getOrCreateCanonicalSolidsFolder(){
+    // match "solids", "solids.", etc (case-insensitive, ignore trailing dots/spaces)
+    var candidates = [];
+    for (var ii = 1; ii <= proj.numItems; ii++) {
+        var itF = proj.item(ii);
+        if (!isFolder(itF)) continue;
+        if (itF.parentFolder !== root) continue;
+        var nm = String(itF.name || "").replace(/[\s\.]+$/g, "");
+        if (nm.toLowerCase() === "solids") candidates.push(itF);
+    }
+    if (candidates.length === 0) {
+        var f = proj.items.addFolder("SOLIDS");
+        f.parentFolder = root;
+        return f;
+    }
+    // Prefer the one named exactly "SOLIDS" if present; else first.
+    var primary = candidates[0];
+    for (var p=0; p<candidates.length; p++){
+        if (String(candidates[p].name) === "SOLIDS") { primary = candidates[p]; break; }
+    }
+    // Merge others into primary
+    for (var m=0; m<candidates.length; m++){
+        var other = candidates[m];
+        if (other === primary) continue;
+        moveAllItems(other, primary);
+        removeFolderIfEmpty(other);
+    }
+    // Normalize name (optional)
+    try { primary.name = "SOLIDS"; } catch(e){}
+    return primary;
+}
+
+var fSolids  = getOrCreateCanonicalSolidsFolder();
         var fImages  = findOrCreateRootFolder("IMAGES");
         var fAudio   = findOrCreateRootFolder("AUDIO");
-        var fSolids  = findOrCreateRootFolder("SOLIDS");
         var fPrecomps= findOrCreateRootFolder("PRECOMPS");
 
         // ------------------------------------------------------------
-        // Merge duplicate SOLIDS folders at root (if any)
         // ------------------------------------------------------------
-        try {
-            var solids = listRootFoldersByName("SOLIDS");
-            if (solids.length > 1) {
-                // Keep the first as canonical, merge the rest into it
-                var mainSolids = solids[0];
-                for (var s = 1; s < solids.length; s++) {
-                    moveAllItems(solids[s], mainSolids);
-                    removeFolderIfEmpty(solids[s]);
-                }
-                fSolids = mainSolids;
-            }
-        } catch (eMerge) {}
-
+        // TEST CLEANUP (DISABLED): Previously removed root-level SOLIDS folders and contents.
+        // This was only for early warning-probe testing and MUST NOT run on user projects.
+        // We now only delete ShineTools-created test solids by name prefix elsewhere.
         // ------------------------------------------------------------
+// ------------------------------------------------------------
         // Classification
         // ------------------------------------------------------------
         var audioExts = {
@@ -4629,12 +4842,11 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
                     continue;
                 }
 
-                // SOLIDS (including null solids)
-                if (isSolidFootage(it)) {
+                // SOLIDS (including null/adjustment sources)
+                if (isSolidFootageSafe(it)) {
                     it.parentFolder = fSolids;
                     continue;
                 }
-
                 // Stills by AE metadata (covers still sequences, etc.)
                 if (isStillFootage(it)) {
                     it.parentFolder = fImages;
@@ -4643,7 +4855,10 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
 
                 if (isFootage(it)) {
                     var ext = getExt(it);
-                    if (ext && audioExts[ext]) {
+                    // SOLIDS: route solid footage into SOLIDS folder (never FOOTAGE)
+                    if (isSolidFootageSafe(it)) {
+                        it.parentFolder = fSolids;
+                    } else if (ext && audioExts[ext]) {
                         it.parentFolder = fAudio;
                     } else if (ext && imageExts[ext]) {
                         it.parentFolder = fImages;
@@ -5190,7 +5405,687 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
     // ============================================================
     // 11) UI — TABS + Accordion
     // ============================================================
-    function buildUI(thisObj) {
+    
+
+// ============================================================
+// Offset Layers Utility (ported from OffsetLayers_Standalone15.jsx)
+// NOTE: Must be in global scope so MAIN > UTILITIES button can call it.
+// ============================================================
+// ============================================================
+// Offset Layers Utility (Frame Offset engine)
+// Ported from: Frame Offset.jsx
+// NOTE: Must be in global scope so MAIN > UTILITIES button can call it.
+// Click: Linear Frame Offset dialog
+// Option/Alt: Curve Offset dialog (Square/Cubic/Ease In-Out/Exponential + preview + invert)
+// ============================================================
+
+var ST_FO_MAX_SPREAD_FRAMES = 90; // max total spread for CURVE mode (frames)
+
+function _stFrameOffset_getComp(){ var i=app.project && app.project.activeItem; return (i&&i instanceof CompItem)?i:null; }
+
+// selection order respects shift-select direction (top->bottom or bottom->top)
+function _stFrameOffset_getSelectedLayersInUserOrder(comp){
+    var s=comp.selectedLayers; if(!s||s.length<2) return [];
+    var min=s[0].index; for(var i=1;i<s.length;i++) if(s[i].index<min) min=s[i].index;
+    var down=(s[0].index===min), out=[];
+    if(!down){ for(i=1;i<=comp.numLayers;i++) if(comp.layer(i).selected) out.push(comp.layer(i)); }
+    else{ for(i=comp.numLayers;i>=1;i--) if(comp.layer(i).selected) out.push(comp.layer(i)); }
+    return out;
+}
+
+// ---- focus ring suppression ----
+function _stFrameOffset_addFocusSink(win){
+    var sink = win.add("edittext", undefined, "");
+    sink.visible = false; sink.enabled = true;
+    sink.maximumSize=[0,0]; sink.minimumSize=[0,0];
+    return sink;
+}
+function _stFrameOffset_focusSink(sink){ try{ sink && (sink.active=true); }catch(e){} }
+function _stFrameOffset_defocus(btn,sink){
+    // Best-effort: remove ScriptUI's blue focus ring by moving focus to a hidden edittext.
+    // Some AE ScriptUI builds ignore addEventListener on dialog buttons, so we also set onMouseDown/onMouseUp.
+    if(!btn) return;
+
+    function _do(){
+        try{ btn.active = false; }catch(e){}
+        try{ if(sink) sink.active = true; }catch(e2){}
+        try{ if(btn.window && btn.window.update) btn.window.update(); }catch(e3){}
+    }
+
+    try{ btn.addEventListener("mousedown", _do); }catch(eA){}
+    try{ btn.addEventListener("mouseup",   _do); }catch(eB){}
+    try{ btn.addEventListener("click",     _do); }catch(eC){}
+
+    // Older/quirky ScriptUI fallbacks
+    try{ btn.onMouseDown = _do; }catch(eD){}
+    try{ btn.onMouseUp   = _do; }catch(eE){}
+}
+
+// Dialog buttons (OK/Cancel) need extra help: explicitly defocus BEFORE closing the dialog.
+function _stFrameOffset_wireDialogBtn(btn, sink, closeFn){
+    if(!btn) return;
+    btn.onClick = function(){
+        try{ _stFrameOffset_defocus(btn, sink); }catch(e0){}
+        try{ btn.active = false; }catch(e1){}
+        try{ if(sink) sink.active = true; }catch(e2){}
+        try{ if(btn.window && btn.window.update) btn.window.update(); }catch(e3){}
+        try{ if(closeFn) closeFn(); }catch(e4){}
+    };
+    // Also hook mouse down/up so the ring doesn't "stick" while the dialog is still open.
+    try{ btn.onMouseDown = function(){ try{ btn.active=false; }catch(e){} try{ if(sink) sink.active=true; }catch(e2){} }; }catch(e5){}
+    try{ btn.onMouseUp   = function(){ try{ btn.active=false; }catch(e){} try{ if(sink) sink.active=true; }catch(e2){} }; }catch(e6){}
+}
+
+
+
+// ===================== LINEAR (NORMAL CLICK) =====================
+function _stFrameOffset_showFrameOffsetDialog(){
+    var d=new Window("dialog","Frame Offset");
+    d.orientation="column";
+    d.alignChildren=["fill","top"];
+    d.margins = 12;
+    d.spacing = 8;
+
+    // Smaller, tighter dialog
+    d.minimumSize   = [220, 0];
+    d.preferredSize = [220, 0];
+
+    var sink=_stFrameOffset_addFocusSink(d);
+
+    var row=d.add("group");
+    row.orientation="row";
+    row.alignChildren=["left","center"];
+    row.alignment=["fill","top"];
+    row.spacing = 6;
+
+    row.add("statictext", undefined, "Frames:");
+    var et=row.add("edittext", undefined, "3");
+    et.characters = 4;
+
+    // ensure focus sink so no blue ring appears on buttons
+    d.onShow=function(){
+        try{ et.active=true; }catch(e){}
+    };
+
+    function parseFrames(){
+        var v = parseInt(et.text,10);
+        if(isNaN(v)) v = 0;
+        if(v < 0) v = 0;
+        if(v > 9999) v = 9999;
+        return v;
+    }
+
+    
+var btns = d.add("group");
+btns.orientation = "row";
+btns.alignment = ["right","top"];
+btns.spacing = 8;
+
+// Dialog action buttons (match ShineTools stack-cell button architecture used in Font Audit CLOSE)
+// This avoids the native macOS focus ring look.
+var __dlgH = (typeof clippedBtnH === "function") ? clippedBtnH() : 24;
+var __dlgMinW = 90;
+
+function __makeDlgCellBtn(parent, label, minW){
+    var cell = parent.add("group");
+    cell.orientation   = "stack";
+    cell.alignChildren = ["fill","fill"];
+    cell.alignment     = ["left","center"];
+    cell.margins       = 0;
+
+    var b = cell.add("button", undefined, label);
+    b.alignment     = ["fill","center"];
+    b.preferredSize = [0, __dlgH];
+    b.minimumSize   = [minW || __dlgMinW, __dlgH];
+    b.maximumSize   = [10000, __dlgH];
+
+    try { defocusButtonBestEffort(b); } catch(eDF) {}
+    return { cell: cell, btn: b };
+}
+
+var __cancelPack = __makeDlgCellBtn(btns, "Cancel", 90);
+var __okPack     = __makeDlgCellBtn(btns, "OK", 70);
+var cBtn = __cancelPack.btn;
+var oBtn = __okPack.btn;
+
+cBtn.onClick = function(){ try{ d.close(0); }catch(e){ try{ d.close(); }catch(e2){} } };
+oBtn.onClick = function(){ try{ d.close(1); }catch(e){ try{ d.close(); }catch(e2){} } };
+d.layout.layout(true);
+    try { d.pack(); } catch(e) {}
+
+    if(d.show()!==1) return null;
+    return { frames: parseFrames() };
+}
+
+function _stFrameOffset_applyLinearOffset(comp, layers, frameOffset){
+    if(frameOffset === 0) return;
+    var fps=comp.frameRate;
+    app.beginUndoGroup("Offset Layers (Linear)");
+    for(var i=0;i<layers.length;i++){
+        layers[i].startTime += (i * frameOffset) / fps;
+    }
+    app.endUndoGroup();
+}
+
+// ===================== CURVE (OPTION CLICK) =====================
+function _stFrameOffset_lerp(a,b,t){ return a + (b-a)*t; }
+function _stFrameOffset_curveNorm50(curve50){ return Math.max(0, Math.min(1, curve50/50)); } // 0..1
+
+function _stFrameOffset_f_power(t, p){ return Math.pow(t, p); }
+function _stFrameOffset_f_sigmoid(t, a){
+    var ta = Math.pow(t, a);
+    var ua = Math.pow(1-t, a);
+    var den = ta + ua;
+    return den !== 0 ? (ta/den) : t;
+}
+
+function _stFrameOffset_f_exponential(t, k){
+    // Normalized exponential curve: 0->0, 1->1. Higher k = more back-loaded.
+    if(k <= 1e-6) return t;
+    var ek = Math.exp(k);
+    var num = Math.exp(k*t) - 1;
+    var den = ek - 1;
+    return den !== 0 ? (num/den) : t;
+}
+
+
+function _stFrameOffset_invertOffsets(offsets){
+    if(!offsets || offsets.length < 3) return offsets;
+    var inc=[], i;
+    for(i=1;i<offsets.length;i++) inc.push(offsets[i]-offsets[i-1]);
+    inc.reverse();
+    var out=[0];
+    for(i=0;i<inc.length;i++) out.push(out[out.length-1] + inc[i]);
+    return out;
+}
+
+// typeIdx: 0=Square, 1=Cubic, 2=Ease In-Out, 3=Exponential
+function _stFrameOffset_computeOffsetsFloat(count, totalFrames, typeIdx, curve50, invert){
+    if(count<=1) return [0];
+
+    var n = _stFrameOffset_curveNorm50(curve50);
+
+    // Curve 0 -> linear, 50 -> strong curvature.
+    var p_square = _stFrameOffset_lerp(1.35, 4.2, n);
+    var p_cubic  = _stFrameOffset_lerp(1.8,  6.0, n);
+    var a_sig    = _stFrameOffset_lerp(1.25, 8.0, n);
+    var k_exp    = _stFrameOffset_lerp(0.75, 7.5, n);
+
+    var out=[];
+    for(var i=0;i<count;i++){
+        var t = (i/(count-1));
+        var y;
+        if(typeIdx===0) y = _stFrameOffset_f_power(t, p_square);
+        else if(typeIdx===1) y = _stFrameOffset_f_power(t, p_cubic);
+        else if(typeIdx===2) y = _stFrameOffset_f_sigmoid(t, a_sig);
+        else y = _stFrameOffset_f_exponential(t, k_exp);
+        out.push(y * totalFrames);
+    }
+
+    for(i=1;i<out.length;i++){
+        if(out[i] < out[i-1]) out[i] = out[i-1];
+    }
+    if(invert) out = _stFrameOffset_invertOffsets(out);
+    for(i=1;i<out.length;i++){
+        if(out[i] < out[i-1]) out[i] = out[i-1];
+    }
+    return out;
+}
+function _stFrameOffset_computeOffsetsRounded(count, totalFrames, typeIdx, curve50, invert){
+    var f = _stFrameOffset_computeOffsetsFloat(count, totalFrames, typeIdx, curve50, invert);
+    var r=[];
+    for(var i=0;i<f.length;i++) r.push(Math.round(f[i]));
+    for(i=1;i<r.length;i++) if(r[i] < r[i-1]) r[i]=r[i-1];
+    return r;
+}
+
+// ---- ASCII preview ----
+var ST_FO_DOT_CHAR = "·";      // background
+var ST_FO_CURVE_DOT = "●";    // curve position (large dot)
+function _stFrameOffset_makeBarLine(pos, cols){
+    if(cols < 18) cols = 18;
+    if(pos < 0) pos = 0;
+    if(pos > cols-1) pos = cols-1;
+    var s="";
+    for(var c=0;c<cols;c++){
+        if(c===pos) s += ST_FO_CURVE_DOT;
+        else s += ST_FO_DOT_CHAR;
+    }
+    return s;
+}
+
+function _stFrameOffset_computeBarPositions(offsets, cols){
+    var max = offsets[offsets.length-1] || 1;
+    var pos=[];
+    for(var i=0;i<offsets.length;i++){
+        pos.push(Math.round((offsets[i]/max)*(cols-1)));
+    }
+    return pos;
+}
+function _stFrameOffset_measureLineWidth(st, cols){
+    try{
+        // Worst-case width estimate: mostly ST_FO_DOT_CHAR with at least one ST_FO_CURVE_DOT.
+        // Some fonts render ST_FO_CURVE_DOT wider than ST_FO_DOT_CHAR; this prevents line-wrap "extra spacing".
+        var sample="";
+        for(var i=0;i<cols;i++) sample += ST_FO_DOT_CHAR;
+        if(cols > 2){
+            // put ST_FO_CURVE_DOT near the middle
+            var mid = Math.floor(cols/2);
+            sample = sample.substring(0, mid) + ST_FO_CURVE_DOT + sample.substring(mid+1);
+        }else if(cols === 2){
+            sample = ST_FO_CURVE_DOT + ST_FO_DOT_CHAR;
+        }else if(cols === 1){
+            sample = ST_FO_CURVE_DOT;
+        }
+        return st.graphics.measureString(sample)[0];
+    }catch(e){
+        return cols * 6;
+    }
+}
+function _stFrameOffset_calcNoWrapCols(previewPanel, st){
+    // Use the best available width estimate (sizes can be 0 until after first layout)
+    var w = 0;
+    try{ w = (st && st.size && st.size.width) ? st.size.width : 0; }catch(e){}
+    if(!w){
+        try{ w = (previewPanel && previewPanel.size && previewPanel.size.width) ? previewPanel.size.width : 0; }catch(e){}
+    }
+    if(!w){
+        try{ w = (previewPanel && previewPanel.window && previewPanel.window.size) ? (previewPanel.window.size.width - 60) : 260; }catch(e){}
+    }
+    // Prefer dialog/window width so the preview can use the full available space
+    try{
+        if(previewPanel && previewPanel.window && previewPanel.window.size && previewPanel.window.size.width){
+            w = Math.max(w, previewPanel.window.size.width - 60);
+        }
+    }catch(e){}
+    if(!w || w < 80) w = 260;
+
+    var dotW=5.5;
+    try{
+    var wDot = st.graphics.measureString(ST_FO_DOT_CHAR)[0] || dotW;
+    var wCurve = st.graphics.measureString(ST_FO_CURVE_DOT)[0] || wDot;
+    dotW = Math.max(wDot, wCurve) || dotW;
+}catch(e){}
+// Nudge smaller so we can fit more dots (loop below backs off if we overflow)
+dotW *= 0.90;
+
+
+    // EVEN WIDER: assume minimal padding (we also reduce panel margins below)
+    var usable = w - 0;
+    var cols = ((Math.floor(usable/dotW) + 18) * 2) + 60; // more columns to reach the edge
+    if(isNaN(cols) || cols < 18) cols = 18;
+    if(cols > 800) cols = 800;
+
+    // keep a tiny right margin so we don't clip inside panel
+    var pad = 8; // safety padding to avoid wrap
+    var tries=0;
+    while(tries<260 && _stFrameOffset_measureLineWidth(st, cols) > (w - pad)){
+        cols--;
+        tries++;
+    }
+    if(cols < 18) cols = 18;
+    return cols;
+}
+
+function _stFrameOffset_showCurveDialog(layerCount, fps){
+    var maxFramesMax = ST_FO_MAX_SPREAD_FRAMES;
+    // default spread starts at ~1 second worth of frames (clamped to 90)
+    var maxFrames = Math.min(maxFramesMax, Math.max(1, Math.round(fps * 1.0)));
+
+    var d=new Window("dialog","Curve Offset");
+    d.orientation="column";
+    d.alignChildren=["fill","top"];
+    // tighter overall dialog so the bottom hugs the buttons
+    d.margins=12; d.spacing=4;
+
+    d.minimumSize=[340,470];
+    d.preferredSize=[340,470];
+
+    var sink=_stFrameOffset_addFocusSink(d);
+
+    var row=d.add("group");
+    row.orientation="row";
+    row.alignChildren=["left","center"];
+    row.alignment=["fill","top"];
+    // tighten label-to-control spacing
+    row.spacing=5;
+
+    // (removed top Curve readout; Curve label/value now lives above the bottom slider)
+// flexible spacer to push Type controls to the right edge
+var flex=row.add("group");
+flex.alignment=["fill","center"];
+flex.add("statictext", undefined, "");
+
+// Type controls pinned right
+var typeGrp = row.add("group");
+typeGrp.orientation = "row";
+typeGrp.alignChildren = ["left","center"];
+typeGrp.alignment = ["right","center"];
+typeGrp.spacing = 3;
+
+typeGrp.add("statictext", undefined, "Type:");
+var dd = typeGrp.add("dropdownlist", undefined, ["Square","Cubic","Ease In-Out","Exponential"]);
+dd.selection = 3; // Exponential (default)
+dd.preferredSize = [140, 22];
+dd.alignment=["right","center"];
+
+// --- Max Frame Spread (frames) ---
+var maxRow=d.add("group");
+maxRow.orientation="row";
+maxRow.alignChildren=["left","center"];
+maxRow.alignment=["fill","top"];
+maxRow.spacing=5;
+
+maxRow.add("statictext", undefined, "Max Spread (Frames):");
+var mfv=maxRow.add("statictext", undefined, String(maxFrames));
+mfv.minimumSize=[46,0];
+
+var maxSlider=d.add("slider", undefined, maxFrames, 1, maxFramesMax);
+maxSlider.alignment=["fill","top"];
+
+var maxLR=d.add("group");
+maxLR.orientation="row"; maxLR.alignment=["fill","top"];
+maxLR.add("statictext",undefined,"1").alignment=["left","center"];
+maxLR.add("statictext",undefined,"").alignment=["fill","center"];
+maxLR.add("statictext",undefined,String(maxFramesMax)).alignment=["right","center"];
+
+// --- Curve control ---
+var curveRow=d.add("group");
+curveRow.orientation="row";
+curveRow.alignChildren=["left","center"];
+curveRow.alignment=["fill","top"];
+curveRow.spacing=5;
+curveRow.add("statictext", undefined, "Curve:");
+var cv=curveRow.add("statictext", undefined, "20");
+cv.minimumSize=[34,0];
+
+// Range: 0 .. 50 (0 = linear, 50 = strongest)
+var cs=d.add("slider",undefined,20,0,50);
+cs.alignment=["fill","top"];
+
+var lr=d.add("group");
+lr.orientation="row"; lr.alignment=["fill","top"];
+lr.add("statictext",undefined,"0").alignment=["left","center"];lr.add("statictext",undefined,"50").alignment=["right","center"];
+
+    // PREVIEW (no border)
+    // ScriptUI panels always draw a border on some OS builds, so we use a group + our own label.
+    var preview=d.add("group");
+    preview.orientation="column";
+    preview.alignment=["fill","top"];
+    preview.alignChildren=["fill","top"];
+    preview.margins=[0,0,0,0];
+    preview.spacing=0;
+
+    // push the header row down a touch
+    var preTopPad=preview.add("group");
+    preTopPad.minimumSize=[0,10];
+
+    var preTitleRow=preview.add("group");
+    preTitleRow.orientation="row";
+    preTitleRow.alignChildren=["left","center"];
+    preTitleRow.alignment=["fill","top"];
+    preTitleRow.spacing=8;
+
+    // (Preview label removed) — use this header row space for the Invert control
+    var leftPad = preTitleRow.add("group");
+    leftPad.minimumSize=[6,0];
+
+    // Push Invert to the far right
+    var preFlex=preTitleRow.add("group");
+    preFlex.alignment=["fill","center"];
+    preFlex.add("statictext", undefined, "");
+
+    var invCb=preTitleRow.add("checkbox", undefined, "Invert");
+    invCb.alignment=["right","center"];
+    // add extra gap so dots/bars sit noticeably lower than the title
+    var preTitlePad=preview.add("group");
+    preTitlePad.minimumSize=[0,16];
+
+    var st=preview.add("statictext",undefined,"",{multiline:true});
+    st.alignment=["fill","fill"];
+    // reduce preview height so the dialog bottom hugs the buttons
+    st.minimumSize=[10,230];
+    // Auto-grow dialog/preview to fit more layers (up to a sane max), so lines don't clip.
+    // We size once based on layerCount; sliders shouldn't affect line count.
+    var PREVIEW_BASE_LINES = 12;
+    var PREVIEW_LINE_H = 14;      // approx line height in pixels
+    var PREVIEW_BASE_H = 230;     // matches the st.minimumSize height above
+    var PREVIEW_MAX_H  = 620;     // cap so dialog doesn't exceed screen on huge selections
+
+    function sizeForLayerCount(){
+        var cntPreview = Math.min(30, Math.max(2, layerCount||6));
+        var desiredH = PREVIEW_BASE_H + Math.max(0, (cntPreview - PREVIEW_BASE_LINES)) * PREVIEW_LINE_H;
+        if(desiredH > PREVIEW_MAX_H) desiredH = PREVIEW_MAX_H;
+
+        // Apply heights
+        st.minimumSize = [10, desiredH];
+        st.preferredSize = [10, desiredH];
+
+        // Grow the window proportionally (cap via preview cap above)
+        var extra = desiredH - PREVIEW_BASE_H;
+        if(extra > 0){
+            var targetH = 470 + extra;
+            d.minimumSize = [340, targetH];
+            d.preferredSize = [340, targetH];
+            try{ d.size = d.preferredSize; }catch(e){}
+        }
+    }
+
+    try{ st.graphics.font = ScriptUI.newFont("Courier New","REGULAR",11); }catch(e){}
+
+    function update(){
+        var curve50=Math.max(0, Math.min(50, Math.round(cs.value)));
+        cv.text=String(curve50);
+        var invert = (invCb && invCb.value) ? true : false;
+        var typeIdx = dd.selection ? dd.selection.index : 0;
+
+        var cnt=Math.min(30, Math.max(2, layerCount||6));
+        maxFrames = Math.max(1, Math.round(maxSlider.value));
+        mfv.text = String(maxFrames);
+        var offs=_stFrameOffset_computeOffsetsRounded(cnt, maxFrames, typeIdx, curve50, invert);
+
+        try{ d.layout.layout(true); }catch(e){}
+        var cols = _stFrameOffset_calcNoWrapCols(preview, st);
+        var pos = _stFrameOffset_computeBarPositions(offs, cols);
+
+        var lines=[];
+        for(var i=0;i<pos.length;i++) lines.push(_stFrameOffset_makeBarLine(pos[i], cols));
+        st.text = lines.join("\n");
+
+        _stFrameOffset_focusSink(sink);
+        try{ d.layout.layout(true); }catch(e){}
+    }
+
+    maxSlider.onChanging=update;
+    cs.onChanging=update;
+    dd.onChange=update;
+    if(invCb) invCb.onClick=update;
+    d.onShow=function(){ sizeForLayerCount(); update(); _stFrameOffset_focusSink(sink); };
+
+    
+var btns=d.add("group");
+btns.alignment=["right","bottom"];
+btns.spacing=10;
+btns.margins=[0,0,0,0];
+
+// Dialog action buttons (match ShineTools stack-cell button architecture used in Font Audit CLOSE)
+// This avoids the native macOS focus ring look.
+var __dlgH = (typeof clippedBtnH === "function") ? clippedBtnH() : 24;
+var __dlgMinW = 90;
+
+function __makeDlgCellBtn(parent, label, minW){
+    var cell = parent.add("group");
+    cell.orientation   = "stack";
+    cell.alignChildren = ["fill","fill"];
+    cell.alignment     = ["left","center"];
+    cell.margins       = 0;
+
+    var b = cell.add("button", undefined, label);
+    b.alignment     = ["fill","center"];
+    b.preferredSize = [0, __dlgH];
+    b.minimumSize   = [minW || __dlgMinW, __dlgH];
+    b.maximumSize   = [10000, __dlgH];
+
+    try { defocusButtonBestEffort(b); } catch(eDF) {}
+    return { cell: cell, btn: b };
+}
+
+var __cancelPack = __makeDlgCellBtn(btns, "Cancel", 90);
+var __okPack     = __makeDlgCellBtn(btns, "OK", 70);
+var cBtn = __cancelPack.btn;
+var oBtn = __okPack.btn;
+
+cBtn.onClick = function(){ try{ d.close(0); }catch(e){ try{ d.close(); }catch(e2){} } };
+oBtn.onClick = function(){ try{ d.close(1); }catch(e){ try{ d.close(); }catch(e2){} } };
+if(d.show()!==1) return null;
+
+    return {
+        totalFrames: maxFrames,
+        typeIdx: (dd.selection ? dd.selection.index : 0),
+        curve50: Math.max(0, Math.min(50, Math.round(cs.value))),
+        invert: (invCb && invCb.value) ? true : false
+    };
+}
+
+function _stFrameOffset_applyCurveOffset(comp, layers, totalFrames, typeIdx, curve50, invert){
+    var fps=comp.frameRate;
+    var offsF=_stFrameOffset_computeOffsetsFloat(layers.length, totalFrames, typeIdx, curve50, invert);
+
+    app.beginUndoGroup("Offset Layers (Curve)");
+    for(var i=0;i<layers.length;i++){
+        layers[i].startTime += (offsF[i] / fps);
+    }
+    app.endUndoGroup();
+}
+
+// Entry point for the MAIN > UTILITIES button
+
+// ============================================================
+// Modal-safe helpers: pause background scheduleTask loops while dialogs are open
+// (AE throws "Cannot run a script while a modal dialog is waiting for response")
+// ============================================================
+function __ST_pauseBackgroundTasks__(){
+    try{
+        // Pause TextBox watcher (it uses a scheduleTask loop)
+        if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.__watcher){
+            $.global.__ST_TextBoxWatcherWasRunning__ = !!$.global.ShineTools.TextBox.__watcher.running;
+            $.global.ShineTools.TextBox.__watcher.running = false;
+        } else {
+            $.global.__ST_TextBoxWatcherWasRunning__ = false;
+        }
+    }catch(e0){}
+
+    try{
+        // Cancel hover label polling (it uses scheduleTask while hovering)
+        if ($.global && $.global.__ShineTools_CancelHoverPoll__) $.global.__ShineTools_CancelHoverPoll__();
+    }catch(e1){}
+}
+
+function __ST_resumeBackgroundTasks__(){
+    try{
+        if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.ensureWatcherRunning){
+            if ($.global.__ST_TextBoxWatcherWasRunning__) {
+                $.global.ShineTools.TextBox.ensureWatcherRunning();
+            }
+        }
+    }catch(e2){}
+}
+
+// Runs after a short delay (scheduled) so any in-flight scheduled tasks can finish
+// before we open a modal dialog.
+function __ST_RunOffsetLayersModal__(){
+    var pending = null;
+    try { pending = $.global.__ST_PendingOffsetLayers__; } catch(e0) {}
+    // clear immediately to avoid re-entrancy
+    try { $.global.__ST_PendingOffsetLayers__ = null; } catch(e1) {}
+
+    try{
+        var comp = null;
+
+        // Try to locate the original comp by id (best-effort)
+        try{
+            if (pending && pending.compId && app.project){
+                for (var i=1; i<=app.project.numItems; i++){
+                    var it = app.project.item(i);
+                    if (it && (it instanceof CompItem) && it.id === pending.compId){
+                        comp = it;
+                        break;
+                    }
+                }
+            }
+        }catch(e2){}
+
+        // Fallback to active comp
+        if (!comp) comp = _stFrameOffset_getComp();
+        if (!comp) return;
+
+        // Restore the intended layer list by index (best-effort)
+        var layers = [];
+        try{
+            if (pending && pending.layerIdxs && pending.layerIdxs.length){
+                for (var k=0; k<pending.layerIdxs.length; k++){
+                    var idx = pending.layerIdxs[k];
+                    try{
+                        var lyr = comp.layer(idx);
+                        if (lyr) layers.push(lyr);
+                    }catch(e3){}
+                }
+            }
+        }catch(e4){}
+
+        // If we couldn't rebuild, just use current selection (in user order)
+        if (!layers || layers.length < 2){
+            layers = _stFrameOffset_getSelectedLayersInUserOrder(comp);
+        }
+        if (!layers || layers.length < 2) return;
+
+        if (pending && pending.useCurve){
+            var r = _stFrameOffset_showCurveDialog(layers.length, comp.frameRate);
+            if (r) _stFrameOffset_applyCurveOffset(comp, layers, r.totalFrames, r.typeIdx, r.curve50, r.invert);
+        } else {
+            var lin = _stFrameOffset_showFrameOffsetDialog();
+            if (lin) _stFrameOffset_applyLinearOffset(comp, layers, lin.frames);
+        }
+    }catch(e){
+        try{ alert("Offset Layers failed:\n\n" + e.toString()); }catch(ea){}
+    }finally{
+        __ST_resumeBackgroundTasks__();
+    }
+}
+// Expose modal runner for app.scheduleTask (runs in global scope)
+try { $.global.__ST_RunOffsetLayersModal__ = __ST_RunOffsetLayersModal__; } catch(e) {}
+
+
+function offsetSelectedLayers_ShineTools(){
+    var comp = _stFrameOffset_getComp();
+    if (!comp) return alert("No active comp.");
+
+    var layers = _stFrameOffset_getSelectedLayersInUserOrder(comp);
+    if (!layers || layers.length < 2) return alert("Select 2+ layers.");
+
+    // Pause any repeating scheduleTask loops BEFORE showing a modal dialog.
+    __ST_pauseBackgroundTasks__();
+
+    // Snapshot selection so we can open the dialog slightly later (lets any already-scheduled tasks finish)
+    var idxs = [];
+    try { for (var i=0; i<layers.length; i++) idxs.push(layers[i].index); } catch(e0) {}
+
+    $.global.__ST_PendingOffsetLayers__ = {
+        compId: comp.id,
+        layerIdxs: idxs,
+        useCurve: isOptionDown() ? true : false
+    };
+
+    // Open the dialog AFTER a short delay so any in-flight scheduled tasks can complete
+    // (prevents AE modal-dialog scheduleTask conflicts).
+    try { app.scheduleTask("$.global.__ST_RunOffsetLayersModal__();", 260, false); } catch (e1) {
+        // Fallback: try immediately
+        try { ($.global.__ST_RunOffsetLayersModal__ || __ST_RunOffsetLayersModal__)(); } catch (e2) {}
+    }
+}
+
+
+function buildUI(thisObj) {
 
         var pal = (thisObj instanceof Panel)
             ? thisObj
@@ -5214,7 +6109,7 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
 
         if (!pal) return pal;
 
-        pal.preferredSize = [420, 780];
+        pal.preferredSize = [380, 748];
         pal.minimumSize   = [320, 420];
         // Resize handlers are attached later (after UI is built) for better performance.
         pal.orientation   = "column";
@@ -5438,6 +6333,7 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
             // -------------------------
             var tabStack = pal.add("group");
             tabStack.orientation   = "stack";
+            // Expose stack host for takeover warning overlay
             tabStack.alignChildren = ["fill", "fill"];
             tabStack.alignment     = ["fill", "fill"];
             tabStack.margins       = 0;
@@ -5505,7 +6401,26 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
         var tabUpdates  = _tabs.tabUpdates;
         var tabHelp     = _tabs.tabHelp;
 
-        // GLOBAL FOOTER (outside tabs)
+        // Expose tab references for takeover/restore logic
+        try {
+            pal.__stTabStack    = tabStack;
+            pal.__stTabMain     = tabMain;
+            pal.__stTabText     = tabText;
+            pal.__stTabRequests = tabRequests;
+            pal.__stTabUpdates  = tabUpdates;
+            pal.__stTabHelp     = tabHelp;
+        } catch (e) {}
+
+        
+// Flexible glue to keep footer pinned to the bottom even in docked panels.
+// ScriptUI can sometimes re-measure the main stack too small after visibility changes;
+// this glue absorbs remaining height so the footer stays bottom-anchored.
+var __footerGlue = pal.add("group");
+__footerGlue.alignment = ["fill","fill"];
+try { __footerGlue.minimumSize = [0,0]; } catch(eMin) {}
+try { __footerGlue.preferredSize = [0,0]; } catch(ePref) {}
+
+// GLOBAL FOOTER (outside tabs)
 // -------------------------
 // Two-line footer, both lines pinned LEFT to the panel edge.
 //  Line 1: Status (if visible) + Legend
@@ -7003,6 +7918,16 @@ function _stEnsureModernExpressionsForCounters(comp) {
     );
     return false;
 }
+
+
+// ============================================================
+// OFFSET LAYERS (Utilities)
+//   - Click: Linear frame offset (prompts for frames; can be negative)
+//   - Option+Click: Exponential offset (curve + invert preview)
+// ============================================================
+var ST_OFFSETLAYERS_EXP_TOTAL_SPREAD_FRAMES = 24; // total spread for Exponential mode
+
+
 
 function _stApplyCounterPreset(fileName, newLayerName) {
     // Guard: counters rely on Modern JavaScript expressions
@@ -8573,27 +9498,114 @@ function _buildTextTabIfNeeded() {
 
         }
 
+        
+
         function _buildHelpTab(tabHelp) {
             // Ensure HELP tab lays out from the top (prevents vertical centering gaps)
             try {
                 tabHelp.orientation = "column";
                 tabHelp.alignChildren = ["fill", "top"];
                 tabHelp.alignment = ["fill", "top"];
-                if (tabHelp.spacing === undefined) tabHelp.spacing = 10;
-                if (tabHelp.margins === undefined) tabHelp.margins = 0;
+                tabHelp.spacing = 0;
+                tabHelp.margins = 0;
             } catch (eLay) {}
-// HELP TAB DUMMY CONTENT (placeholder)
+
             var helpWrap = tabHelp.add("group");
             helpWrap.orientation = "column";
             helpWrap.alignChildren = ["fill", "top"];
             helpWrap.alignment = ["fill", "top"];
             helpWrap.margins = [12, 8, 12, 10];
-            helpWrap.spacing = 0;
+            helpWrap.spacing = 0; // ultra-tight (per Jim)
 
-            var helpText = "Navigating the ShineTools Interface\n----------------------------------\n\nSECTIONS\n• Single-click a section name to expand or collapse it\n• SHIFT-click a section name to expand multiple sections\n• CMD-click a section name to collapse all sections\n\n• Hidden arrows on the right side of each section allow you to reorder sections\n• OPTION-click on a section name to reorder the buttons within that section\n\nBUTTONS & MODIFIERS\n• Buttons with a yellow indicator support modifier keys\n  (CMD, OPTION, or SHIFT for alternate actions)\n\nFAVORITES & IMPORTS\n• Single-click the PLUS (+) icon to add files to your Favorites\n• CMD-click the PLUS (+) icon to add files to your Favorites and timeline\n\n• In the Favorites list:\n  – CMD-click a file to remove it from the list\n\nREQUIRED SETTINGS\n• Enable \"Allow Scripts to Write Files and Access Network\"\n• File > Project Settings > Expressions must be set to JavaScript";
-var helpTitle = helpWrap.add("statictext", undefined, helpText, {multiline:true});
-try { helpTitle.alignment = ["fill","top"]; } catch(e) {}
-try { helpTitle.maximumSize = [10000, 10000]; } catch(e) {}
+            var SHINE_YELLOW_RGB = [1.0, 0.82, 0.0]; // Shine yellow
+
+            function _setShineYellowBold(st) {
+                try {
+                    if (!st || !st.graphics) return;
+                    var g = st.graphics;
+                    // bold (best-effort)
+                    try {
+                        var f = g.font;
+                        if (f && ScriptUI && ScriptUI.newFont && ScriptUI.FontStyle) {
+                            g.font = ScriptUI.newFont(f.family, ScriptUI.FontStyle.BOLD, f.size);
+                            try { st.font = g.font; } catch(eF2) {}
+                        }
+                    } catch (eF) {}
+                    try { g.foregroundColor = g.newPen(g.PenType.SOLID_COLOR, SHINE_YELLOW_RGB, 1); } catch (eC) {}
+                } catch (e) {}
+            }
+
+            function _spacer(px) {
+                try {
+                    var h = Math.max(0, px || 0);
+                    if (h === 0) return null;
+                    var sp = helpWrap.add("group");
+                    sp.minimumSize = [0, h];
+                    sp.maximumSize = [10000, h];
+                    sp.preferredSize = [0, h];
+                    return sp;
+                } catch (e) {}
+                return null;
+            }
+
+            // Title
+            var helpTitleTop = helpWrap.add("statictext", undefined, "NAVIGATING THE SHINETOOLS INTERFACE:");
+            try { helpTitleTop.alignment = ["fill","top"]; } catch(e) {}
+
+            
+            _setShineYellowBold(helpTitleTop);
+// Divider
+            var helpDivider = helpWrap.add("statictext", undefined, "----------------------------------");
+            try { helpDivider.alignment = ["fill","top"]; } catch(e) {}
+
+            _spacer(12);
+
+            // --- SECTIONS ---
+            var hdrSections = helpWrap.add("statictext", undefined, "SECTIONS");
+            _setShineYellowBold(hdrSections);
+
+            function _addHelpLine(str) {
+                var st = helpWrap.add("statictext", undefined, String(str || ""));
+                try { st.alignment = ["fill", "top"]; } catch (e) {}
+                return st;
+            }
+
+            // SECTIONS bullets (single-line controls to avoid extra vertical padding)
+            _addHelpLine("• Single-click a section name to expand or collapse it");
+            _addHelpLine("• SHIFT-click a section name to expand multiple sections");
+            _addHelpLine("• CMD-click a section name to collapse all sections");
+            _addHelpLine("• Hidden arrows on the right side of each section allow you to reorder sections");
+
+            _spacer(12);
+
+            // --- BUTTONS & MODIFIERS ---
+            var hdrButtons = helpWrap.add("statictext", undefined, "BUTTONS & MODIFIERS");
+            _setShineYellowBold(hdrButtons);
+
+            _addHelpLine("• Buttons with a yellow indicator support modifier keys");
+            _addHelpLine("  (CMD, OPTION, or SHIFT for alternate actions)");
+            _addHelpLine("• OPTION-click on a section name to reorder the buttons within that section");
+
+            _spacer(12);
+
+            // --- FAVORITES & IMPORTS ---
+            var hdrFav = helpWrap.add("statictext", undefined, "FAVORITES & IMPORTS");
+            _setShineYellowBold(hdrFav);
+
+            _addHelpLine("• Single-click the PLUS (+) icon to add files to your Favorites");
+            _addHelpLine("• CMD-click the PLUS (+) icon to add files to your Favorites and timeline");
+            _addHelpLine("• In the Favorites list:");
+            _addHelpLine("  – CMD-click a file to remove it from the list");
+            _addHelpLine("  – OPTION-click sets blend mode to ADD");
+
+            _spacer(12);
+
+            // --- REQUIRED SETTINGS ---
+            var hdrReq = helpWrap.add("statictext", undefined, "REQUIRED SETTINGS");
+            _setShineYellowBold(hdrReq);
+
+            _addHelpLine("• Enable \"Allow Scripts to Write Files and Access Network\"");
+            _addHelpLine("• File > Project Settings > Expressions must be set to JavaScript");
 
             // PASS 13: DEBUG INFO (bottom of HELP tab, hidden by default; toggled via CMD-click HELP)
             try {
@@ -8658,16 +9670,7 @@ try { helpTitle.maximumSize = [10000, 10000]; } catch(e) {}
                 // Fill once (not visible until toggled)
                 try { _refreshDebugPanelText(); } catch (eF) {}
             } catch (eDbg) {}
-
-try { helpTitle.graphics.foregroundColor = helpTitle.graphics.newPen(helpTitle.graphics.PenType.SOLID_COLOR, [0.85,0.85,0.85,1], 1); } catch(eHT) {}
-            // Font sizing: On some AE/ScriptUI builds, changing graphics.font alone doesn't stick.
-            // Set both .graphics.font and .font for maximum compatibility.
-            try {
-                var hf = helpTitle.graphics.font;
-                var bigger = ScriptUI.newFont(hf.name, hf.style, hf.size + 10);
-                helpTitle.graphics.font = bigger;
-                helpTitle.font = bigger;
-            } catch(eHF) {}        }
+        }
 
         _buildUpdatesTab(tabUpdates);
 
@@ -8806,6 +9809,10 @@ if (w && dd.list) {
             } catch (e3) {}
         }
 
+        // Popup width helper: clamp the dropdown popup list to the content width (not the closed control width).
+        // Useful when the CLOSED dropdown is wide (fills the row) but we want a tighter POPUP like the TEXT tab.
+        
+
 
         // Keep dropdown popup width from ballooning by ensuring item labels
         // never exceed the *current* closed-control width.
@@ -8814,6 +9821,8 @@ if (w && dd.list) {
             try {
                 label = String(label == null ? "" : label);
 
+                if (dd && dd.__shineNoTruncate === true) return label;
+
                 // Determine current control width (fallback to preferred sizes)
                 var w = 0;
                 try { if (dd.size && dd.size.width) w = dd.size.width; } catch (e0) {}
@@ -8821,8 +9830,20 @@ if (w && dd.list) {
                 if (!w) { try { if (dd.preferredSize && dd.preferredSize.width) w = dd.preferredSize.width; } catch (e2) {} }
                 if (!w) w = 220;
 
+                // If the popup list is wider than the closed control (common in some layouts),
+                // prefer the popup width so we don't manually ellipsis too early.
+                try {
+                    var lw = 0;
+                    if (dd.list) {
+                        try { if (dd.list.size && dd.list.size.width) lw = dd.list.size.width; } catch (eL0) {}
+                        if (!lw) { try { if (dd.list.bounds && dd.list.bounds.length === 4) lw = (dd.list.bounds[2] - dd.list.bounds[0]); } catch (eL1) {} }
+                    }
+                    if (lw && lw > w) w = lw;
+                } catch (eL) {}
+
+
                 // Leave room for arrow + insets (empirical; keeps popup from expanding wider than control)
-                var usable = Math.max(50, w - 42);
+                var usable = Math.max(50, w - 28);
 
                 // Prefer real text measurement when available (much more reliable than char-width guessing)
                 var g = null;
@@ -8880,6 +9901,8 @@ if (w && dd.list) {
         function _applyDropdownLabelClamp(dd) {
             try {
                 if (!dd || !dd.items) return;
+                // Some dropdowns (e.g., MAIN tab Library Elements) should never be manually ellipsed.
+                if (dd.__shineNoTruncate) return;
                 for (var i = 0; i < dd.items.length; i++) {
                     var it = dd.items[i];
                     if (!it || it._isBlank || it.text === "(No saved files)" || it.text === "(No saved presets)" || it.type === "separator") continue;
@@ -8889,6 +9912,59 @@ if (w && dd.list) {
                 }
             } catch (e) {}
         }
+
+        // Fit dropdown popup list width to content (keeps collapsed control unchanged).
+        // Used for MAIN tab "LIB. ELEMENTS" dropdown to avoid excessive empty space on the right.
+        function _fitDropdownPopupToContent(dd, opts) {
+            try {
+                if (!dd || !dd.items || dd.items.length === 0) return;
+
+                opts = opts || {};
+                var minW = (opts.minW != null) ? opts.minW : 140;
+                var maxW = (opts.maxW != null) ? opts.maxW : 520;
+                var padW = (opts.padW != null) ? opts.padW : 44; // scrollbar + padding
+                var MAX_ITEMS = (opts.maxVisibleItems != null) ? Math.max(4, opts.maxVisibleItems) : 12;
+
+                // Prefer list graphics for accurate font metrics when available
+                var gfx = null;
+                try { gfx = (dd.list && dd.list.graphics) ? dd.list.graphics : dd.graphics; } catch (eG) { gfx = dd.graphics; }
+                if (!gfx || !gfx.measureString) return;
+
+                var maxTextW = 0;
+                for (var i = 0; i < dd.items.length; i++) {
+                    var it = dd.items[i];
+                    if (!it || it.type === "separator" || it._isBlank) continue;
+                    var label = it._fullText || it.text || "";
+                    if (!label) continue;
+                    var w = 0;
+                    try { w = gfx.measureString(label)[0]; } catch (eM) { w = 0; }
+                    if (w > maxTextW) maxTextW = w;
+                }
+
+                var targetW = Math.round(maxTextW + padW);
+                if (targetW < minW) targetW = minW;
+                if (targetW > maxW) targetW = maxW;
+
+                // Apply to popup list only (dd.list). This should not affect the collapsed control.
+                if (dd.list) {
+                    try { dd.list.minimumSize = [targetW, dd.list.minimumSize ? dd.list.minimumSize[1] : 0]; } catch (e1) {}
+                    try { dd.list.preferredSize = [targetW, dd.list.preferredSize ? dd.list.preferredSize[1] : 0]; } catch (e2) {}
+                    try { dd.list.maximumSize = [targetW, dd.list.maximumSize ? dd.list.maximumSize[1] : 10000]; } catch (e3) {}
+
+                    // Height clamp: keep macOS from showing a monitor-tall popup when there are many items.
+                    try {
+                        if (dd.list.size) {
+                            var itemH = 16;
+                            try { if (dd.list.itemSize && dd.list.itemSize.height) itemH = dd.list.itemSize.height; } catch (eIH) {}
+                            var maxH = (itemH * MAX_ITEMS) + 10;
+                            if (dd.list.size.height > maxH) dd.list.size.height = maxH;
+                        }
+                    } catch (eH) {}
+                }
+            } catch (e) {}
+        }
+
+
 
         // Chain a small Y-shift to a parent group's onLayout without breaking existing handlers.
         // Useful for pixel-perfect alignment nudges (e.g., the ★ icon).
@@ -9229,7 +10305,14 @@ function addDropdownHeader(col, text, insetPx) {
             _hoverLastShift = null;
         }
 
-        function _hoverSafeSetText(btn, txt) { try { btn.text = txt; } catch (e) {} }
+        
+        // Expose a global canceller so we can pause hover polling when a modal dialog is shown
+        // (AE cannot execute scheduled tasks while a modal dialog is open).
+        $.global.__ShineTools_CancelHoverPoll__ = function(){
+            try{ _hoverClearInternal(); }catch(e){}
+        };
+
+function _hoverSafeSetText(btn, txt) { try { btn.text = txt; } catch (e) {} }
 
         $.global[HOVER_TICK_FN] = function () {
             _hoverTask = 0;
@@ -10630,15 +11713,20 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         try { _setLabelColor(favDDHdr, [0.55, 0.55, 0.55, 1]); } catch(eH) {}
 
         var favDD = favDDCol.add("dropdownlist", undefined, []);
+        // Keep the collapsed (closed) dropdown compact; the popup list can be wider.
         favDD.alignment     = ["fill", "bottom"];
-        var _ddMinMain = Math.max(50, TOPROW_DD_MIN_W_MAIN - TOPROW_DD_RIGHT_TRIM);
-        var _ddMaxTop  = Math.max(_ddMinMain, TOPROW_DD_MAX_W - TOPROW_DD_RIGHT_TRIM);
+        // IMPORTANT (MAIN tab Library Elements dropdown): do NOT manually ellipsis.
+        // ScriptUI will naturally clip based on the popup width; manual ellipsis truncates too early.
+        favDD.__shineNoTruncate = true;
+
+        // Responsive collapsed width (like TEXT tab): narrow minimum, expands with panel
+        var _ddMinMain = Math.max(50, TOPROW_DD_MIN_W_TEXT - TOPROW_DD_RIGHT_TRIM); // match TEXT tab minimum
+        var _ddMaxMain = Math.max(_ddMinMain, TOPROW_DD_MAX_W - TOPROW_DD_RIGHT_TRIM); // soft max
         favDD.minimumSize   = [_ddMinMain, UI.btnH];
         favDD.preferredSize = [_ddMinMain, UI.btnH];
-        favDD.maximumSize   = [_ddMaxTop, UI.btnH]; // soft max (control can grow up to this)
-        _lockDropdownPopupWidth(favDD, 12);
-
-        // Right-edge alignment: reserve a small spacer so the dropdown's right edge lines up with the button grid below
+        favDD.maximumSize   = [_ddMaxMain, UI.btnH]; // allow growth when docked/resized
+        // Encourage a wider popup list (character-based hint)
+                // Right-edge alignment: reserve a small spacer so the dropdown's right edge lines up with the button grid below
         var favRightPad = favRow.add("group");
         favRightPad.minimumSize = [TOPROW_DD_RIGHT_TRIM, 1];
         favRightPad.maximumSize = [TOPROW_DD_RIGHT_TRIM, 10000];
@@ -10665,9 +11753,11 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                         for (var i = 0; i < favs.length; i++) {
                             var ff = new File(favs[i]);
                             var displayName = _stPrettyFileLabel(favs[i]);
-                            var it = favDD.add("item", _truncateDropdownLabel(favDD, displayName));
+                            // Do not manually ellipsis; let ScriptUI clip naturally based on popup width.
+                            var it = favDD.add("item", displayName);
                             it._fullText = displayName;
                             it._path = favs[i];
+                            try { it.helpTip = displayName; } catch (eTip) {}
                         }
                     }
 
@@ -10681,6 +11771,15 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                     _applyDropdownLabelClamp(favDD);
 
                 favRebuildDropdown();
+
+                // Keep the popup list tight to content (no excessive empty space on the right)
+                _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 520, padW: 44 });
+                try {
+                    favDD.onActivate = function () { _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 520, padW: 44 }); };
+                    favDD.onMouseDown = favDD.onActivate; // some builds fire mouse down earlier than activate
+                } catch (ePop) {}
+
+
 
                 favAddBtn.onClick = function () {
                     if (!requireProject()) return;
@@ -10788,13 +11887,6 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
 // =========================
 // Sections / buttons (MAIN)  (re-orderable with header chevrons)
 // =========================
-mainAcc.defineSection("ADD RIG", function(body){
-    addGrid2(body, [
-        { text: "3D CAMERA RIG",  onClick: addCameraRig },
-        { text: "ADJ. LAYER RIG", onClick: addCCAdjustmentRig }
-    ]);
-});
-
 mainAcc.defineSection("ADD LAYER", function(body){
     addGrid2(body, [
         {
@@ -10807,6 +11899,13 @@ mainAcc.defineSection("ADD LAYER", function(body){
         { text: "3D LIGHT...",   onClick: addLightNativePrompt },
         { text: "NULL",       onClick: addNullDefault },
         { text: "ADJ. LAYER", onClick: addAdjustmentLayerDefault }
+    ]);
+});
+
+mainAcc.defineSection("ADD RIG", function(body){
+    addGrid2(body, [
+        { text: "3D CAMERA RIG",  onClick: addCameraRig },
+        { text: "ADJ. LAYER RIG", onClick: addCCAdjustmentRig }
     ]);
 });
 
@@ -10826,13 +11925,6 @@ mainAcc.defineSection("ADD EXPRESSION", function(body){
 mainAcc.defineSection("UTILITIES", function(body){
     addGrid2(body, [
         {
-            text: "TRIM LAYER",
-            badgeDot: true,
-            onClick: trimLayerToNeighbor,
-            helpTip: "Trim to layer below\nOption: Trim to layer above\nClick runs the shown mode",
-            hoverLabels: { base: "TRIM LAYER", hover: "BELOW", optionHover: "ABOVE" }
-        },
-	        {
 	            text: "COPY UNIQUE COMP",
 	            onClick: copyUniqueCompDeepToPrecompsFromSelectedLayer,
 	            helpTip: "Duplicates the selected precomp AND all nested precomps."
@@ -10848,11 +11940,6 @@ mainAcc.defineSection("UTILITIES", function(body){
             helpTip: "Adds CC Repetile to the selected layer, expands 1000px on all sides, and sets Tiling to Unfold."
         },
         {
-            text: "EXTEND PRECOMP",
-            onClick: extendPrecompToCTI_Util,
-            helpTip: "Extends selected precomp (and layers inside) so the last visible frame lands on the CTI."
-        },
-                {
             text: "ANIMATE STROKE",
             badgeDot: true,
             onClick: function () {
@@ -10870,13 +11957,26 @@ mainAcc.defineSection("UTILITIES", function(body){
 ]);
 });
 
-mainAcc.defineSection("RENDER", function(body){
+mainAcc.defineSection("TIMELINE", function(body){
     addGrid2(body, [
-        { text: "RENDER PRORES 422...", onClick: renderPRORES422WithSaveDialog },
         {
-            text: "SAVE FRAME AS .JPG",
-            onClick: saveCurrentFrameJPGStill,
-            helpTip: "Saves the current frame as a .JPG using the Output Module template: JPEG STILL."
+        text: "TRIM LAYER",
+        badgeDot: true,
+        onClick: trimLayerToNeighbor,
+        helpTip: "Trim to layer below\nOption: Trim to layer above\nClick runs the shown mode",
+        hoverLabels: { base: "TRIM LAYER", hover: "BELOW", optionHover: "ABOVE" }
+        },
+        {
+        text: "OFFSET LAYERS",
+        badgeDot: true,
+        onClick: offsetSelectedLayers_ShineTools,
+        helpTip: "Offsets selected layers in time.\nClick: Linear Frame Offset\nOption: Curve Offset (Type + Max Spread + Curve + Invert)",
+        hoverLabels: { base: "OFFSET LAYERS", hover: "FRAME OFFSET", optionHover: "CURVE OFFSET" }
+        },
+        {
+        text: "EXTEND PRECOMP",
+        onClick: extendPrecompToCTI_Util,
+        helpTip: "Extends selected precomp (and layers inside) so the last visible frame lands on the CTI."
         }
     ]);
 });
@@ -10888,6 +11988,19 @@ mainAcc.defineSection("CLEAN UP", function(body){
         { text: "REDUCE PROJECT", onClick: function(){ try{ if (typeof reduceProject === "function") reduceProject(); } catch(e){} } }
     ]);
 });
+
+mainAcc.defineSection("RENDER", function(body){
+    addGrid2(body, [
+        { text: "RENDER PRORES 422...", onClick: renderPRORES422WithSaveDialog },
+        {
+            text: "SAVE FRAME AS .JPG",
+            onClick: saveCurrentFrameJPGStill,
+            helpTip: "Saves the current frame as a .JPG using the Output Module template: JPEG STILL."
+        }
+    ]);
+});
+
+
 // Build accordion in persisted order
 mainAcc.build();
 
@@ -10975,6 +12088,473 @@ var collapseGap = content.add("group");
     // Init
     // ============================================================
     var myPal = buildUI(thisObj);
+
+    // ------------------------------------------------------------
+    // TEST CLEANUP: Remove any "Solids"/"SOLIDS" folders + their solid items
+    // (Used during warnings testing; safe best-effort removal)
+    // ------------------------------------------------------------
+    
+    // ------------------------------------------------------------
+    // TEST CLEANUP: Remove any "Solids"/"SOLIDS" folder(s) + their contents
+    // (Used during warnings testing; safe best-effort removal)
+    // ------------------------------------------------------------
+    function _cleanupSolidsFoldersBestEffort() {
+        // IMPORTANT: Only delete the temporary test solids ShineTools creates for its startup checks.
+        // Never delete user-created solids or wipe the entire Solids folder.
+        try {
+            if (!app.project) return;
+            var proj = app.project;
+
+            function isFootage(it) { try { return (it && (it instanceof FootageItem)); } catch (e) { return false; } }
+            function isSolidFootage(it) {
+                try { return (isFootage(it) && it.mainSource && (it.mainSource instanceof SolidSource)); } catch (e) { return false; }
+            }
+
+            // Any test solids created by ShineTools MUST use this prefix.
+            var TEST_PREFIX = "_ST_TEST_SOLID_";
+
+            // Pass 1: remove matching solids anywhere in the project
+            for (var i = proj.numItems; i >= 1; i--) {
+                var it = null;
+                try { it = proj.item(i); } catch (eIt) { it = null; }
+                if (!it) continue;
+
+                var nm = "";
+                try { nm = String(it.name || ""); } catch (eN) { nm = ""; }
+                if (!nm) continue;
+
+                if (nm.indexOf(TEST_PREFIX) === 0 && isSolidFootage(it)) {
+                    try { it.remove(); } catch (eRm) {}
+                }
+            }
+
+            // NOTE: We intentionally do NOT remove the "Solids" folder itself, even if empty.
+            // Users may already have one and we should never touch their structure.
+
+        } catch (e) {}
+    }
+
+    // Run once per launch (best-effort)
+    try { _cleanupSolidsFoldersBestEffort(); } catch(e0) {}
+
+    // Expose + run delayed cleanups (startup checks may create Solids after initial UI)
+    try { $.global.__ShineToolsCleanupSolidsFoldersBestEffort = _cleanupSolidsFoldersBestEffort; } catch(eG) {}
+
+    // Run several times over the first ~5 seconds to catch late-created Solids folders.
+    try {
+        for (var dly = 250; dly <= 5250; dly += 500) {
+            app.scheduleTask("try{$.global.__ShineToolsCleanupSolidsFoldersBestEffort&&$.global.__ShineToolsCleanupSolidsFoldersBestEffort();}catch(e){}", dly, false);
+        }
+    } catch (eT) {}
+
+
+
+// ------------------------------------------------------------
+// ShineTools Launch Setup Check (TAKEOVER WARNING)
+// Shows ONLY a takeover warning screen if required settings are NOT enabled.
+// If user dismisses, warning hides for this AE session and returns to MAIN.
+// ------------------------------------------------------------
+try {
+    (function (pal) {
+        if (!pal) return;
+
+        // --- Checks ---
+        function _stCanWriteFilesEffective() {
+            // We want to reflect the actual checkbox (pref) when possible,
+            // but also avoid false-negatives in some AE builds by doing a quick write probe.
+            var prefEnabled = null;
+            try {
+                prefEnabled = app.preferences.getPrefAsBool("Main Pref Section", "Pref_SCRIPTING_FILE_NETWORK_SECURITY");
+            } catch (ePref) { prefEnabled = null; }
+
+            function _tryWrite(folderObj, name) {
+                var f = null;
+                try {
+                    if (!folderObj || !folderObj.exists) return false;
+                    f = new File(folderObj.fsName + "/" + name);
+                    try { if (f.exists) f.remove(); } catch (e0) {}
+                    if (!f.open("w")) return false;
+                    f.encoding = "UTF-8";
+                    f.write("test");
+                    f.close();
+                    try { f.remove(); } catch (e1) {}
+                    return true;
+                } catch (e) {
+                    try { if (f && f.opened) f.close(); } catch (e2) {}
+                    return false;
+                }
+            }
+
+            var writeOk = false;
+            try { writeOk = _tryWrite(Folder.temp, "st_write_test.txt") || _tryWrite(Folder.userData, "st_write_test.txt"); } catch (eW) { writeOk = false; }
+
+            // If prefs explicitly say enabled, trust that.
+            if (prefEnabled === true) return true;
+
+            // If prefs explicitly say disabled, only consider it "enabled" if the write probe succeeds.
+            // (Some hosts/versions can mis-report the pref; this avoids blocking users incorrectly.)
+            if (prefEnabled === false) return (writeOk === true);
+
+            // Pref unknown: fall back to probe.
+            return (writeOk === true);
+        }
+
+        function _stProjectSaysJavaScriptExpressions() {
+    // Robust across AE versions: set a JS-only expression and read expressionError.
+    // If the project is using Legacy expressions, this should produce an error string.
+    if (!app.project) return false;
+
+    var testComp = null;
+    var testLayer = null;
+    var ok = true;
+
+    try {
+        testComp = app.project.items.addComp("_ST_JS_TEST_", 16, 16, 1, 1, 30);
+        testLayer = testComp.layers.addSolid([1, 1, 1], "_ST_TEST_SOLID_JS_", 16, 16, 1);
+
+        var prop = testLayer.opacity;
+        prop.expression = "(()=>100)()";
+
+        // Force a parse/eval pass (some hosts are lazy until value is queried)
+        try { prop.valueAtTime(0, false); } catch (eEval) {}
+
+        var err = "";
+        try { err = prop.expressionError; } catch (eErr) { err = ""; }
+
+        if (err && err.toString && err.toString().length > 0) ok = false;
+    } catch (e) {
+        ok = false;
+    }
+
+    // Cleanup
+    try { if (testComp) testComp.remove(); } catch (e2) {}
+
+    return ok;
+}
+
+function _stEnsureProjectForProbe() {
+            try { if (!app.project) app.newProject(); } catch (e) {}
+            return app.project || null;
+        }
+
+        function _stProbeJavaScriptExpressions() {
+            var proj = _stEnsureProjectForProbe();
+            if (!proj) return null;
+
+            var comp = null, layer = null, prop = null;
+            // Use a token legacy doesn't support. 'const' should fail in Legacy ExtendScript expressions.
+            var expr = "var a = (()=>1)(); a*100;";
+
+            function attemptOnce() {
+                var out = { ok: false, err: "", val: null };
+                try {
+                    comp = proj.items.addComp("_ST_JS_PROBE_", 16, 16, 1, 1, 30);
+                    layer = comp.layers.addSolid([1, 1, 1], "_probeSolid", 16, 16, 1);
+                    prop = layer.property("ADBE Transform Group").property("ADBE Opacity");
+                    prop.expression = expr;
+                    prop.expressionEnabled = true;
+
+                    try { out.val = prop.valueAtTime(0, false); } catch (eVal) {}
+                    try { out.err = prop.expressionError || ""; } catch (eErr) { out.err = ""; }
+
+                    if (!out.err || out.err === "") {
+                        if (typeof out.val === "number" && Math.abs(out.val - 100) < 0.001) out.ok = true;
+                    }
+                } catch (e) {
+                    out.ok = false;
+                    out.err = String(e);
+                } finally {
+                    try { if (comp) comp.remove(); } catch (eRm) {}
+                    comp = null; layer = null; prop = null;
+                }
+                return out;
+            }
+
+            for (var i = 0; i < 3; i++) {
+                var res = attemptOnce();
+                if (res.ok === true) return true;
+
+                var err = (res.err || "").toLowerCase();
+                if (err.indexOf("syntax") !== -1 || err.indexOf("unexpected") !== -1 || err.indexOf("parse") !== -1) return false;
+                try { $.sleep(50); } catch (eS) {}
+            }
+
+            return false;
+        }
+
+        function _stRunLaunchChecks() {
+            var canWrite = _stCanWriteFilesEffective();
+
+            var jsExpr = null;
+            try { jsExpr = _stProjectSaysJavaScriptExpressions(); } catch (e1) { jsExpr = null; }
+
+            if (jsExpr === null) {
+                try { app.beginUndoGroup("ShineTools - Launch Check"); } catch (eUG) {}
+                try { jsExpr = _stProbeJavaScriptExpressions(); } catch (eP) { jsExpr = null; }
+                try { app.endUndoGroup(); } catch (eUE) {}
+            }
+
+            var canWriteOk = (canWrite === true);
+            var jsExprOk   = (jsExpr === true);
+            return { ok: (canWriteOk && jsExprOk), canWrite: canWriteOk, jsExpr: jsExprOk };
+        }
+
+        // --- UI takeover ---
+        var __stWarnPanel = null;
+        var __stWarnHeader = null;
+        var __stWarnText = null;
+        function _stBuildTakeoverUI() {
+            if (__stWarnPanel) return;
+
+            // Full-panel takeover container
+            var __stHost = (pal.__stTabStack) ? pal.__stTabStack : pal;
+            __stWarnPanel = __stHost.add("panel", undefined, "Setup Required");
+            __stWarnPanel.orientation = "column";
+            __stWarnPanel.alignChildren = ["fill", "top"];
+            __stWarnPanel.margins = 14;
+            __stWarnPanel.spacing = 12;
+            try { __stWarnPanel.alignment = ["fill", "fill"]; } catch (eA0) {}
+
+            // Inner boxed content (matches screenshot)
+            var bodyBox = __stWarnPanel.add("panel");
+            bodyBox.orientation = "column";
+            bodyBox.alignChildren = ["fill", "top"];
+            bodyBox.margins = 14;
+            bodyBox.spacing = 10;
+            try { bodyBox.alignment = ["fill", "top"]; } catch (eAB) {}            // Header row: icon + single-line headline (matches your earlier styled warning)
+            var headerRow = bodyBox.add("group");
+            headerRow.orientation = "row";
+            headerRow.alignChildren = ["left", "center"];
+            headerRow.spacing = 10;
+            headerRow.alignment = ["fill", "top"];
+            headerRow.margins = 0;
+
+            // Big yellow triangle (reliable in docked panels)
+            var warnIcon = headerRow.add("group");
+            var iconW = 25, iconH = 25;
+            warnIcon.preferredSize = [iconW, iconH];
+            warnIcon.minimumSize   = [iconW, iconH];
+            warnIcon.maximumSize   = [iconW, iconH];
+            try { warnIcon.alignment = ["left", "center"]; } catch (eAI2) {}
+
+            warnIcon.onDraw = function () {
+                try {
+                    var gr = this.graphics;
+                    var w = this.size[0], h = this.size[1];
+                    var pad = 2;
+
+                    var topX = Math.round(w * 0.5);
+                    var topY = pad;
+                    var leftX = pad;
+                    var leftY = h - pad;
+                    var rightX = w - pad;
+                    var rightY = h - pad;
+
+                    var yellow = [1.0, 0.82, 0.0, 1.0]; // Shine yellow
+                    var fillBrush = gr.newBrush(gr.BrushType.SOLID_COLOR, yellow);
+
+                    var black = [0.08, 0.08, 0.08, 1];
+                    var strokePen = gr.newPen(gr.PenType.SOLID_COLOR, black, 1);
+
+                    gr.newPath();
+                    gr.moveTo(topX, topY);
+                    gr.lineTo(rightX, rightY);
+                    gr.lineTo(leftX, leftY);
+                    gr.closePath();
+
+                    gr.fillPath(fillBrush);
+
+                    try { gr.strokePath(strokePen); } catch(eS) {}
+                } catch (eD) {}
+            };
+            try { warnIcon.notify('onDraw'); } catch (eND) {}
+
+            __stWarnHeader = headerRow.add("statictext", undefined, "ShineTools needs these settings enabled:");
+            __stWarnHeader.alignment = ["fill", "center"];
+
+            // Body copy below headline
+            __stWarnText = bodyBox.add("statictext", undefined, "", { multiline: true });
+            __stWarnText.alignment = ["fill", "top"];
+
+            // Populate copy immediately so the bodyBox isn't blank on first draw.
+            try { _stSetWarnCopy(_stRunLaunchChecks()); } catch (eCopy) {}
+
+        }
+
+        function _stSetWarnCopy(status) {
+            // Only show the lines that actually need to be changed.
+            // status: { ok:Boolean, canWrite:Boolean, jsExpr:Boolean }
+            var lines = [];
+
+            // Normalize
+            status = status || {};
+            var needWrite = (status.canWrite !== true);
+            var needJS    = (status.jsExpr   !== true);
+
+            lines.push("");
+            lines.push("Fix steps:");
+
+            if (needWrite) {
+                lines.push("• Settings > Scripting & Expressions > Allow Scripts");
+                lines.push("  to Write Files and Access Network");
+                // spacer between bullets if both are needed
+                if (needJS) lines.push("");
+            }
+
+            if (needJS) {
+                lines.push("• File > Project Settings > Expressions > Use \"JavaScript\"");
+            }
+
+            lines.push("");
+            lines.push("• Restart After Effects");
+
+            try { if (__stWarnText) __stWarnText.text = lines.join("\n"); } catch (eT) {}
+            try { if (__stWarnHeader) __stWarnHeader.text = "ShineTools needs these settings enabled:"; } catch (eH) {}
+        }
+
+                // 
+function _stCollapseWarn() {
+            try {
+                if (!__stWarnPanel) return;
+                __stWarnPanel.visible = false;
+                __stWarnPanel.minimumSize = [0, 0];
+                __stWarnPanel.maximumSize = [0, 0];
+                __stWarnPanel.preferredSize = [0, 0];
+            } catch (e) {}
+        }
+
+        function _stExpandWarn() {
+            try {
+                if (!__stWarnPanel) return;
+                __stWarnPanel.visible = true;
+                __stWarnPanel.minimumSize = [0, 0];
+                __stWarnPanel.maximumSize = [9999, 9999];
+                __stWarnPanel.preferredSize = [pal.size[0], pal.size[1]];
+
+                // Encourage wrapping by constraining width
+                try {
+                    var pad = 60; // approx margins + icon + spacing
+                    var w = Math.max(200, pal.size[0] - pad);
+                    __stWarnText.preferredSize = [w, -1];
+                    try { __stWarnHeader.preferredSize = [w, -1]; } catch (eWH) {}
+                } catch (eW) {}
+
+                // Pin to top + fill
+                try { __stWarnPanel.alignment = ["fill", "top"]; } catch (eA) {}
+                try { __stWarnPanel.location = [0, 0]; } catch (eL) {}
+                try { __stWarnPanel.bounds = [0, 0, pal.size[0], pal.size[1]]; } catch (eB) {}
+            } catch (e) {}
+        }
+
+        function _stApplyTakeoverVisibility(forceRestore) {
+            var res = _stRunLaunchChecks();
+            var shouldWarn = (!res.ok && !forceRestore);
+
+            try { _stSetWarnCopy(res); } catch (eCopy2) {}
+// If the warning lives inside the tabStack, we must NOT hide the tabStack itself.
+            var host = null;
+            try { host = (pal.__stTabStack) ? pal.__stTabStack : pal; } catch (eH) { host = pal; }
+
+            // 1) Root visibility on the pal level.
+            //    - When warning is active: hide everything except the host container.
+            //    - When warning is NOT active: show everything, but DO NOT force all stack tabs visible.
+            try {
+                for (var i = 0; i < pal.children.length; i++) {
+                    var ch = pal.children[i];
+                    if (!ch) continue;
+
+                    if (shouldWarn) {
+                        // Keep host visible (it will either be pal itself, or the stack group inside pal)
+                        if (host !== pal && ch === host) { ch.visible = true; continue; }
+                        // If warning is hosted on pal directly, keep only the warn panel visible
+                        if (host === pal && __stWarnPanel && ch === __stWarnPanel) { ch.visible = true; continue; }
+                        ch.visible = false;
+                    } else {
+                        // Restore normal UI; don't override tab visibility logic
+                        ch.visible = true;
+                    }
+                }
+            } catch (eRoot) {}
+
+            // 2) If warning is hosted inside the tabStack, we MUST restore a visible content tab
+            //    because during takeover we hide all other stack children.
+            if (host && host !== pal) {
+                try {
+                    // First: hide everything in the stack (we'll explicitly re-show the correct tab next)
+                    for (var j = 0; j < host.children.length; j++) {
+                        var hc = host.children[j];
+                        if (!hc) continue;
+                        hc.visible = false;
+                    }
+
+                    if (shouldWarn) {
+                        // Show only the warning overlay
+                        if (__stWarnPanel) __stWarnPanel.visible = true;
+                    } else {
+                        // Hide overlay and restore MAIN (fallback to first non-overlay child)
+                        if (__stWarnPanel) __stWarnPanel.visible = false;
+
+                        var mainTab = null;
+                        try { mainTab = pal.__stTabMain || null; } catch (eM) { mainTab = null; }
+
+                        if (mainTab) {
+                            mainTab.visible = true;
+                        } else {
+                            // Fallback: first stack child that isn't the overlay
+                            for (var k = 0; k < host.children.length; k++) {
+                                var cc = host.children[k];
+                                if (!cc) continue;
+                                if (__stWarnPanel && cc === __stWarnPanel) continue;
+                                cc.visible = true;
+                                break;
+                            }
+                        }
+                    }
+                } catch (eHost) {}
+            }
+
+            // Ensure warning visibility + sizing
+            try {
+                if (__stWarnPanel) {
+                    __stWarnPanel.visible = shouldWarn ? true : false;
+                    __stWarnPanel.minimumSize = [0, 0];
+                    __stWarnPanel.maximumSize = [9999, 9999];
+                    __stWarnPanel.alignment = ["fill", "fill"];
+                }
+            } catch (eW) {}
+
+            // Refresh layout
+            try {
+                pal.layout.layout(true);
+                pal.layout.resize();
+            } catch (eL) {}
+        }
+
+
+        _stBuildTakeoverUI();
+        _stCollapseWarn();
+        _stApplyTakeoverVisibility(false);
+
+        // Keep takeover pinned during resize
+        try {
+            var prevResize = pal.onResize;
+            pal.onResize = function () {
+                try { if (prevResize) prevResize(); } catch (e0) {}
+                try { if (__stWarnPanel && __stWarnPanel.visible) _stExpandWarn(); } catch (e1) {}
+            };
+        } catch (eR) {}
+
+        try {
+            var prevResizing = pal.onResizing;
+            pal.onResizing = function () {
+                try { if (prevResizing) prevResizing(); } catch (e0) {}
+                try { if (__stWarnPanel && __stWarnPanel.visible) _stExpandWarn(); } catch (e1) {}
+            };
+        } catch (eRR) {}
+
+    })(myPal);
+} catch (eLaunchCheck) {}
+
 
 // Expose pal + a safe "kick" relayout to global scope so scheduleTask can access it.
 try { $.global.__ShineTools_pal = myPal; } catch (e0) {}
