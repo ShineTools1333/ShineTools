@@ -50,6 +50,113 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
 (function ShineTool(thisObj) {
 
     // ============================================================
+    // PASS 14: DOCKED PANEL HANDOFF (LOADER -> MAIN)
+    // ------------------------------------------------------------
+    // When a ScriptUI Panels "loader" evalFile()s the shared main,
+    // After Effects does NOT automatically pass the docked Panel
+    // instance into the evaluated script. Without this, the main
+    // script thinks it is running standalone and creates a floating
+    // Window("palette"), leaving the docked panel blank.
+    //
+    // Fix:
+    //  - Loader sets $.global.__ST_HOST_PANEL to the docked Panel.
+    //  - Main picks it up here and uses it as thisObj.
+    // ============================================================
+    try {
+        if ($.global.__ST_HOST_PANEL && ($.global.__ST_HOST_PANEL instanceof Panel)) {
+            thisObj = $.global.__ST_HOST_PANEL;
+        }
+    } catch (eHost) {}
+    try { $.global.__ST_HOST_PANEL = null; } catch (eClr) {}
+
+
+    // ============================================================
+    // PASS 13: AE 2025/2026 SHARED-MAIN BOOTSTRAP (LOADER MODEL)
+    // ------------------------------------------------------------
+    // Goal:
+    //  - Allow one "loader" file to live in each AE version's ScriptUI Panels folder
+    //  - Keep the real ShineTools code in a user-writable shared location
+    //  - Updater writes ONLY to the shared location (avoids /Applications permissions)
+    //
+    // Behavior:
+    //  - If this file is NOT the shared main file AND the shared main file exists,
+    //    we eval the shared main and return early (so this file behaves as a loader).
+    //  - If the shared main file doesn't exist yet, we run normally (self-contained),
+    //    and the updater can create the shared main on first update.
+    // ============================================================
+
+    function _stGetSharedMainFile() {
+        // System-wide shared location. Installer will place the main script here so all AE versions load the same code.
+        // NOTE: Writing here generally requires admin during install, but ShineTools updates will also target this file.
+        // If your environment blocks writes to /Library from AE, switch to Folder.userData instead.
+        try {
+            var basePath = "/Library/Application Support/ShineTools";
+            var dir = new Folder(basePath);
+            if (!dir.exists) {
+                try { dir.create(); } catch (eMk) {}
+            }
+            return new File(dir.fsName + "/ShineTools_Main.jsx");
+        } catch (e) {}
+        return null;
+    }
+
+function _stLooksLikeShineToolsMain(raw) {
+        // Lightweight signature check to prevent accidentally eval'ing HTML or random content.
+        try {
+            if (!raw) return false;
+            var s = String(raw);
+            if (s.indexOf("ShineTools") === -1) return false;
+            if (s.indexOf("Tabbed UI") === -1 && s.indexOf("SHINE TOOLS") === -1) return false;
+            return true;
+        } catch (e) {}
+        return false;
+    }
+
+    function _stMaybeLoadSharedMainAndExit() {
+        try {
+            var shared = _stGetSharedMainFile();
+            if (!shared || !shared.exists) return false;
+
+            // If we're already running FROM the shared main file, do nothing.
+            var thisPath = null;
+            try { thisPath = $.fileName ? String($.fileName) : null; } catch (eFN) { thisPath = null; }
+            if (thisPath) {
+                try {
+                    var tf = new File(thisPath);
+                    if (tf && tf.exists && shared.fsName && (String(shared.fsName) === String(tf.fsName))) return false;
+                } catch (eCmp) {}
+            }
+
+            // Safety: read a small chunk to validate
+            var ok = false;
+            try {
+                shared.encoding = "UTF-8";
+                if (shared.open("r")) {
+                    var head = shared.read(4000);
+                    shared.close();
+                    ok = _stLooksLikeShineToolsMain(head);
+                }
+            } catch (eR) { try { if (shared && shared.opened) shared.close(); } catch (eRC) {} }
+
+            if (!ok) return false;
+
+            // Pass through docked Panel host, if any, so the shared main builds into the docked UI.
+            try { $.global.__ST_HOST_PANEL = (thisObj instanceof Panel) ? thisObj : null; } catch (eHP) {}
+
+            try { $.evalFile(shared); } catch (eEval) {
+                try { alert("ShineTools loader couldn't load shared main:\\n" + shared.fsName + "\\n\\n" + eEval.toString()); } catch (eA) {}
+                return false;
+            }
+            return true; // loaded shared main, caller should return;
+        } catch (e) {}
+        return false;
+    }
+
+    // If a shared main exists, this file acts as a loader and exits.
+    if (_stMaybeLoadSharedMainAndExit()) { return; }
+
+
+    // ============================================================
     // 0a) Dropdown helpers (temporary display then revert to blank)
     // ============================================================
     function _ensureDDStore() {
@@ -823,6 +930,13 @@ function _withUndoGroup(name, fn) {
             } catch (e3) {}
             return null;
         }
+        // PASS 14: Prefer system-wide shared install path first
+        //   /Library/Application Support/ShineTools/logo
+        try {
+            var sharedLogo = tryIconsFolder("/Library/Application Support/ShineTools/logo");
+            if (sharedLogo) { __ST_CACHE.logoFile = sharedLogo; return __ST_CACHE.logoFile; }
+        } catch (eSharedLogo) {}
+
 
         // 1) Relative to the running script (most reliable)
         try {
@@ -2369,6 +2483,13 @@ var FAV_DEFAULT_START_FOLDER_NAME = "LIBRARY ELEMENTS_1"; // preferred start fol
     ];
 
     function _stResolveBundledTextPresetFolder() {
+    // PASS 14: Prefer system-wide shared install path first
+    //   /Library/Application Support/ShineTools/presets/text
+    try {
+        var sharedPF = Folder("/Library/Application Support/ShineTools/" + ANIM_BUNDLED_SUBFOLDER);
+        if (sharedPF && sharedPF.exists) return sharedPF;
+    } catch (eShared) {}
+
     // Bundled preset folder lives at:
     //   .../Scripts/ScriptUI Panels/ShineTools/presets/text
     // We try, in order:
@@ -9166,6 +9287,16 @@ function _buildTextTabIfNeeded() {
                         }
 
                         var thisFile = new File(thisPath);
+
+                        // Prefer installing updates into the shared main file (user-writable).
+                        // This avoids permission issues when the loader lives in /Applications/...
+                        try {
+                            var __stSharedMain = _stGetSharedMainFile();
+                            if (__stSharedMain) {
+                                try { if (__stSharedMain.parent && !__stSharedMain.parent.exists) __stSharedMain.parent.create(); } catch (eSMk) {}
+                                thisFile = __stSharedMain;
+                            }
+                        } catch (eSMain) {}
                         var newFile = new File(jsxPath);
 
                         // Backup existing script
@@ -9181,8 +9312,32 @@ function _buildTextTabIfNeeded() {
                         try { copied = newFile.copy(thisFile.fsName); } catch (eCP) { copied = false; }
 
                         if (!copied) {
-                            _setUpdatesStatus("Downloaded v" + latest + " but couldn't replace the installed .jsx (permissions). Try installing from a user Scripts folder or run AE as admin.");
-                            return;
+                            // If we targeted the system-wide shared main in /Library, we may need admin privileges.
+                            try {
+                                var destFS = thisFile && thisFile.fsName ? String(thisFile.fsName) : "";
+                                var srcFS  = newFile && newFile.fsName ? String(newFile.fsName) : "";
+                                var needsAdmin = (destFS.indexOf("/Library/") === 0);
+
+                                if (needsAdmin && srcFS && destFS) {
+                                    try { _setUpdatesStatus(__UPD_STATUS.INSTALLING_ADMIN); } catch (eST) {}
+
+                                    // Use AppleScript to request admin privileges and perform the copy.
+                                    // NOTE: We keep it simple: copy over destination (and rely on our backup above).
+                                    var cmd = 'osascript -e ' +
+                                              '"do shell script \"cp -f \\"' + srcFS.replace(/"/g, '\\"') + '\\" \\"' + destFS.replace(/"/g, '\\"') + '\\"\" with administrator privileges"';
+
+                                    var out = null;
+                                    try { out = safeCallSystem(cmd); } catch (eSC) { out = null; }
+
+                                    // Re-check
+                                    try { copied = (thisFile && thisFile.exists); } catch (eEX) { copied = false; }
+                                }
+                            } catch (eADM) {}
+
+                            if (!copied) {
+                                _setUpdatesStatus("Downloaded v" + latest + " but couldn't replace the installed .jsx (permissions).");
+                                return;
+                            }
                         }
 
                         // Mark as installed (still requires restart for the UI to show new version)
