@@ -87,29 +87,49 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
 
     
     // ============================================================
-    // Shared install root (macOS): ~/Library/Application Support/ShineTools
+    // Shared install root (macOS): /Library/Application Support/ShineTools
     // Centralized so paths stay consistent across loader, presets, logos, etc.
     // ============================================================
     function _stGetSharedRootFolder() {
         // USER Application Support (macOS): ~/Library/Application Support/ShineTools
-        // Folder.appData maps to ~/Library/Application Support on macOS.
+        // NOTE: In After Effects ExtendScript on macOS, Folder.appData may resolve to the SYSTEM /Library.
+        // Folder.userData is more reliable for the current user. We then step up to ".../Application Support".
         try {
-            var base = Folder.appData;
-            return new Folder(base.fsName + "/ShineTools");
+            var ud = Folder.userData; // often: ~/Library/Application Support/Adobe
+            var appSupport = null;
+
+            if (ud && ud.exists) {
+                // If userData points to ".../Application Support/Adobe", parent is ".../Application Support"
+                if (ud.parent && ud.parent.exists && /Application Support$/.test(ud.parent.fsName)) {
+                    appSupport = ud.parent;
+                } else if (/\/Library$/.test(ud.fsName) || /\/Library$/.test(ud.fsName)) {
+                    // If userData is just ".../Library"
+                    appSupport = new Folder(ud.fsName + "/Application Support");
+                } else if (/Application Support$/.test(ud.fsName)) {
+                    // If userData is already ".../Application Support"
+                    appSupport = ud;
+                } else if (ud.parent && ud.parent.exists && (/\/Library$/.test(ud.parent.fsName) || /\/Library$/.test(ud.parent.fsName))) {
+                    // If parent is ".../Library"
+                    appSupport = new Folder(ud.parent.fsName + "/Application Support");
+                }
+            }
+
+            if (!appSupport) appSupport = new Folder("~/Library/Application Support");
+            return new Folder(appSupport.fsName + "/ShineTools");
         } catch (e) {
             return new Folder("~/Library/Application Support/ShineTools");
         }
     }
 
 function _stGetSharedMainFile() {
-        // LOCKED filename - updater always overwrites this.
+        // System-wide shared location. Installer will place the main script here so all AE versions load the same code.
+        // NOTE: Writing here generally requires admin during install, but ShineTools updates will also target this file.
+        // If your environment blocks writes to /Library from AE, switch to Folder.userData instead.
         try {
             var dir = _stGetSharedRootFolder();
-            if (!dir.exists) { try { dir.create(); } catch (eMk) {} }
-            return new File(dir.fsName + "/ShineTools_Main.jsx");
-        } catch (e) {}
-        return null;
-    }
+            if (!dir.exists) {
+                try { dir.create(); } catch (eMk) {}
+            }
             return new File(dir.fsName + "/ShineTools_Main.jsx");
         } catch (e) {}
         return null;
@@ -8579,7 +8599,8 @@ function _stApplyCounterPreset(fileName, newLayerName) {
 
 
         try {
-            var base = "/Library/Application Support/ShineTools/presets/text/";
+            var root = _stGetSharedRootFolder();
+            var base = root.fsName + "/presets/text/";
             var f = new File(base + String(fileName || ""));
             if (!f || !f.exists) {
                 alert("Counter preset not found:\n" + (f ? f.fsName : String(fileName)));
@@ -9725,8 +9746,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     if (jsxUrl) {
                         var baseJsxUrl = _normalizeUpdateUrl(String(jsxUrl));
                         jsxUrl = _appendCacheBuster(baseJsxUrl);
-                        var jsxName = "ShineTools_Main.download.jsx"; // TEMP ONLY
-
+                        var jsxName = "ShineTools_" + latest.replace(/[^\w\.\-]/g, "_") + ".jsx";
                         var jsxPath = cacheDir.fsName + "/" + jsxName;
 
                         _setUpdatesStatus(__UPD_STATUS.DL_SCRIPT);
@@ -9839,7 +9859,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                             try {
                                 var destFS = thisFile && thisFile.fsName ? String(thisFile.fsName) : "";
                                 var srcFS  = newFile && newFile.fsName ? String(newFile.fsName) : "";
-                                var needsAdmin = (destFS.indexOf("/Library/") === 0);
+                                var needsAdmin = false; // User-library install: no admin needed
 
                                 if (needsAdmin && srcFS && destFS) {
                                     try { _setUpdatesStatus(__UPD_STATUS.INSTALLING_ADMIN); } catch (eST) {}
