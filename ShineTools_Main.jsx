@@ -19,7 +19,7 @@
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.1";
+var SHINE_VERSION      = "1.0";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
@@ -87,22 +87,29 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
 
     
     // ============================================================
-    // Shared install root (macOS): /Library/Application Support/ShineTools
+    // Shared install root (macOS): ~/Library/Application Support/ShineTools
     // Centralized so paths stay consistent across loader, presets, logos, etc.
     // ============================================================
     function _stGetSharedRootFolder() {
-        try { return new Folder("/Library/Application Support/ShineTools"); } catch (e) { return new Folder("/Library/Application Support/ShineTools"); }
+        // USER Application Support (macOS): ~/Library/Application Support/ShineTools
+        // Folder.appData maps to ~/Library/Application Support on macOS.
+        try {
+            var base = Folder.appData;
+            return new Folder(base.fsName + "/ShineTools");
+        } catch (e) {
+            return new Folder("~/Library/Application Support/ShineTools");
+        }
     }
 
 function _stGetSharedMainFile() {
-        // System-wide shared location. Installer will place the main script here so all AE versions load the same code.
-        // NOTE: Writing here generally requires admin during install, but ShineTools updates will also target this file.
-        // If your environment blocks writes to /Library from AE, switch to Folder.userData instead.
+        // LOCKED filename - updater always overwrites this.
         try {
             var dir = _stGetSharedRootFolder();
-            if (!dir.exists) {
-                try { dir.create(); } catch (eMk) {}
-            }
+            if (!dir.exists) { try { dir.create(); } catch (eMk) {} }
+            return new File(dir.fsName + "/ShineTools_Main.jsx");
+        } catch (e) {}
+        return null;
+    }
             return new File(dir.fsName + "/ShineTools_Main.jsx");
         } catch (e) {}
         return null;
@@ -9718,7 +9725,8 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     if (jsxUrl) {
                         var baseJsxUrl = _normalizeUpdateUrl(String(jsxUrl));
                         jsxUrl = _appendCacheBuster(baseJsxUrl);
-                        var jsxName = "ShineTools_" + latest.replace(/[^\w\.\-]/g, "_") + ".jsx";
+                        var jsxName = "ShineTools_Main.download.jsx"; // TEMP ONLY
+
                         var jsxPath = cacheDir.fsName + "/" + jsxName;
 
                         _setUpdatesStatus(__UPD_STATUS.DL_SCRIPT);
