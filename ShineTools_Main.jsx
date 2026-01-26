@@ -1927,6 +1927,30 @@ function syncNamesForPrecompLayer(precompLayer) {
         } catch (e) {}
     }
 
+    // Public helper: enable ANIMATE + build Reveal % keys immediately (used by TEXT BOX Option-click)
+    mod.__enableRevealAnim = function(compId, boxIndex) {
+        try {
+            var comp = app.project && app.project.itemByID(compId);
+            if (!isComp(comp)) return;
+            if (boxIndex < 1 || boxIndex > comp.numLayers) return;
+
+            var boxLayer = comp.layer(boxIndex);
+            if (!boxLayer) return;
+
+            try {
+                var fx = boxLayer.property("ADBE Effect Parade");
+                if (fx) {
+                    var a = fx.property("ANIMATE");
+                    if (a) a.property(1).setValue(1);
+                    var r = fx.property("Reveal %");
+                    if (r) r.property(1).setValue(0);
+                }
+            } catch (eSet) {}
+
+            ensureAnimateState(boxLayer);
+        } catch (e) {}
+    };
+
     // ----- Expressions application -----
     mod.applyExpressions = function(compId, boxIndex) {
         try {
@@ -2471,6 +2495,13 @@ function syncNamesForPrecompLayer(precompLayer) {
         addCheck(fx, "ANIMATE", DEFAULT_ANIMATE_ON);
         addSlider(fx, "Reveal %", 100);
 
+
+        var __doAnimate = false;
+        try { __doAnimate = isOptionDown(); } catch (eOpt) { __doAnimate = false; }
+        if (__doAnimate) {
+            try { fx.property("ANIMATE").property(1).setValue(1); } catch (eAnimOn) {}
+            try { fx.property("Reveal %").property(1).setValue(0); } catch (eReveal0) {}
+        }
         // Shape contents
         var root = boxLayer.property("ADBE Root Vectors Group");
         var reveal = root.addProperty("ADBE Vector Group");
@@ -2489,6 +2520,9 @@ function syncNamesForPrecompLayer(precompLayer) {
 
         // Apply expressions + precompose (tight timing for responsiveness)
         app.scheduleTask('$.global.ShineTools.TextBox.applyExpressions(' + compId + ',' + bi + ');', 50, false);
+        if (__doAnimate) {
+            app.scheduleTask('$.global.ShineTools.TextBox.__enableRevealAnim(' + compId + ',' + bi + ');', 80, false);
+        }
         app.scheduleTask('$.global.ShineTools.TextBox.precomposeTextBox(' + compId + ',' + ti + ',' + bi + ',"' + initialName.replace(/"/g,'\\"') + '");', 120, false);
 
         mod.ensureWatcherRunning();
