@@ -50,6 +50,27 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
 (function ShineTool(thisObj) {
 
     // ============================================================
+    // GLOBAL MODAL SAFETY (scheduleTask-safe)
+    // ------------------------------------------------------------
+    // scheduleTask() executes in the global eval context, so any
+    // wrapper MUST live on $.global (not only inside this closure).
+    // ============================================================
+    try {
+        if (!$.global.__ST_withModalSafety__) {
+            $.global.__ST_withModalSafety__ = function(fn) {
+                try {
+                    // Best-effort "not now" guards. AE has modal moments that aren't visible.
+                    try { if (app && app.isSaving) return; } catch (eS) {}
+                    try { if (!app || !app.project) { /* allow */ } } catch (eP) {}
+                    if (fn && typeof fn === "function") fn();
+                } catch (e) {}
+            };
+        }
+    } catch (eG) {}
+
+
+
+    // ============================================================
     // PASS 14: DOCKED PANEL HANDOFF (LOADER -> MAIN)
     // ------------------------------------------------------------
     // When a ScriptUI Panels "loader" evalFile()s the shared main,
@@ -215,6 +236,9 @@ function _stLooksLikeShineToolsMain(raw) {
     // ============================================================
     // Namespace for debug toggles / shared state (kept global so a docked panel reload can reuse it).
     var ST = $.global.__ShineToolsNS || ($.global.__ShineToolsNS = { DEBUG: false });
+    // SAFE MODE: disable app.scheduleTask-based UI ticks to avoid ScriptUI freezes after focus/minimize.
+    // Set false if you want the original deferred UI polish back.
+    ST.SAFE_MODE = (ST.SAFE_MODE === false) ? false : true;
     var SHINETOOLS_BUILD_STAMP = "2026-01-18 02:08 UTC";
 
     // ============================================================
@@ -641,7 +665,7 @@ function _settingsGet(section, key, defaultValue) {
                 dd.__shineProgrammatic = true;
                 dd.selection = 0; // blank item
                 try {
-                    app.scheduleTask("try{var s=$.global.__ShineToolsDDStore;var d=s? s['" + key + "']:null; if(d) d.__shineProgrammatic=false;}catch(e){}", 0, false);
+                    app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{var s=$.global.__ShineToolsDDStore;var d=s? s[\'" + key + "\']:null; if(d) d.__shineProgrammatic=false;}catch(e){}});", 0, false);
                 } catch (e2) {}
             } catch (e) {}
         };
@@ -663,7 +687,7 @@ function _settingsGet(section, key, defaultValue) {
                     if (dd.window && dd.window.update) dd.window.update();
                 } catch (eInner) {}
                 try {
-                    app.scheduleTask("try{var s=$.global.__ShineToolsDDStore;var d=s? s['" + key + "']:null; if(d) d.__shineProgrammatic=false;}catch(e){}", 0, false);
+                    app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{var s=$.global.__ShineToolsDDStore;var d=s? s[\'" + key + "\']:null; if(d) d.__shineProgrammatic=false;}catch(e){}});", 0, false);
                 } catch (e2) {}
             } catch (e) {}
         };
@@ -694,8 +718,15 @@ function _settingsGet(section, key, defaultValue) {
                 }
             } catch (eSet) {}
 
+            if (ST && ST.SAFE_MODE === true) {
+                // In SAFE_MODE, do not schedule restore; just show message then immediately blank.
+                try { if (dd.items && dd.items.length > 0) { dd.items[0].text = ' '; dd.selection = 0; } } catch(eSM) {}
+                try { dd.__shineProgrammatic = false; } catch(eSM2) {}
+                return;
+            }
+
             dd.__shineMsgTaskId = app.scheduleTask(
-                "$.global._shineToolsRestoreDropdownBlank('" + dd.__shineDDKey + "');",
+                "$.global.__ST_withModalSafety__(function(){ $.global._shineToolsRestoreDropdownBlank(\'" + dd.__shineDDKey + "\'); });",
                 ms,
                 false
             );
@@ -775,8 +806,15 @@ function _settingsGet(section, key, defaultValue) {
             // Cancel any pending reset for this dropdown
             _cancelTaskSafe(dd.__shineDDTaskId);
 
+            if (ST && ST.SAFE_MODE === true) {
+                // In SAFE_MODE, keep dropdown blank immediately (no delayed reset).
+                try { dd.__shineProgrammatic = true; dd.selection = 0; } catch(eSel0) {}
+                try { dd.__shineProgrammatic = false; } catch(eSel1) {}
+                return;
+            }
+
             dd.__shineDDTaskId = app.scheduleTask(
-                "$.global._shineToolsResetDropdown('" + dd.__shineDDKey + "');",
+                "$.global.__ST_withModalSafety__(function(){ $.global._shineToolsResetDropdown(\'" + dd.__shineDDKey + "\'); });",
                 ms,
                 false
             );
@@ -887,8 +925,12 @@ function _withUndoGroup(name, fn) {
 
             // Escape single quotes for scheduleTask string
             var safe = String(presetPath || "").replace(/'/g, "\\'");
-            var taskStr = "$.global._shineToolsApplyFFXPreset('" + safe + "');";
-            dd.__shineApplyTaskId = app.scheduleTask(taskStr, ms, false);
+            var taskStr = "$.global.__ST_withModalSafety__(function(){ $.global._shineToolsApplyFFXPreset(\'" + safe + "\'); });";
+            if (ST && ST.SAFE_MODE === true) {
+                try { $.global._shineToolsApplyFFXPreset(safe); } catch(eNow) {}
+            } else {
+                dd.__shineApplyTaskId = app.scheduleTask(taskStr, ms, false);
+            }
 
         } catch (e) {}
     }
@@ -1049,7 +1091,17 @@ function _withUndoGroup(name, fn) {
     // ============================================================
     // 2) Core helpers
     // ============================================================
-    function warn(msg) { alert(msg); }
+    function warn(msg) {
+    try {
+        if (typeof __ST_withModalSafety__ === "function") {
+            $.global.__ST_withModalSafety__(function(){ alert(msg); });
+        } else {
+            alert(msg);
+        }
+    } catch (e) {
+        try { alert(msg); } catch (e2) {}
+    }
+}
 
     function requireProject() {
         try {
@@ -1086,6 +1138,41 @@ function _withUndoGroup(name, fn) {
         if (!c) warn("Please select an active composition.");
         return c;
     }
+
+
+// ------------------------------------------------------------
+// Place a newly-created layer at the current time indicator (CTI)
+// - Ensures the layer appears where you clicked, not at comp start.
+// - Best-effort: sets startTime + inPoint, and caps outPoint to comp duration.
+// ------------------------------------------------------------
+function _stPlaceLayerAtCTI(layer, comp) {
+    try {
+        if (!layer) return;
+        comp = comp || (layer.containingComp ? layer.containingComp : null);
+        if (!comp) return;
+        var t = 0;
+        try { t = comp.time; } catch (eT) { t = 0; }
+
+        // Shift the layer so its inPoint lands at CTI.
+        // startTime can be used even on camera/light/null; inPoint ensures visibility starts at CTI.
+        try { layer.startTime = t; } catch (eST) {}
+        try { layer.inPoint  = t; } catch (eIN) {}
+        try {
+            // Keep the layer ending at comp end if possible
+            var endT = comp.duration;
+            if (endT !== undefined && endT !== null && isFinite(endT)) {
+                if (layer.outPoint < endT) {
+                    // Some layers default shorter; extend if needed
+                    layer.outPoint = endT;
+                } else {
+                    // Otherwise, cap to comp end (most users expect full length)
+                    layer.outPoint = Math.min(layer.outPoint, endT);
+                }
+            }
+        } catch (eOUT) {}
+    } catch (e) {}
+}
+
 
     function isSolidFootageItem(it) {
         try {
@@ -1135,7 +1222,7 @@ function _withUndoGroup(name, fn) {
         var srcComp = lyr.source;
 
         // Prompt for a base name for the unique duplicate
-        var userBaseName = prompt("Name the new comp:", String(srcComp.name || "Comp") + "_");
+        var userBaseName = __ST_promptSafe__("Name the new comp:", String(srcComp.name || "Comp") + "_");
         if (userBaseName === null) { return; }
         userBaseName = String(userBaseName || "");
         if (!userBaseName) { userBaseName = String(srcComp.name || "Comp") + "_"; }
@@ -1256,7 +1343,7 @@ function _withUndoGroup(name, fn) {
 
         // Prompt for a suffix (default: "_2")
         // Example: "LowerThird" -> "LowerThird_2" or "LowerThird_ALT"
-        var suffix = prompt("Add a suffix for the copied comps:", "_2");
+        var suffix = __ST_promptSafe__("Add a suffix for the copied comps:", "_2");
         if (suffix === null) { return; }
         suffix = String(suffix || "");
         // If user entered nothing, fall back to _2 to keep behavior predictable.
@@ -1434,13 +1521,51 @@ function _withUndoGroup(name, fn) {
 
     function getSelectedExprProps(c) {
         var props = [];
-        var layers = c.selectedLayers;
-        for (var i = 0; i < layers.length; i++) {
-            var sp = layers[i].selectedProperties;
-            for (var j = 0; j < sp.length; j++) {
-                if (sp[j] && sp[j].canSetExpression) props.push(sp[j]);
+
+        // Prefer CompItem.selectedProperties when available.
+        // This captures selections from the Effect Controls panel as well as the timeline.
+        try {
+            if (c && c.selectedProperties && c.selectedProperties.length) {
+                var spC = c.selectedProperties;
+                for (var a = 0; a < spC.length; a++) {
+                    try {
+                        var pC = spC[a];
+                        if (pC && pC.canSetExpression) props.push(pC);
+                    } catch (eC) {}
+                }
             }
-        }
+        } catch (e0) {}
+
+        // Fallback: timeline selections via selectedLayers[].selectedProperties
+        try {
+            var layers = c.selectedLayers;
+            for (var i = 0; i < layers.length; i++) {
+                var sp = layers[i].selectedProperties;
+                for (var j = 0; j < sp.length; j++) {
+                    if (sp[j] && sp[j].canSetExpression) props.push(sp[j]);
+                }
+            }
+        } catch (e1) {}
+
+        // De-dupe (same prop can appear in both arrays)
+        try {
+            var out = [];
+            var seen = {};
+            for (var k = 0; k < props.length; k++) {
+                var p = props[k];
+                if (!p) continue;
+                var key = "";
+                try {
+                    // propertyDepth+matchName is usually stable enough for dedupe.
+                    key = String(p.propertyDepth) + "|" + String(p.matchName) + "|" + String(p.name);
+                } catch (eK) {
+                    key = "k" + k;
+                }
+                if (!seen[key]) { seen[key] = true; out.push(p); }
+            }
+            return out;
+        } catch (e2) {}
+
         return props;
     }
 
@@ -1509,8 +1634,7 @@ function _withUndoGroup(name, fn) {
     // Avoid double-registration if the main script loads this more than once
     if (ST.TextBox && ST.TextBox.__version === "2.36") {
         // Still ensure watcher is running if UI is not shown.
-        try { ST.TextBox.ensureWatcherRunning(); } catch (e) {}
-        return;
+        /* watcher no longer auto-starts on panel load (reduces AE cursor flicker); it starts on first TEXT BOX use */return;
     }
 
     // ---------- Module ----------
@@ -1870,7 +1994,6 @@ function syncNamesForPrecompLayer(precompLayer) {
         try {
             var fx = boxLayer.property("ADBE Effect Parade");
             if (!fx) return 0;
-            var eff = fx.property("ANIMATE");
             if (!eff) return 0;
             return eff.property(1).value;
         } catch (e) { return 0; }
@@ -1880,14 +2003,17 @@ function syncNamesForPrecompLayer(precompLayer) {
         try {
             var fx = boxLayer.property("ADBE Effect Parade");
             if (!fx) return null;
-            var e = fx.property("Reveal %");
+            var e = fx.property("Animate %");
             if (!e) return null;
             return e.property(1);
         } catch (e) { return null; }
     }
 
     function ensureAnimateState(boxLayer) {
-        try {
+        
+        // Patched: ANIMATE toggle removed. Do not auto-manage keys.
+        return;
+try {
             if (!boxLayer || !isShapeLayer(boxLayer)) return;
             var comp = boxLayer.containingComp;
             if (!isComp(comp)) return;
@@ -1902,8 +2028,8 @@ function syncNamesForPrecompLayer(precompLayer) {
             var prev = (mod.__animState[id] === undefined) ? -1 : mod.__animState[id];
 
             if (on) {
-                // Only rebuild keys when we newly turned on, or keys are missing
-                if (prev !== 1 || reveal.numKeys < 2) {
+                // Only build keys if they are missing (do NOT retime existing keys)
+                if (reveal.numKeys < 2) {
                     if (reveal.numKeys > 0) removeAllKeys(reveal);
 
                     var t0 = Math.max(comp.time, boxLayer.inPoint);
@@ -1927,7 +2053,7 @@ function syncNamesForPrecompLayer(precompLayer) {
         } catch (e) {}
     }
 
-    // Public helper: enable ANIMATE + build Reveal % keys immediately (used by TEXT BOX Option-click)
+    // Public helper: enable ANIMATE + build Animate % keys immediately (used by TEXT BOX Option-click)
     mod.__enableRevealAnim = function(compId, boxIndex) {
         try {
             var comp = app.project && app.project.itemByID(compId);
@@ -1940,14 +2066,11 @@ function syncNamesForPrecompLayer(precompLayer) {
             try {
                 var fx = boxLayer.property("ADBE Effect Parade");
                 if (fx) {
-                    var a = fx.property("ANIMATE");
                     if (a) a.property(1).setValue(1);
-                    var r = fx.property("Reveal %");
+                    var r = fx.property("Animate %");
                     if (r) r.property(1).setValue(0);
                 }
             } catch (eSet) {}
-
-            ensureAnimateState(boxLayer);
         } catch (e) {}
     };
 
@@ -1986,9 +2109,8 @@ function syncNamesForPrecompLayer(precompLayer) {
                 "var sr = thisLayer.parent.sourceRectAtTime(time,false);",
                 "var fullW = sr.width + px*2;",
                 "var fullH = sr.height + py*2;",
-                "var on = effect(\"ANIMATE\")(\"Checkbox\");",
-                "var p = 1; try { p = effect(\"Reveal %\")(\"Slider\")/100; } catch (err) { p = 1; }",
-                "var w = (on==1) ? (fullW*p) : fullW;",
+                                "var p = 1; try { p = effect(\"Animate %\")(\"Slider\")/100; } catch (err) { p = 1; }",
+                "var w = fullW*p;",
                 "[w, fullH];"
             ].join("\n");
 
@@ -1997,9 +2119,8 @@ function syncNamesForPrecompLayer(precompLayer) {
                 "var px = effect(\"Padding\")(\"Point\")[0];",
                 "var sr = thisLayer.parent.sourceRectAtTime(time,false);",
                 "var fullW = sr.width + px*2;",
-                "var on = effect(\"ANIMATE\")(\"Checkbox\");",
-                "var p = 1; try { p = effect(\"Reveal %\")(\"Slider\")/100; } catch (err) { p = 1; }",
-                "var w = (on==1) ? (fullW*p) : fullW;",
+                                "var p = 1; try { p = effect(\"Animate %\")(\"Slider\")/100; } catch (err) { p = 1; }",
+                "var w = fullW*p;",
                 "[-(fullW - w)/2, 0];"
             ].join("\n");
 
@@ -2021,13 +2142,17 @@ function syncNamesForPrecompLayer(precompLayer) {
             }
 
             if (fill) {
-                fill.property("ADBE Vector Fill Color").expression = 'effect("Box Color")("Color");';
+                // Native control: set defaults once, then user edits Fill Color in Contents.
+                try { fill.property("ADBE Vector Fill Color").setValue(DEFAULT_FILL_COLOR); } catch (eFC) {}
+                // Keep checkbox controlling visibility
                 fill.property("ADBE Vector Fill Opacity").expression = 'effect("FILL")("Checkbox")*100;';
             }
 
             if (stroke) {
-                stroke.property("ADBE Vector Stroke Width").expression = 'effect("Stroke Width")("Slider");';
-                stroke.property("ADBE Vector Stroke Color").expression = 'effect("Stroke Color")("Color");';
+                // Native control: set defaults once, then user edits Stroke Color/Width in Contents.
+                try { stroke.property("ADBE Vector Stroke Width").setValue(DEFAULT_STROKE_W); } catch (eSW) {}
+                try { stroke.property("ADBE Vector Stroke Color").setValue(DEFAULT_STROKE_COL); } catch (eSC) {}
+                // Keep checkbox controlling visibility
                 stroke.property("ADBE Vector Stroke Opacity").expression = 'effect("STROKE")("Checkbox")*100;';
             }
 
@@ -2149,9 +2274,8 @@ function syncNamesForPrecompLayer(precompLayer) {
 
             }
 
-            mod.ensureWatcherRunning();
-
-        } catch (e) {
+            mod.ensureWatcherBurst(1500);
+} catch (e) {
             alert("TEXT BOX precomp error:\n" + e.toString());
         }
     };
@@ -2302,6 +2426,33 @@ function syncNamesForPrecompLayer(precompLayer) {
 
 
 
+
+
+    // Cursor-stability: run the TextBox watcher ONLY while the user is actively interacting
+    // with a TextBox (selected tagged layers). This prevents a perpetual scheduleTask loop
+    // from impacting AE's cursor/tool icon when the panel is simply open.
+    function _watcherNeedsToRun(comp){
+        try {
+            if (!isComp(comp)) return false;
+
+            var sel = comp.selectedLayers;
+            if (sel && sel.length > 0) {
+                for (var i=0; i<sel.length; i++){
+                    var l = sel[i];
+                    if (!l) continue;
+                    var cmt = "";
+                    try { cmt = String(l.comment || ""); } catch (eC) { cmt = ""; }
+                    if (cmt === TAG_TEXT_LAYER || cmt === TAG_BOX_LAYER || cmt === TAG_PRECOMP_LAYER) return true;
+                }
+            }
+
+            // If nothing is selected, don't keep ticking.
+            return false;
+        } catch (e) {
+            return false;
+        }
+    }
+
     mod.__watchTick = function() {
         try {
             var comp = app.project && app.project.activeItem;
@@ -2360,9 +2511,7 @@ function syncNamesForPrecompLayer(precompLayer) {
 // Only run automation behaviors after edit pause window
             if (now >= mod.__watcher.editPauseUntil) {
                 var boxes = findBoxLayersInComp(comp);
-                for (var b=0; b<boxes.length; b++) ensureAnimateState(boxes[b]);
-
-
+                for (var b=0; b<boxes.length; b++)
                 // Bounds-based precomp anchor recenter (runs every tick, lightweight via cached sig)
 
                 var compId = comp.id;
@@ -2382,7 +2531,18 @@ function syncNamesForPrecompLayer(precompLayer) {
         } catch (e) {
         } finally {
             if (mod.__watcher.running) {
-                app.scheduleTask('$.global.ShineTools.TextBox.__watchTick();', WATCH_INTERVAL_MS, false);
+                // Keep ticking only while a tagged TextBox layer/precomp is selected.
+                // If the user clicks away, stop the watcher to restore AE cursor stability.
+                try {
+                    var c = app.project && app.project.activeItem;
+                    if (_watcherNeedsToRun(c)) {
+                        app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.__watchTick(); });', WATCH_INTERVAL_MS, false);
+                    } else {
+                        mod.__watcher.running = false;
+                    }
+                } catch (eRun) {
+                    mod.__watcher.running = false;
+                }
             }
         }
     };
@@ -2390,9 +2550,28 @@ function syncNamesForPrecompLayer(precompLayer) {
     mod.ensureWatcherRunning = function(){
         if (!mod.__watcher.running) {
             mod.__watcher.running = true;
-            app.scheduleTask('$.global.ShineTools.TextBox.__watchTick();', WATCH_INTERVAL_MS, false);
+            app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.__watchTick(); });', WATCH_INTERVAL_MS, false);
         }
     };
+
+    // Run the watcher only for a short burst (for setup / expression application),
+    // then stop it to avoid AE cursor/tool icon flicker while the panel is open.
+    mod.ensureWatcherBurst = function(durationMs){
+        try {
+            if (durationMs === undefined || durationMs === null) durationMs = 1500;
+            durationMs = Math.max(200, Math.min(6000, durationMs|0));
+
+            if (!mod.__watcher.running) {
+                mod.__watcher.running = true;
+                app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.__watchTick(); });', WATCH_INTERVAL_MS, false);
+            }
+
+            // Force-stop after the burst window.
+            app.scheduleTask('$.global.__ST_withModalSafety__(function(){ try{ $.global.ShineTools.TextBox.__watcher.running = false; }catch(e){} });', durationMs, false);
+        } catch (e) {}
+    };
+
+
 
     // ----- Main: create text box + precomp -----
     mod.makeTextBox = function(){
@@ -2486,23 +2665,13 @@ function syncNamesForPrecompLayer(precompLayer) {
         try { padCtrl.property(1).setValue([DEFAULT_PAD_X, DEFAULT_PAD_Y]); } catch (eP) {}
 
         addSlider(fx, "Roundness", DEFAULT_ROUND);
-        addColor(fx, "Box Color", DEFAULT_FILL_COLOR);
+        // NOTE: Color/Width are now native Shape properties (no Effect Controls)
 
         addCheck(fx, "STROKE", DEFAULT_STROKE_ON);
-        addSlider(fx, "Stroke Width", DEFAULT_STROKE_W);
-        addColor(fx, "Stroke Color", DEFAULT_STROKE_COL);
 
-        addCheck(fx, "ANIMATE", DEFAULT_ANIMATE_ON);
-        addSlider(fx, "Reveal %", 100);
-
-
-        var __doAnimate = false;
-        try { __doAnimate = isOptionDown(); } catch (eOpt) { __doAnimate = false; }
-        if (__doAnimate) {
-            try { fx.property("ANIMATE").property(1).setValue(1); } catch (eAnimOn) {}
-            try { fx.property("Reveal %").property(1).setValue(0); } catch (eReveal0) {}
-        }
-        // Shape contents
+        addSlider(fx, "Animate %", 100);
+        try { fx.property("Animate %").property(1).minValue = 0; } catch (eMin) {}
+// Shape contents
         var root = boxLayer.property("ADBE Root Vectors Group");
         var reveal = root.addProperty("ADBE Vector Group");
         reveal.name = "Reveal";
@@ -2519,19 +2688,197 @@ function syncNamesForPrecompLayer(precompLayer) {
         app.endUndoGroup();
 
         // Apply expressions + precompose (tight timing for responsiveness)
-        app.scheduleTask('$.global.ShineTools.TextBox.applyExpressions(' + compId + ',' + bi + ');', 50, false);
-        if (__doAnimate) {
-            app.scheduleTask('$.global.ShineTools.TextBox.__enableRevealAnim(' + compId + ',' + bi + ');', 80, false);
-        }
-        app.scheduleTask('$.global.ShineTools.TextBox.precomposeTextBox(' + compId + ',' + ti + ',' + bi + ',"' + initialName.replace(/"/g,'\\"') + '");', 120, false);
+        app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.applyExpressions(' + compId + ',' + bi + '); });', 50, false);
 
-        mod.ensureWatcherRunning();
+        app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.precomposeTextBox(' + compId + ',' + ti + ',' + bi + ',"' + initialName.replace(/"/g,'\\"') + '"); });', 120, false);
+
+        mod.ensureWatcherBurst(1500);
+};
+
+
+    // ----- Re-animate preset -----
+    // Clears any keyframes on the "Animate %" slider and sets 0 -> 100 over N frames at the current time.
+    mod.resetAnimate = function(frames) {
+        try {
+            frames = (frames === undefined || frames === null) ? 30 : Math.max(1, Math.floor(frames));
+            var comp = app.project && app.project.activeItem;
+            if (!isComp(comp)) { alert("Select a comp first."); return; }
+
+            var t = comp.time;
+            var dt = frames * comp.frameDuration;
+
+            function isBoxLayer(lyr) {
+                if (!lyr) return false;
+                try {
+                    if (isShapeLayer && isShapeLayer(lyr)) {
+                        var nm = String(lyr.name || "");
+                        if (nm.toLowerCase() === "text box") return true;
+                    }
+                } catch (e) {}
+                // Fallback: check comment tag
+                try {
+                    var c = getCommentSafe(lyr);
+                    if (c && String(c).indexOf("SHINE_TEXT_BOX_BOX_LAYER") !== -1) return true;
+                } catch (e2) {}
+                return false;
+            }
+
+            function findBoxForTextLayer(textLyr) {
+                try {
+                    if (!textLyr) return null;
+                    for (var i=1; i<=comp.numLayers; i++) {
+                        var lyr = comp.layer(i);
+                        if (!lyr) continue;
+                        if (lyr.parent === textLyr && isBoxLayer(lyr)) return lyr;
+                    }
+                } catch (e) {}
+                return null;
+            }
+
+            var targetBox = null;
+
+            // Prefer selected layer(s)
+            if (comp.selectedLayers && comp.selectedLayers.length > 0) {
+                var sel = comp.selectedLayers[0];
+
+                // If a TEXT BOX shape is selected
+                if (isBoxLayer(sel)) {
+                    targetBox = sel;
+                } else {
+                    // If a text layer is selected, find its paired box (parented)
+                    try {
+                        if (isTextLayer && isTextLayer(sel)) {
+                            targetBox = findBoxForTextLayer(sel);
+                        }
+                    } catch (e3) {}
+                }
+            }
+
+            // Fallback: find first TEXT BOX layer in comp
+            if (!targetBox) {
+                for (var j=1; j<=comp.numLayers; j++) {
+                    var l = comp.layer(j);
+                    if (isBoxLayer(l)) { targetBox = l; break; }
+                }
+            }
+
+            if (!targetBox) { alert("No TEXT BOX layer found. Select a TEXT BOX layer (or its text layer) and try again."); return; }
+
+            var fx = targetBox.property("ADBE Effect Parade");
+            if (!fx) { alert("TEXT BOX has no effects."); return; }
+
+            var animFx = fx.property("Animate %");
+            if (!animFx) { alert('Could not find "Animate %" on the TEXT BOX layer.'); return; }
+
+            var slider = animFx.property(1);
+            if (!slider) { alert('Could not access "Animate %" slider value.'); return; }
+
+            app.beginUndoGroup("TEXT BOX Re-animate");
+
+            // Clear keys
+            try {
+                while (slider.numKeys > 0) slider.removeKey(1);
+            } catch (eK) {}
+
+            // Set 0 -> 100 over N frames
+            try { slider.setValueAtTime(t, 0); } catch (eA) { try { slider.setValue(0); } catch (eA2) {} }
+            try { slider.setValueAtTime(t + dt, 100); } catch (eB) {}
+
+            // Ensure current value is visible at CTI
+            try { slider.setValueAtTime(t, 0); } catch (eC) {}
+
+            app.endUndoGroup();
+
+        } catch (e) {
+            alert("TEXT BOX reset error:\n" + e.toString());
+        }
     };
+
+// ----- Toggle animation keys (SHIFT-click helper) -----
+// If keyframes exist on "Animate %", remove them and set to 100.
+// If none exist, add 0 -> 100 over N frames at the current time.
+mod.toggleAnimateKeys = function(frames) {
+    try {
+        frames = (frames === undefined || frames === null) ? 30 : Math.max(1, Math.floor(frames));
+        var comp = app.project && app.project.activeItem;
+        if (!isComp(comp)) { alert("Select a comp first."); return; }
+
+        // Require a selected TEXT BOX shape layer (per Jim's request)
+        if (!comp.selectedLayers || comp.selectedLayers.length < 1) {
+            alert('Select the TEXT BOX shape layer, then SHIFT-click "TEXT BOX" to toggle keys.');
+            return;
+        }
+
+        var sel = comp.selectedLayers[0];
+        // Validate selection is the box layer
+        var isBox = false;
+        try {
+            if (isShapeLayer && isShapeLayer(sel)) {
+                var nm = String(sel.name || "");
+                if (nm.toLowerCase() === "text box") isBox = true;
+            }
+        } catch (e0) {}
+        if (!isBox) {
+            // Fallback: tag check
+            try {
+                var c = getCommentSafe(sel);
+                if (c && String(c).indexOf("SHINE_TEXT_BOX_BOX_LAYER") !== -1) isBox = true;
+            } catch (e1) {}
+        }
+        if (!isBox) {
+            alert('SHIFT toggle requires the TEXT BOX shape layer to be selected.');
+            return;
+        }
+
+        var fx = sel.property("ADBE Effect Parade");
+        if (!fx) { alert("TEXT BOX has no effects."); return; }
+
+        var animFx = fx.property("Animate %");
+        if (!animFx) { alert('Could not find "Animate %" on the TEXT BOX layer.'); return; }
+
+        var s = animFx.property(1);
+        if (!s) { alert('Could not access "Animate %" slider value.'); return; }
+
+        var t = comp.time;
+        var dt = frames * comp.frameDuration;
+
+        app.beginUndoGroup("TEXT BOX Toggle Animate Keys");
+
+        if (s.numKeys && s.numKeys > 0) {
+            // Remove keys and return to 100
+            try { while (s.numKeys > 0) s.removeKey(1); } catch (eK) {}
+            try { s.setValue(100); } catch (eV) {}
+        } else {
+            // Add 0 -> 100 keys over N frames
+            try { s.setValueAtTime(t, 0); } catch (eA) { try { s.setValue(0); } catch (eA2) {} }
+            try { s.setValueAtTime(t + dt, 100); } catch (eB) {}
+        
+try {
+    var easeIn  = new KeyframeEase(0, 33);
+    var easeOut = new KeyframeEase(0, 33);
+    // First key (0%)
+    if (s.numKeys >= 1) {
+        s.setTemporalEaseAtKey(1, [easeIn], [easeOut]);
+    }
+    // Second key (100%)
+    if (s.numKeys >= 2) {
+        s.setTemporalEaseAtKey(2, [easeIn], [easeOut]);
+    }
+} catch (eEase) {}
+}
+
+        app.endUndoGroup();
+
+    } catch (e) {
+        alert("TEXT BOX toggle error:\n" + e.toString());
+    }
+};
+
 
     // ---------- Publish module (integrated) ----------
     ST.TextBox = mod;
-    try { mod.ensureWatcherRunning(); } catch (e) {}
-    }
+    /* watcher no longer auto-starts on panel load; it starts on first TEXT BOX use */
+}
     // Initialize once so the TEXT tab button can call it
     try { initTextBoxModule(); } catch (eInitTB) {}
 
@@ -3199,7 +3546,7 @@ function _openDialogAtFolder(startFolder, prompt, filter, multiSelect) {
     }
 
     // Fallback only when we couldn't use the startFolder method (missing folder / exception before showing dialog).
-    try { return File.openDialog(prompt, filter, !!multiSelect); } catch (e2) {}
+    try { return __ST_openDialogSafe__(prompt, filter, !!multiSelect); } catch (e2) {}
     return null;
 }
 function favOpenDialogFromDefaultFolder() {
@@ -3293,11 +3640,16 @@ function favOpenDialogFromDefaultFolder() {
             var cam = c.layers.addCamera("Camera 1", [c.width / 2, c.height / 2]);
             cam.label = LABEL_ORANGE;
 
+
+            // Place rig layers at CTI
+            try { _stPlaceLayerAtCTI(cam, c); } catch (eCTICam) {}
             var nul = c.layers.addNull();
             nul.threeDLayer = true;
             nul.name = "CAM CONTROL";
             nul.label = LABEL_ORANGE;
 
+
+            try { _stPlaceLayerAtCTI(nul, c); } catch (eCTINul) {}
             try { nul.autoOrient = AutoOrientType.NO_AUTO_ORIENT; } catch (e0) {}
             try { nul.property("Transform").property("Orientation").setValue([0, 0, 0]); } catch (e1) {}
             try { nul.property("Transform").property("X Rotation").setValue(0); } catch (e2) {}
@@ -3327,18 +3679,22 @@ function favOpenDialogFromDefaultFolder() {
 
         app.beginUndoGroup("ShineTools - ADD CC ADJUSTMENT LAYER RIG");
         try {
-            var adjA = c.layers.addSolid([1, 1, 1], "ADJ - Color", c.width, c.height, c.pixelAspect, c.duration);
+            var adjA = c.layers.addSolid([1, 1, 1], "COLOR", c.width, c.height, c.pixelAspect, c.duration);
             adjA.adjustmentLayer = true;
             adjA.label = LABEL_LAVENDER;
 
+
+            try { _stPlaceLayerAtCTI(adjA, c); } catch (eCTIAdjA) {}
             addEffect(adjA, "ADBE Easy Levels2") || addEffect(adjA, "ADBE Levels");
             addEffect(adjA, "ADBE HUE SATURATION") || addEffect(adjA, "ADBE Hue Saturation");
             addEffect(adjA, "ADBE CurvesCustom") || addEffect(adjA, "ADBE Curves");
 
-            var adjB = c.layers.addSolid([1, 1, 1], "ADJ - Vignette + Noise", c.width, c.height, c.pixelAspect, c.duration);
+            var adjB = c.layers.addSolid([1, 1, 1], "VIGNETTE + NOISE", c.width, c.height, c.pixelAspect, c.duration);
             adjB.adjustmentLayer = true;
             adjB.label = LABEL_LAVENDER;
 
+
+            try { _stPlaceLayerAtCTI(adjB, c); } catch (eCTIAdjB) {}
             var vig = addEffect(adjB, "CC Vignette");
             if (vig) { try { vig.property("Amount").setValue(200); } catch (eV) {} }
 
@@ -3348,16 +3704,18 @@ function favOpenDialogFromDefaultFolder() {
                 try { noise.property("Use Color Noise").setValue(false); } catch (eN2) {}
             }
 
-            var adjC = c.layers.addSolid([1, 1, 1], "ADJ - Camera Lens Blur", c.width, c.height, c.pixelAspect, c.duration);
+            var adjC = c.layers.addSolid([1, 1, 1], "CAMERA LENS BLUR", c.width, c.height, c.pixelAspect, c.duration);
             adjC.adjustmentLayer = true;
             adjC.label = LABEL_LAVENDER;
 
+
+            try { _stPlaceLayerAtCTI(adjC, c); } catch (eCTIAdjC) {}
             var clb = addEffect(adjC, "ADBE Camera Lens Blur") || addEffect(adjC, "Camera Lens Blur");
             if (clb) { try { clb.property("Blur Amount").setValue(10); } catch (eB) {} }
 
-            adjC.moveToBeginning();
-            adjB.moveAfter(adjC);
-            adjA.moveAfter(adjB);
+            adjB.moveToBeginning();
+            adjC.moveAfter(adjB);
+            adjA.moveAfter(adjC);
 
         } catch (err) {
             warn("Error: " + err.toString());
@@ -3471,7 +3829,16 @@ function favOpenDialogFromDefaultFolder() {
             var layersBefore = c.numLayers;
             app.executeCommand(cmd);
 
-            if (c.numLayers > layersBefore) return;
+            if (c.numLayers > layersBefore) {
+                try {
+                    var sel0 = c.selectedLayers;
+                    if (sel0 && sel0.length) {
+                        _stPlaceLayerAtCTI(sel0[0], c);
+                        _stPlaceLayerSourceInSolidsFolder(sel0[0]);
+                    }
+                } catch (eCreated) {}
+                return;
+            }
 
             var newestSolid = null;
             for (var j = 1; j <= app.project.numItems; j++) {
@@ -3504,6 +3871,7 @@ function favOpenDialogFromDefaultFolder() {
                 try { newLayer = c.layers.add(newestSolid); } catch (eAdd) { newLayer = null; }
                 if (newLayer) {
                     try { newLayer.selected = true; } catch (eSel) {}
+                    try { _stPlaceLayerAtCTI(newLayer, c); } catch (eCTIS) {}
                 }
             } catch (eAddOuter) {}
 
@@ -3535,6 +3903,10 @@ function favOpenDialogFromDefaultFolder() {
             if (!requireProject()) return;
             ensureCompViewer(c);
             app.executeCommand(cmd);
+            try {
+                var sel = c.selectedLayers;
+                if (sel && sel.length) _stPlaceLayerAtCTI(sel[0], c);
+            } catch (eCTIL) {}
         } catch (err) {
             warn("Error running Light command:\n" + err.toString());
         } finally {
@@ -3556,7 +3928,9 @@ function favOpenDialogFromDefaultFolder() {
             var lay = c.layers.addSolid(white, name, c.width, c.height, c.pixelAspect, c.duration);
             try { lay.selected = true; } catch (eSel) {}
         
-            // Ensure the underlying solid footage item lives in SOLIDS (all caps)
+            
+            _stPlaceLayerAtCTI(lay, c);
+// Ensure the underlying solid footage item lives in SOLIDS (all caps)
             _stPlaceLayerSourceInSolidsFolder(lay);
 } catch (err) {
             warn("Error: " + err.toString());
@@ -3573,7 +3947,9 @@ function favOpenDialogFromDefaultFolder() {
             var nul = c.layers.addNull();
             try { nul.selected = true; } catch (eSel) {}
         
-            // Ensure the null's solid source footage item lives in SOLIDS (all caps)
+            
+            _stPlaceLayerAtCTI(nul, c);
+// Ensure the null's solid source footage item lives in SOLIDS (all caps)
             _stPlaceLayerSourceInSolidsFolder(nul);
 } catch (err) {
             warn("Error: " + err.toString());
@@ -3599,7 +3975,12 @@ function favOpenDialogFromDefaultFolder() {
 
             if (cmd) {
                 app.executeCommand(cmd);
-                // The command creates a solid-source FootageItem; move it into canonical SOLIDS.
+                try {
+                    var selL = c.selectedLayers;
+                    if (selL && selL.length) _stPlaceLayerAtCTI(selL[0], c);
+                } catch (eCTI) {}
+
+                                // The command creates a solid-source FootageItem; move it into canonical SOLIDS.
                 try {
                     var sel = c.selectedLayers;
                     if (sel && sel.length) _stPlaceLayerSourceInSolidsFolder(sel[0]);
@@ -3607,7 +3988,9 @@ function favOpenDialogFromDefaultFolder() {
             } else {
                 var adj = c.layers.addSolid([1, 1, 1], "Adjustment Layer", c.width, c.height, c.pixelAspect, c.duration);
                 adj.adjustmentLayer = true;
-                _stPlaceLayerSourceInSolidsFolder(adj);
+                
+                _stPlaceLayerAtCTI(adj, c);
+_stPlaceLayerSourceInSolidsFolder(adj);
             }
         } catch (err) {
             warn("Error: " + err.toString());
@@ -4045,36 +4428,90 @@ function favOpenDialogFromDefaultFolder() {
         ].join("\n");
     }
 
-    function doHardBounce() {
+    function doHardBounce(_deferred) {
         var c = requireComp(); if (!c) return;
-        var props = requireSelectedProps(c); if (!props) return;
+
+        // Some AE UI contexts (notably clicking a property in the Effect Controls panel)
+        // can take a beat before the selection is reflected in comp.selectedLayers[].selectedProperties.
+        // Auto-retry twice so you don't have to click the button twice.
+        if (!$.global.__ST_doHardBounceDeferred) {
+            $.global.__ST_doHardBounceDeferred = function () {
+                try { doHardBounce(true); } catch (e) {}
+            };
+        }
+
+        var props = getSelectedExprProps(c);
+        if (!props || props.length === 0) {
+            if (_deferred !== true) {
+                try {
+                    var token = (new Date()).getTime();
+                    $.global.__ST_hardBounceRetryToken = token;
+
+                    var t1 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_hardBounceRetryToken==" + token + ") $.global.__ST_doHardBounceDeferred(); }catch(e){}});";
+                    var t2 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_hardBounceRetryToken==" + token + ") $.global.__ST_doHardBounceDeferred(); }catch(e){}});";
+
+                    app.scheduleTask(t1, 120, false);
+                    app.scheduleTask(t2, 240, false);
+                } catch (eT) {}
+                return;
+            }
+            warn("Select one or more properties (Position/Scale/Rotation/etc.) in the timeline or Effect Controls, then click the button.");
+            return;
+        }
 
         var host = hostLayerFromProps(c, props);
         if (!host) { warn("Could not determine a layer to host HARD BOUNCE sliders."); return; }
 
         app.beginUndoGroup("ShineTools - HARD BOUNCE");
         try {
+            applyExpressionToProps(props, hardBounceExpr());
             getOrAddSlider(host, "ELASTICITY", 0.30);
             getOrAddSlider(host, "GRAVITY", 10000);
             getOrAddSlider(host, "NUMBER OF BOUNCES", 6);
-            applyExpressionToProps(props, hardBounceExpr());
-        } finally { app.endUndoGroup(); }
+            } finally { app.endUndoGroup(); }
     }
 
-    function doInertialBounce() {
+    function doInertialBounce(_deferred) {
         var c = requireComp(); if (!c) return;
-        var props = requireSelectedProps(c); if (!props) return;
+
+        // Some AE UI contexts (notably clicking a property in the Effect Controls panel)
+        // can take a beat before the selection is reflected in comp.selectedLayers[].selectedProperties.
+        // Auto-retry twice so you don't have to click the button twice.
+        if (!$.global.__ST_doInertialBounceDeferred) {
+            $.global.__ST_doInertialBounceDeferred = function () {
+                try { doInertialBounce(true); } catch (e) {}
+            };
+        }
+
+        var props = getSelectedExprProps(c);
+        if (!props || props.length === 0) {
+            if (_deferred !== true) {
+                try {
+                    var token = (new Date()).getTime();
+                    $.global.__ST_inertialBounceRetryToken = token;
+
+                    var t1 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_inertialBounceRetryToken==" + token + ") $.global.__ST_doInertialBounceDeferred(); }catch(e){}});";
+                    var t2 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_inertialBounceRetryToken==" + token + ") $.global.__ST_doInertialBounceDeferred(); }catch(e){}});";
+
+                    app.scheduleTask(t1, 120, false);
+                    app.scheduleTask(t2, 240, false);
+                } catch (eT) {}
+                return;
+            }
+            warn("Select one or more properties (Position/Scale/Rotation/etc.) in the timeline or Effect Controls, then click the button.");
+            return;
+        }
 
         var host = hostLayerFromProps(c, props);
         if (!host) { warn("Could not determine a layer to host INERTIAL BOUNCE sliders."); return; }
 
         app.beginUndoGroup("ShineTools - INERTIAL BOUNCE");
         try {
+            applyExpressionToProps(props, inertialBounceExpr());
             getOrAddSlider(host, "AMOUNT", 20);
             getOrAddSlider(host, "FREQUENCY", 3.5);
             getOrAddSlider(host, "DECAY", 6);
-            applyExpressionToProps(props, inertialBounceExpr());
-        } finally { app.endUndoGroup(); }
+            } finally { app.endUndoGroup(); }
     }
 
     function doWiggle(_deferred) {
@@ -4092,7 +4529,18 @@ function favOpenDialogFromDefaultFolder() {
         var props = getSelectedExprProps(c);
         if (!props || props.length === 0) {
             if (_deferred !== true) {
-                try { app.scheduleTask("$.global.__ST_doWiggleDeferred();", 25, false); } catch (eT) {}
+                // Some UI paths (especially Effect Controls) lag a bit before the selected property shows up.
+                // Auto-retry twice so you don't have to click the button twice.
+                try {
+                    var token = (new Date()).getTime();
+                    $.global.__ST_wiggleRetryToken = token;
+
+                    var t1 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_wiggleRetryToken==" + token + ") $.global.__ST_doWiggleDeferred(); }catch(e){}});";
+                    var t2 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_wiggleRetryToken==" + token + ") $.global.__ST_doWiggleDeferred(); }catch(e){}});";
+
+                    app.scheduleTask(t1, 120, false);
+                    app.scheduleTask(t2, 240, false);
+                } catch (eT) {}
                 return;
             }
             warn("Select one or more properties (Position/Scale/Rotation/etc.) in the timeline, then click the button.");
@@ -4142,10 +4590,10 @@ function favOpenDialogFromDefaultFolder() {
                 removeEffectByName(host, "AMOUNT");
             } else {
                 // ADD
+                applyExpressionToProps(props, wiggleExpr());
                 getOrAddSlider(host, "FREQ", 2);
                 getOrAddSlider(host, "AMOUNT", 100);
-                applyExpressionToProps(props, wiggleExpr());
-            }
+}
         } finally { app.endUndoGroup(); }
     }
 
@@ -4887,8 +5335,9 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
             // Detect Option/Alt key (Option on Mac maps to altKey)
             var ks = ScriptUI.environment.keyboardState;
             var use4444 = (ks && ks.altKey === true);
+            var queueOnly = (ks && ks.shiftKey === true);
 
-            var rsTemplate = "Best Settings"; // Always Best Settings
+var rsTemplate = "Best Settings"; // Always Best Settings
             var omTemplateCandidates = use4444
                 ? [
                     "PRORES 4444 RGB+ALPHA",
@@ -4964,17 +5413,53 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
 
             om.file = outFile;
 
-            // Close undo group BEFORE render to avoid mismatch warning
+            // Close undo group BEFORE leaving (avoids mismatch warning)
             app.endUndoGroup();
             undoOpen = false;
 
-            // Render (AE renders the whole queue)
-            app.project.renderQueue.render();
+            // SHIFT-click = Queue only (no auto-render). Lets you CMD+H / Show Desktop, etc.
+            if (queueOnly) {
+                // IMPORTANT: Do NOT toggle the Render Queue panel here.
+                // The menu command is a toggle (open/close). If the user already has it open,
+                // executing it would close it—which is what you were seeing.
+                // So for SHIFT-click we simply leave the RQ item queued and return.
+                return;
+            }
 
-            // Reveal file
-            _revealIfRequested(outFile);
+// Normal click = Auto-render (original behavior), but defer a tick so the Save dialog fully releases.
+            try {
+                // Capture whether CMD was held at click-time (since render runs later)
+                var _doReveal = false;
+                try { _doReveal = (typeof _isCmdDown === "function" && _isCmdDown()); } catch (eC) {}
 
-        } catch (err) {
+                $.global.__ST_lastRenderOutFileFS = outFile.fsName;
+                $.global.__ST_lastRenderReveal = _doReveal;
+
+                if (!$.global.__ST_RQRenderAndReveal__) {
+                    $.global.__ST_RQRenderAndReveal__ = function () {
+                        try {
+                            var p = $.global.__ST_lastRenderOutFileFS;
+                            var rev = $.global.__ST_lastRenderReveal === true;
+                            var f = (p ? new File(p) : null);
+
+                            app.project.renderQueue.render();
+
+                            if (rev && f) {
+                                try { revealInOS(f); } catch (eR) {}
+                            }
+                        } catch (e) {
+                            alert("Render failed:\n" + e.toString());
+                        }
+                    };
+                }
+
+                app.scheduleTask('$.global.__ST_RQRenderAndReveal__();', 50, false);
+            } catch (eSched) {
+                // Fallback: render immediately if scheduling fails
+                app.project.renderQueue.render();
+                _revealIfRequested(outFile);
+            }
+} catch (err) {
             if (undoOpen) {
                 try { app.endUndoGroup(); } catch (eEnd) {}
             }
@@ -5427,12 +5912,16 @@ var fSolids  = _stGetOrCreateCanonicalSolidsFolderRoot();
         // ------------------------------------------------------------
         // Move items (single-pass snapshot to avoid index-shift staging)
         // ------------------------------------------------------------
+        // NOTE (2026-01-28):
+        // Previously, this only organized ROOT-level items. This meant that
+        // mis-filed items (e.g. a .psd inside FOOTAGE) would not be corrected.
+        // We now scan ALL project items and move them to the appropriate
+        // canonical folder (FOOTAGE / IMAGES / AUDIO / SOLIDS / PRECOMPS).
         var moveList = [];
         for (var i = 1; i <= proj.numItems; i++) {
             var it0 = proj.item(i);
             if (!it0) continue;
-            if (isFolder(it0)) continue;            // ignore folders
-            if (it0.parentFolder !== root) continue; // ROOT ONLY
+            if (isFolder(it0)) continue; // ignore folders
             moveList.push(it0);
         }
 
@@ -6686,6 +7175,65 @@ function __ST_resumeBackgroundTasks__(){
     }catch(e2){}
 }
 
+// ============================================================
+// PASS A+: Global modal wrappers + re-entrancy guard
+//  - Prevents "Cannot run a script while a modal dialog is waiting for response"
+//  - Pauses scheduleTask-based background loops around ANY modal call
+//  - Adds a simple global "busy" lock to prevent double-fire while running
+// ============================================================
+
+function __ST_runExclusive__(fn){
+    try {
+        if (!$.global) $.global = {};
+        if ($.global.__ST_BUSY__ === true) return null;
+        $.global.__ST_BUSY__ = true;
+    } catch (e0) {
+        // if $.global isn't writable, just run without the lock
+        try { return fn(); } catch (e1) { throw e1; }
+    }
+
+    try {
+        return fn();
+    } finally {
+        try { $.global.__ST_BUSY__ = false; } catch (e2) {}
+    }
+}
+
+function __ST_withModalSafety__(fn){
+    return __ST_runExclusive__(function(){
+        __ST_pauseBackgroundTasks__();
+        try {
+            return fn();
+        } finally {
+            __ST_resumeBackgroundTasks__();
+        }
+    });
+}
+
+function __ST_promptSafe__(question, defaultText){
+    return $.global.__ST_withModalSafety__(function(){
+        return prompt(question, defaultText);
+    });
+}
+
+function __ST_confirmSafe__(question){
+    return $.global.__ST_withModalSafety__(function(){
+        return confirm(question);
+    });
+}
+
+function __ST_openDialogSafe__(title, filter, multiSelect){
+    return $.global.__ST_withModalSafety__(function(){
+        return File.openDialog(title, filter, multiSelect);
+    });
+}
+
+function __ST_selectDialogSafe__(title){
+    return $.global.__ST_withModalSafety__(function(){
+        return Folder.selectDialog(title);
+    });
+}
+
 // Runs after a short delay (scheduled) so any in-flight scheduled tasks can finish
 // before we open a modal dialog.
 function __ST_RunOffsetLayersModal__(){
@@ -6772,7 +7320,7 @@ function offsetSelectedLayers_ShineTools(){
 
     // Open the dialog AFTER a short delay so any in-flight scheduled tasks can complete
     // (prevents AE modal-dialog scheduleTask conflicts).
-    try { app.scheduleTask("$.global.__ST_RunOffsetLayersModal__();", 260, false); } catch (e1) {
+    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ $.global.__ST_RunOffsetLayersModal__(); });", 260, false); } catch (e1) {
         // Fallback: try immediately
         try { ($.global.__ST_RunOffsetLayersModal__ || __ST_RunOffsetLayersModal__)(); } catch (e2) {}
     }
@@ -6784,6 +7332,16 @@ function buildUI(thisObj) {
         var pal = (thisObj instanceof Panel)
             ? thisObj
             : new Window("palette", "ShineTools_v" + SHINE_VERSION, undefined, { resizeable: true });
+
+        // Failsafe: if the panel loses focus/deactivates, stop any hover tick so it can't stick running.
+        try {
+            pal.onDeactivate = function(){
+                try { _hoverClearInternal(); } catch(e0) {}
+                try { _stHoverSetRunning(false); } catch(e1) {}
+                try { _stHoverCancelTask(); } catch(e2) {}
+            };
+        } catch(e) {}
+
 
         // Focus sink (used to kill blue focus ring on buttons after click)
         function ensureFocusSink() {
@@ -7790,6 +8348,13 @@ var home = getHomeDir();
                 b.minimumSize   = [__dlgMinW, __dlgBtnH];
                 b.maximumSize   = [10000, __dlgBtnH];
 
+// __ST__FONTBTN_PAD_PATCH__: give extra horizontal breathing room for the two long primary buttons
+try {
+    if (label === "EXPORT FONT LIST" || label === "COPY FOUND FONTS") {
+        // Increase minimum width so the label doesn't feel cramped.
+        b.minimumSize = [__dlgMinW + 40, __dlgBtnH];
+    }
+} catch (ePad) {}
                 try { defocusButtonBestEffort(b); } catch (eDF) {}
                 return { cell: cell, btn: b };
               }
@@ -8698,10 +9263,23 @@ addGrid2(body, [
 // TEXT TAB: Utilities (uses same accordion behavior + layout as MAIN)
                 textAcc.defineSection("UTILITIES", function(body){
                     addGrid2(body, [
-                        { 
+                        {
                             text: "TEXT BOX",
+                            badgeDot: true,
+                            helpTip: "Creates a Text Box (text + auto-sizing shape)\n\nSHIFT-click (with the TEXT BOX shape layer selected): Toggle Animate % keyframes (0→100 over 30f).",
+                            hoverLabels: { base: "TEXT BOX", hover: "TEXT BOX", optionHover: "TEXT BOX", shiftHover: "ANIMATE" },
                             onClick: function(){
                                 try {
+                                    var ks = ScriptUI.environment.keyboardState;
+                                    if (ks && ks.shiftKey) {
+                                        if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.toggleAnimateKeys) {
+                                            $.global.ShineTools.TextBox.toggleAnimateKeys(30);
+                                        } else {
+                                            alert("TEXT BOX module not initialized.");
+                                        }
+                                        return;
+                                    }
+
                                     if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.makeTextBox) {
                                         $.global.ShineTools.TextBox.makeTextBox();
                                     } else {
@@ -8717,7 +9295,9 @@ addGrid2(body, [
                             onClick: createShapesFromText_Util,
                             helpTip: "Runs: Layer > Create > Create Shapes from Text\n\nSelect one or more TEXT layers, then click."
                         }
+
                     ]);
+
                 });
 
                 
@@ -10041,7 +10621,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
             try {
                 if (__autoCheckEnabled) {
-                    app.scheduleTask("try{ if($.global.__ShineToolsUpdateAutoCheck) $.global.__ShineToolsUpdateAutoCheck(); }catch(e){}", 250, false);
+                    app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{ if($.global.__ShineToolsUpdateAutoCheck) $.global.__ShineToolsUpdateAutoCheck(); }catch(e){}});", 250, false);
                 }
             } catch (eS) {}
 
@@ -10192,7 +10772,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             }
             if (!folder.exists) {
                 // If the shared volume isn't mounted, fall back to prompting.
-                try { folder = Folder.selectDialog("Shared volume not found. Choose where to save your submission (.txt)"); } catch(eFD) { folder = null; }
+                try { folder = __ST_selectDialogSafe__("Shared volume not found. Choose where to save your submission (.txt)"); } catch(eFD) { folder = null; }
             }
             if (!folder) {
                 reqStatus.text = "Save canceled.";
@@ -10724,28 +11304,32 @@ if (w && dd.list) {
         }
 
         function _blinkSectionLabel(st, seqAtCall) {
-            if (!st) return;
-            try { st._blinkSeq = seqAtCall; } catch (e0) {}
-            try { st._isBlinking = true; } catch (eB) {}
-            var __isExp = (st && st._getExpanded && st._getExpanded()) ? true : false;
-            _setLabelColor(st, __isExp ? SECTION_LABEL_COLOR_IDLE : SECTION_LABEL_COLOR_EXPANDED);
+    if (!st) return;
+    try { st._blinkSeq = seqAtCall; } catch (e0) {}
+    try { st._isBlinking = true; } catch (eB) {}
 
-            // revert after ~5 frames; ignore if another blink started
+    // Flash YELLOW immediately (5-ish frames), then revert to the correct state color.
+    try { _setLabelColor(st, SECTION_LABEL_COLOR_EXPANDED); } catch (eF) {}
+
+    // revert after ~5 frames; ignore if another blink started
+    try {
+        var fn = "__ShineTools_BlinkLabel__";
+        $.global[fn] = function () {
             try {
-                var fn = "__ShineTools_BlinkLabel__";
-                $.global[fn] = function () {
-                    try {
-                        if (!st || !st.graphics) return;
-                        if (st._blinkSeq !== seqAtCall) return;
-                        try { st._isBlinking = false; } catch (eB2) {}
-                        var col = (st && st._getExpanded && st._getExpanded()) ? SECTION_LABEL_COLOR_EXPANDED : SECTION_LABEL_COLOR_IDLE;
-                        _setLabelColor(st, col);
-                        try { st.parent && st.parent.parent && st.parent.parent.update(); } catch (eU) {}
-                    } catch (e) {}
-                };
-                app.scheduleTask(fn + "()", BLINK_FRAME_MS * BLINK_FRAMES, false);
-            } catch (e1) {}
-        }
+                if (!st || !st.graphics) return;
+                if (st._blinkSeq !== seqAtCall) return;
+                try { st._isBlinking = false; } catch (eB2) {}
+                var col = (st && st._getExpanded && st._getExpanded()) ? SECTION_LABEL_COLOR_EXPANDED : SECTION_LABEL_COLOR_IDLE;
+                _setLabelColor(st, col);
+                try { st.parent && st.parent.parent && st.parent.parent.update(); } catch (eU) {}
+            } catch (e) {}
+        };
+
+        // ALWAYS schedule the revert (safe-mode should not block a UI flash)
+        try { app.scheduleTask(fn + "()", BLINK_FRAME_MS * BLINK_FRAMES, false); } catch (eSched) {}
+    } catch (e1) {}
+}
+
 
 
         var ARROW_COLOR_IDLE  = [0.35, 0.35, 0.35, 1]; // dark gray
@@ -10801,7 +11385,15 @@ function _stCancelRelayoutTick() {
 
 // Request a relayout soon (debounced). If scopeGroup is null, falls back to pal.
 function requestRelayoutSoon(scopeGroup, delayMs) {
+    
     try {
+        if (ST && ST.SAFE_MODE === true) {
+            // Synchronous relayout (no scheduleTask) for stability.
+            relayoutScoped(scopeGroup || pal);
+            return;
+        }
+    } catch (eSafeRL) {}
+try {
         _stQueueRelayout(scopeGroup || pal);
         _stCancelRelayoutTick();
 
@@ -11031,49 +11623,58 @@ function addDropdownHeader(col, text, insetPx) {
         // The real button is slightly wider than the wrapper; the wrapper's fixed width crops the ring.
 
         // Hover + Option label engine (3-state)
+        // ==========================================================
+        // Hover label helpers (Modifier-aware) — NO scheduleTask polling
+        // ----------------------------------------------------------
+        // NOTE:
+        // Older builds used a repeating app.scheduleTask() loop (50ms) to
+        // live-update hover labels when Option/Shift were pressed while
+        // hovering a button. ScriptUI polling can keep the UI "active"
+        // even when the cursor is elsewhere (e.g. Comp Viewer), which can
+        // cause AE cursor-state flicker (resize / camera orbit icons).
+        //
+        // This implementation updates hover labels only on:
+        //   - mouseover (initial)
+        //   - mousemove while still over the button (if modifiers changed)
+        // …and restores on mouseout. No background timers.
+        // ==========================================================
+
         var _hoverBtn = null;
         var _hoverText = "";
         var _hoverOptionText = "";
         var _hoverShiftText = "";
         var _hoverLastAlt = null;
         var _hoverLastShift = null;
-        var _hoverTask = 0;
-
-        var HOVER_TICK_FN = "__ShineTools_c83_HoverTick__";
 
         function _hoverClearInternal() {
-            if (_hoverTask) { try { app.cancelTask(_hoverTask); } catch (e0) {} _hoverTask = 0; }
             _hoverBtn = null;
             _hoverLastAlt = null;
             _hoverLastShift = null;
         }
 
-        
-        // Expose a global canceller so we can pause hover polling when a modal dialog is shown
-        // (AE cannot execute scheduled tasks while a modal dialog is open).
-        $.global.__ShineTools_CancelHoverPoll__ = function(){
-            try{ _hoverClearInternal(); }catch(e){}
+        // Expose a global canceller so we can pause hover state when a modal dialog is shown
+        $.global.__ShineTools_CancelHoverPoll__ = function () {
+            try { _hoverClearInternal(); } catch (e) {}
         };
 
-function _hoverSafeSetText(btn, txt) { try { btn.text = txt; } catch (e) {} }
+        function _hoverSafeSetText(btn, t) { try { btn.text = t; } catch (e) {} }
 
-        $.global[HOVER_TICK_FN] = function () {
-            _hoverTask = 0;
-            if (!_hoverBtn) return;
-
+        function _hoverComputeText() {
             var altNow = isOptionDown();
             var shiftNow = isShiftDown();
+            var next = shiftNow ? (_hoverShiftText || _hoverText) : (altNow ? _hoverOptionText : _hoverText);
+            return { alt: altNow, shift: shiftNow, text: next };
+        }
 
-            if (_hoverLastAlt === null || _hoverLastShift === null || altNow !== _hoverLastAlt || shiftNow !== _hoverLastShift) {
-                _hoverLastAlt = altNow;
-                _hoverLastShift = shiftNow;
-
-                var next = shiftNow ? (_hoverShiftText || _hoverText) : (altNow ? _hoverOptionText : _hoverText);
-                _hoverSafeSetText(_hoverBtn, next);
+        function _hoverUpdateIfChanged() {
+            if (!_hoverBtn) return;
+            var st = _hoverComputeText();
+            if (_hoverLastAlt === null || _hoverLastShift === null || st.alt !== _hoverLastAlt || st.shift !== _hoverLastShift) {
+                _hoverLastAlt = st.alt;
+                _hoverLastShift = st.shift;
+                _hoverSafeSetText(_hoverBtn, st.text);
             }
-
-            try { _hoverTask = app.scheduleTask(HOVER_TICK_FN + "()", 50, false); } catch (e1) {}
-        };
+        }
 
         function _hoverStart(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
             _hoverBtn = btn;
@@ -11083,16 +11684,93 @@ function _hoverSafeSetText(btn, txt) { try { btn.text = txt; } catch (e) {} }
             _hoverLastAlt = null;
             _hoverLastShift = null;
 
-            var next0 = isShiftDown() ? (_hoverShiftText || _hoverText) : (isOptionDown() ? _hoverOptionText : _hoverText);
-            _hoverSafeSetText(btn, next0);
-
-            if (_hoverTask) { try { app.cancelTask(_hoverTask); } catch (e0) {} _hoverTask = 0; }
-            try { _hoverTask = app.scheduleTask(HOVER_TICK_FN + "()", 50, false); } catch (e1) {}
+            _hoverUpdateIfChanged(); // initial set (uses current modifiers)
+            _stHoverEnsureTick();
         }
 
         function _hoverStop(btn, baseText) {
             if (_hoverBtn === btn) _hoverClearInternal();
             _hoverSafeSetText(btn, baseText);
+            _stHoverStopTickIfIdle();
+        }
+
+        // ------------------------------------------------------------
+        // Modifier-hover live update WITHOUT a permanent background loop
+        // ------------------------------------------------------------
+        // NOTE: ScriptUI doesn't emit reliable modifier-key events. To allow
+        // labels to flip the instant Option/Shift is pressed (even if the mouse
+        // is still), we run a tiny scheduleTask poll ONLY while a button is hovered.
+        // We hard-stop on mouseout and on panel deactivation.
+
+        var __ST_HOVER_TICK_NAME__ = "__ST_ShineTools_HoverTick__";
+
+        function _stHoverIsRunning(){
+            try { return !!$.global.__ST_hoverTickRunning; } catch(e) { return false; }
+        }
+
+        function _stHoverSetRunning(v){
+            try { $.global.__ST_hoverTickRunning = !!v; } catch(e) {}
+        }
+
+        function _stHoverCancelTask(){
+            try {
+                var tid = $.global.__ST_hoverTickTaskId;
+                if (tid != null && app.cancelTask) {
+                    try { app.cancelTask(tid); } catch(e0) {}
+                }
+            } catch(e) {}
+            try { $.global.__ST_hoverTickTaskId = null; } catch(e1) {}
+        }
+
+        function _stHoverEnsureTick(){
+            try {
+                if (_stHoverIsRunning()) return;
+                _stHoverSetRunning(true);
+                // Expose tick in global scope (required for scheduleTask string)
+                $.global[__ST_HOVER_TICK_NAME__] = function(){
+                    try {
+                        // Stop if nothing hovered
+                        if (!_hoverBtn) {
+                            _stHoverSetRunning(false);
+                            _stHoverCancelTask();
+                            return;
+                        }
+                        // Update label if modifiers changed
+                        _hoverUpdateIfChanged();
+                    } catch(eTick) {}
+
+                    // Re-schedule only if still hovered
+                    try {
+                        if (_hoverBtn) {
+                            $.global.__ST_hoverTickTaskId = app.scheduleTask("$.global." + __ST_HOVER_TICK_NAME__ + "()", 120, false);
+                        } else {
+                            _stHoverSetRunning(false);
+                            _stHoverCancelTask();
+                        }
+                    } catch(eRes) {
+                        _stHoverSetRunning(false);
+                        _stHoverCancelTask();
+                    }
+                };
+
+                // Kick first tick
+                try {
+                    $.global.__ST_hoverTickTaskId = app.scheduleTask("$.global." + __ST_HOVER_TICK_NAME__ + "()", 120, false);
+                } catch(eKick) {
+                    _stHoverSetRunning(false);
+                }
+            } catch(e) {
+                _stHoverSetRunning(false);
+            }
+        }
+
+        function _stHoverStopTickIfIdle(){
+            // If nothing is hovered, stop any scheduled tick.
+            try {
+                if (_hoverBtn) return;
+                _stHoverSetRunning(false);
+                _stHoverCancelTask();
+            } catch(e) {}
         }
 
         function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
@@ -11105,10 +11783,7 @@ function _hoverSafeSetText(btn, txt) { try { btn.text = txt; } catch (e) {} }
             btn.addEventListener("mouseout",  function () { _hoverStop(btn, baseText); });
         }
 
-
-        
-
-        // -------------------------
+// -------------------------
         // Per-section BUTTON order (Option+Click on section header)
         // -------------------------
         var __ST_BTN_ORDER_SECTION = "ShineTools";
@@ -12773,7 +13448,9 @@ mainAcc.defineSection("CLEAN UP", function(body){
 
 mainAcc.defineSection("RENDER", function(body){
     addGrid2(body, [
-        { text: "PRORES 422...", onClick: renderPRORES422WithSaveDialog, badgeDot: true, hoverLabels: { base: "PRORES 422...", hover: "PRORES 422...", optionHover: "PRORES 4444..." } },
+        { text: "PRORES 422...", onClick: renderPRORES422WithSaveDialog, badgeDot: true,
+  helpTip: "Click: Save + auto-render ProRes 422 (may keep AE in focus during render).\nOPTION: Save + auto-render ProRes 4444 (RGB+Alpha).\nSHIFT: Save + add to Render Queue only (no auto-render; you can CMD+H / Show Desktop).",
+  hoverLabels: { base: "PRORES 422...", hover: "PRORES 422...", optionHover: "PRORES 4444...", shiftHover: "QUEUE ONLY" } },
         {
             text: "FRAME AS .JPG...",
             onClick: saveCurrentFramePSDOrJPG,
@@ -12950,7 +13627,7 @@ var collapseGap = content.add("group");
     // Run several times over the first ~5 seconds to catch late-created Solids folders.
     try {
         for (var dly = 250; dly <= 5250; dly += 500) {
-            app.scheduleTask("try{$.global.__ShineToolsCleanupSolidsFoldersBestEffort&&$.global.__ShineToolsCleanupSolidsFoldersBestEffort();}catch(e){}", dly, false);
+            app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{$.global.__ShineToolsCleanupSolidsFoldersBestEffort&&$.global.__ShineToolsCleanupSolidsFoldersBestEffort();}catch(e){}});", dly, false);
         }
     } catch (eT) {}
 
@@ -13384,13 +14061,13 @@ if (myPal instanceof Window) {
 
     // Final layout pass after show (helps ScriptUI settle bounds).
     try { $.global.__ShineToolsKickLayout(); } catch (e7) {}
-    try { app.scheduleTask("__ShineToolsKickLayout()", 30, false); } catch (e8) {}
-    try { app.scheduleTask("__ShineToolsKickLayout()", 120, false); } catch (e9) {}
+    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 30, false); } catch (e8) {}
+    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 120, false); } catch (e9) {}
 } else {
     // Dockable panels often need an extra layout pass AFTER they are actually drawn.
     try { $.global.__ShineToolsKickLayout(); } catch (e10) {}
-    try { app.scheduleTask("__ShineToolsKickLayout()", 30, false); } catch (e11) {}
-    try { app.scheduleTask("__ShineToolsKickLayout()", 120, false); } catch (e12) {}
+    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 30, false); } catch (e11) {}
+    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 120, false); } catch (e12) {}
 }
 
 })(this);
