@@ -1,6 +1,5 @@
 /*  ShineTools_v1.0.jsx  (Tabbed UI)
-// BUILD: YellowLine merge + Dot removed | FIX PACK b (Animate Stroke hover + Option START Trim Paths) | 2026-01-17T17:51:19.217244Z
-    Tabs:
+// BUILD: YellowLine merge + Dot removed | FIX PACK b (Animate Stroke hover + Option START Trim Paths) | ORGANIZE BIN primary 01_ folder detection (01_MAIN/01_SEQ) | 2026-02-19T15:36:13.668976ZTabs:
       - MAIN  (your current full tool)
       - TEXT  (Break Apart Text tools)
 
@@ -112,6 +111,19 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
     // Centralized so paths stay consistent across loader, presets, logos, etc.
     // ============================================================
     function _stGetSharedRootFolder() {
+        // Prefer the SYSTEM payload location (installer drops assets here):
+        //   /Library/Application Support/ShineTools
+        // Fallbacks:
+        //   ~/Library/Application Support/ShineTools  (user-level payload)
+        //   ~/Library/Application Support/ShineTools           (legacy root)
+        try {
+            var sysPayload = new Folder("/Library/Application Support/ShineTools");
+            if (sysPayload && sysPayload.exists) return sysPayload;
+
+            var userPayload = new Folder("~/Library/Application Support/ShineTools");
+            if (userPayload && userPayload.exists) return userPayload;
+        } catch (_p) {}
+
         // USER Application Support (macOS): ~/Library/Application Support/ShineTools
         // NOTE: In After Effects ExtendScript on macOS, Folder.appData may resolve to the SYSTEM /Library.
         // Folder.userData is more reliable for the current user. We then step up to ".../Application Support".
@@ -719,10 +731,8 @@ function _settingsGet(section, key, defaultValue) {
             } catch (eSet) {}
 
             if (ST && ST.SAFE_MODE === true) {
-                // In SAFE_MODE, do not schedule restore; just show message then immediately blank.
-                try { if (dd.items && dd.items.length > 0) { dd.items[0].text = ' '; dd.selection = 0; } } catch(eSM) {}
-                try { dd.__shineProgrammatic = false; } catch(eSM2) {}
-                return;
+                // In SAFE_MODE we still allow the "Added" flash, but we keep it modal-safe via scheduleTask.
+                // (No immediate blanking.)
             }
 
             dd.__shineMsgTaskId = app.scheduleTask(
@@ -734,6 +744,23 @@ function _settingsGet(section, key, defaultValue) {
     }
 
             
+
+
+
+    // Flash "Added" inside a dropdown for N frames (defaults to 20).
+    // Uses active comp frameRate when available; falls back to 30fps.
+    function _ddFlashAddedFrames(dd, frames) {
+        try {
+            var fr = 30;
+            try {
+                var comp = (app && app.project) ? app.project.activeItem : null;
+                if (comp && (comp instanceof CompItem) && comp.frameRate) fr = comp.frameRate;
+            } catch (eFR) {}
+            var f = (frames && frames > 0) ? frames : 20;
+            var secs = f / Math.max(1, fr);
+            _ddShowTempMessage(dd, "Added", secs);
+        } catch (e) {}
+    }
 
 
 
@@ -762,6 +789,10 @@ function _settingsGet(section, key, defaultValue) {
                 _withUndoGroup("Apply Text Preset", function () {
                 
                     // Pick target: selected text layer if available, otherwise create a new text layer.
+                // Also capture the originally selected layer so a newly created layer can be inserted ABOVE it.
+                var __stRefLayer = null;
+                try { if (comp.selectedLayers && comp.selectedLayers.length) __stRefLayer = comp.selectedLayers[0]; } catch (eRef0) {}
+
                 var target = null;
                 if (comp.selectedLayers && comp.selectedLayers.length > 0) {
                     var l = comp.selectedLayers[0];
@@ -769,8 +800,20 @@ function _settingsGet(section, key, defaultValue) {
                 }
                 if (!target) {
                     target = comp.layers.addText("Enter Text");
-                }
 
+                    // Make the layer bar START at the CTI
+                    try {
+                        var t0 = comp.time;
+                        var d = t0 - target.inPoint;
+                        target.startTime = target.startTime + d;
+                        target.inPoint   = t0;
+                        // keep it alive to comp end (best effort)
+                        if (target.outPoint < t0) target.outPoint = comp.duration;
+                    } catch (eCTI) {}
+
+                    // Insert ABOVE the originally selected layer (if any)
+                    try { if (__stRefLayer) { target.moveBefore(__stRefLayer); } } catch (eMv0) {}
+                }
                 // Ensure only target is selected (AE can be picky about applyPreset context)
                 try {
                     for (var i = 1; i <= comp.numLayers; i++) comp.layer(i).selected = false;
@@ -1395,8 +1438,8 @@ function _stPlaceLayerAtCTI(layer, comp) {
         app.beginUndoGroup("ShineTools - COPY UNIQUE COMP");
 
         try {
-            var precompsFolder = _findOrCreateRootFolder("PRECOMPS");
-            if (!precompsFolder) { alert("Could not create/find PRECOMPS folder in the Project panel."); return; }
+            var precompsFolder = _findOrCreateRootFolder("07_PRECOMPS");
+            if (!precompsFolder) { alert("Could not create/find 07_PRECOMPS folder in the Project panel."); return; }
 
             var dupMap = {};
 
@@ -1643,6 +1686,7 @@ function _stPlaceLayerAtCTI(layer, comp) {
 
     // ===== Tags =====
     var TAG_PRECOMP_LAYER = "SHINE_TEXT_BOX_PRECOMP_LAYER";
+    var TAG_PRECOMP_COMP  = "ST_PRECOMP_COMP";
     var TAG_TEXT_LAYER    = "SHINE_TEXT_BOX_TEXT_LAYER";
     var TAG_BOX_LAYER     = "SHINE_TEXT_BOX_BOX_LAYER";
 
@@ -1666,7 +1710,7 @@ function _stPlaceLayerAtCTI(layer, comp) {
     var ANIMATE_FRAMES = 30;
 
     // Watch cadence
-    var WATCH_INTERVAL_MS = 200;
+    var WATCH_INTERVAL_MS = 1000; // (disabled watcher) kept for legacy
 
     // Pause watcher while user is editing/has text selected
     var EDIT_PAUSE_MS = 5000;
@@ -2170,7 +2214,14 @@ try {
 
             var pc = parentComp.layers.precompose(idx, initialName, true);
 
-            var precompLayer = parentComp.layer(insertAt);
+            // Route the newly-created precomp comp into 07_PRECOMPS
+            try { var _pf = _stGetOrCreatePrecompsFolderRoot(); if (_pf && pc) pc.parentFolder = _pf; } catch (ePF) {}
+
+            
+
+            // Tag the precomp comp so ORGANIZE BIN can route it later if needed
+            try { if (pc) pc.comment = TAG_PRECOMP_COMP; } catch (eTag) {}
+var precompLayer = parentComp.layer(insertAt);
             if (precompLayer) {
                 setCommentSafe(precompLayer, TAG_PRECOMP_LAYER);
                 try { precompLayer.collapseTransformation = true; } catch (e1) {}
@@ -2273,10 +2324,9 @@ try {
  } catch (eDockSel) {}
 
             }
-
-            mod.ensureWatcherBurst(1500);
+            // TextBox watcher removed (no continuous polling needed)
 } catch (e) {
-            alert("TEXT BOX precomp error:\n" + e.toString());
+            try { $.writeln("TEXT BOX precomp error: " + e.toString()); } catch (_e) {}
         }
     };
 
@@ -2536,8 +2586,7 @@ try {
                 try {
                     var c = app.project && app.project.activeItem;
                     if (_watcherNeedsToRun(c)) {
-                        app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.__watchTick(); });', WATCH_INTERVAL_MS, false);
-                    } else {
+                        /* watcher disabled */} else {
                         mod.__watcher.running = false;
                     }
                 } catch (eRun) {
@@ -2548,27 +2597,18 @@ try {
     };
 
     mod.ensureWatcherRunning = function(){
-        if (!mod.__watcher.running) {
-            mod.__watcher.running = true;
-            app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.__watchTick(); });', WATCH_INTERVAL_MS, false);
-        }
+        // Disabled: no continuous polling needed for TextBox UX anymore.
+        try { mod.__watcher.running = false; } catch (e) {}
+        return;
     };
 
     // Run the watcher only for a short burst (for setup / expression application),
     // then stop it to avoid AE cursor/tool icon flicker while the panel is open.
     mod.ensureWatcherBurst = function(durationMs){
-        try {
-            if (durationMs === undefined || durationMs === null) durationMs = 1500;
-            durationMs = Math.max(200, Math.min(6000, durationMs|0));
-
-            if (!mod.__watcher.running) {
-                mod.__watcher.running = true;
-                app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.__watchTick(); });', WATCH_INTERVAL_MS, false);
-            }
-
-            // Force-stop after the burst window.
-            app.scheduleTask('$.global.__ST_withModalSafety__(function(){ try{ $.global.ShineTools.TextBox.__watcher.running = false; }catch(e){} });', durationMs, false);
-        } catch (e) {}
+        // Disabled: no scheduleTask watcher bursts. We now explicitly select the box layer
+        // via the existing open/select scheduleTasks when creating/precomposing the TextBox.
+        try { mod.__watcher.running = false; } catch (e) {}
+        return;
     };
 
 
@@ -2691,8 +2731,7 @@ try {
         app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.applyExpressions(' + compId + ',' + bi + '); });', 50, false);
 
         app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.precomposeTextBox(' + compId + ',' + ti + ',' + bi + ',"' + initialName.replace(/"/g,'\\"') + '"); });', 120, false);
-
-        mod.ensureWatcherBurst(1500);
+            // TextBox watcher removed (no continuous polling needed)
 };
 
 
@@ -3577,6 +3616,11 @@ function favOpenDialogFromDefaultFolder() {
         } catch (eFC) {}
     }
 
+    // Capture reference layer (for "insert above selected layer") BEFORE we import/create anything.
+    // Import / applyPreset can change the selection, so we must grab it early.
+    var __stRefLayer = null;
+    try { if (comp && comp.selectedLayers && comp.selectedLayers.length) __stRefLayer = comp.selectedLayers[0]; } catch (eRef) {}
+
     // Find existing imported footage for this path (if still in the project).
     function _findExistingFootageForFile(f) {
         try {
@@ -3615,6 +3659,9 @@ function favOpenDialogFromDefaultFolder() {
                 try { lyr.startTime = comp.time; } catch (eST) {}
                 try { lyr.inPoint   = comp.time; } catch (eIP) {}
 
+
+                // Insert ABOVE the originally selected layer (if any)
+                try { if (__stRefLayer) { lyr.moveBefore(__stRefLayer); } } catch (eMv) {}
                 // OPTION held: set blend mode to ADD instead of NORMAL
                 try { if (_isOptDown()) { lyr.blendingMode = BlendingMode.ADD; } } catch (eBM) {}
 
@@ -3637,6 +3684,9 @@ function favOpenDialogFromDefaultFolder() {
 
         app.beginUndoGroup("ShineTools - 3D CAMERA RIG");
         try {
+            var __stRefLayer = null;
+            try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
+
             var cam = c.layers.addCamera("Camera 1", [c.width / 2, c.height / 2]);
             cam.label = LABEL_ORANGE;
 
@@ -3661,6 +3711,13 @@ function favOpenDialogFromDefaultFolder() {
             cam.parent = nul;
             nul.moveBefore(cam);
 
+            // If a layer was selected before running, insert the whole rig above it
+            try {
+                if (__stRefLayer) {
+                    cam.moveBefore(__stRefLayer);
+                    nul.moveBefore(cam);
+                }
+            } catch (eRigMv) {}
             try {
                 var p = cam.property("Transform").property("Position").value;
                 cam.property("Transform").property("Position").setValue([0, 0, p[2]]);
@@ -3679,6 +3736,9 @@ function favOpenDialogFromDefaultFolder() {
 
         app.beginUndoGroup("ShineTools - ADD CC ADJUSTMENT LAYER RIG");
         try {
+            var __stRefLayer = null;
+            try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
+
             var adjA = c.layers.addSolid([1, 1, 1], "COLOR", c.width, c.height, c.pixelAspect, c.duration);
             adjA.adjustmentLayer = true;
             adjA.label = LABEL_LAVENDER;
@@ -3713,11 +3773,18 @@ function favOpenDialogFromDefaultFolder() {
             var clb = addEffect(adjC, "ADBE Camera Lens Blur") || addEffect(adjC, "Camera Lens Blur");
             if (clb) { try { clb.property("Blur Amount").setValue(10); } catch (eB) {} }
 
-            adjB.moveToBeginning();
-            adjC.moveAfter(adjB);
-            adjA.moveAfter(adjC);
-
-        } catch (err) {
+            if (__stRefLayer) {
+                // Insert the rig as a block above the originally-selected layer (keep top->bottom order)
+                try { adjA.moveBefore(__stRefLayer); } catch (eMvA) {}
+                try { adjC.moveBefore(adjA); } catch (eMvC) {}
+                try { adjB.moveBefore(adjC); } catch (eMvB) {}
+            } else {
+                // No selection: keep original behavior (top of stack)
+                adjB.moveToBeginning();
+                adjC.moveAfter(adjB);
+                adjA.moveAfter(adjC);
+            }
+} catch (err) {
             warn("Error: " + err.toString());
         } finally {
             app.endUndoGroup();
@@ -3783,6 +3850,39 @@ function favOpenDialogFromDefaultFolder() {
         try { primary.name = "SOLIDS"; } catch(eRen){}
         return primary;
     }
+    // ============================================================
+    // PRECOMPS FOLDER (ROOT) – canonical helper
+    //  - Used to route newly-created precomps into 07_PRECOMPS
+    //  - Does NOT move existing comps when ORGANIZE BIN is pressed
+    // ============================================================
+    function _stGetOrCreatePrecompsFolderRoot(){
+        if (!app.project) return null;
+        var proj = app.project;
+        var root = proj.rootFolder;
+
+        function _isFolder(it){ return (it && (it instanceof FolderItem)); }
+        function _normName(nm){
+            return String(nm || "")
+                .replace(/^[\s]+/g, "")
+                .replace(/[\s\.]+$/g, "")
+                .toLowerCase();
+        }
+
+        var target = "07_precomps";
+        for (var i = 1; i <= proj.numItems; i++){
+            var it = proj.item(i);
+            if (_isFolder(it) && it.parentFolder === root){
+                if (_normName(it.name) === target) return it;
+            }
+        }
+        try{
+            var f = proj.items.addFolder("07_PRECOMPS");
+            f.parentFolder = root;
+            return f;
+        }catch(e){ return null; }
+    }
+
+
 
     function _stPlaceLayerSourceInSolidsFolder(layer){
         try{
@@ -3820,7 +3920,10 @@ function favOpenDialogFromDefaultFolder() {
             if (!requireProject()) return;
             ensureCompViewer(c);
 
-            var solidIdsBefore = {};
+            
+            var __stRefLayer = null;
+            try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
+var solidIdsBefore = {};
             for (var i = 1; i <= app.project.numItems; i++) {
                 var itB = app.project.item(i);
                 if (isSolidFootageItem(itB)) solidIdsBefore[String(itB.id)] = true;
@@ -3834,6 +3937,7 @@ function favOpenDialogFromDefaultFolder() {
                     var sel0 = c.selectedLayers;
                     if (sel0 && sel0.length) {
                         _stPlaceLayerAtCTI(sel0[0], c);
+                        try { if (__stRefLayer) sel0[0].moveBefore(__stRefLayer); } catch (eMv) {}
                         _stPlaceLayerSourceInSolidsFolder(sel0[0]);
                     }
                 } catch (eCreated) {}
@@ -3872,6 +3976,7 @@ function favOpenDialogFromDefaultFolder() {
                 if (newLayer) {
                     try { newLayer.selected = true; } catch (eSel) {}
                     try { _stPlaceLayerAtCTI(newLayer, c); } catch (eCTIS) {}
+                    try { if (__stRefLayer) newLayer.moveBefore(__stRefLayer); } catch (eMv2) {}
                 }
             } catch (eAddOuter) {}
 
@@ -3922,14 +4027,19 @@ function favOpenDialogFromDefaultFolder() {
 
         app.beginUndoGroup("ShineTools - ADD WHITE SOLID");
         try {
+            var __stRefLayer = null;
+            try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
+
             // Create a plain white solid with no dialog
             var white = [1, 1, 1];
             var name = "WHITE SOLID";
             var lay = c.layers.addSolid(white, name, c.width, c.height, c.pixelAspect, c.duration);
-            try { lay.selected = true; } catch (eSel) {}
+            /* selection set after placement */
         
             
             _stPlaceLayerAtCTI(lay, c);
+            try { if (__stRefLayer) lay.moveBefore(__stRefLayer); } catch (eMv) {}
+            try { lay.selected = true; } catch (eSel) {}
 // Ensure the underlying solid footage item lives in SOLIDS (all caps)
             _stPlaceLayerSourceInSolidsFolder(lay);
 } catch (err) {
@@ -3944,11 +4054,16 @@ function favOpenDialogFromDefaultFolder() {
 
         app.beginUndoGroup("ShineTools - ADD NULL");
         try {
+            var __stRefLayer = null;
+            try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
+
             var nul = c.layers.addNull();
-            try { nul.selected = true; } catch (eSel) {}
+            /* selection set after placement */
         
             
             _stPlaceLayerAtCTI(nul, c);
+            try { if (__stRefLayer) nul.moveBefore(__stRefLayer); } catch (eMv) {}
+            try { nul.selected = true; } catch (eSel) {}
 // Ensure the null's solid source footage item lives in SOLIDS (all caps)
             _stPlaceLayerSourceInSolidsFolder(nul);
 } catch (err) {
@@ -4006,6 +4121,7 @@ _stPlaceLayerSourceInSolidsFolder(adj);
         var c = requireComp();
         if (!c) return;
 
+        var __stRefLayer = (c.selectedLayers && c.selectedLayers.length) ? c.selectedLayers[0] : null;
         var t0 = c.time;
         var t1 = t0 + 1.0;
 
@@ -4017,6 +4133,17 @@ _stPlaceLayerSourceInSolidsFolder(adj);
             var lyr = c.layers.addShape();
             lyr.name = "Trim Line";
             lyr.property("Transform").property("Position").setValue([c.width / 2, c.height / 2]);
+
+            // CTI START: set layer start BEFORE keyframes so the first keyframe lands at the CTI
+            try {
+                var __stDelta0 = t0 - lyr.inPoint;
+                lyr.startTime += __stDelta0;
+                lyr.inPoint = t0;
+                // Ensure the layer lasts long enough for the 30f animation
+                try {
+                    if (lyr.outPoint < t1) lyr.outPoint = Math.min(c.duration, t1 + (1.0 / c.frameRate));
+                } catch (eOP0) {}
+            } catch (eTimeTL0) {}
 
             var root = lyr.property("ADBE Root Vectors Group");
             var grp = root.addProperty("ADBE Vector Group");
@@ -4048,7 +4175,27 @@ _stPlaceLayerSourceInSolidsFolder(adj);
             endProp.setTemporalEaseAtKey(1, [new KeyframeEase(0, 66)], [new KeyframeEase(0, 66)]);
             endProp.setTemporalEaseAtKey(2, [new KeyframeEase(0, 85)], [new KeyframeEase(0, 17)]);
 
-            lyr.moveToBeginning();
+            // Place Trim Line above the originally selected layer (if any)
+            try {
+                if (__stRefLayer) {
+                    lyr.moveBefore(__stRefLayer);
+                } else {
+                    lyr.moveToBeginning();
+                }
+            } catch (eMoveTL) {
+                try { lyr.moveToBeginning(); } catch (eMoveTL2) {}
+            }
+
+            // Make the layer bar start at the CTI
+            try {
+                var __stDelta = t0 - lyr.inPoint;
+                lyr.startTime += __stDelta;
+                lyr.inPoint = t0;
+                // Preserve outPoint if possible; clamp to comp duration
+                try {
+                    if (lyr.outPoint < t0) lyr.outPoint = Math.min(c.duration, t0 + 1.0);
+                } catch (eOP) {}
+            } catch (eTimeTL) {}
 
         } catch (err) {
             warn("Error: " + err.toString());
@@ -4270,6 +4417,7 @@ _stPlaceLayerSourceInSolidsFolder(adj);
         var c = requireComp();
         if (!c) return;
 
+        var __stRefLayer = (c.selectedLayers && c.selectedLayers.length) ? c.selectedLayers[0] : null;
         var t0 = c.time;
         var t1 = t0 + (30 / c.frameRate); // 30 frames
 
@@ -4309,6 +4457,17 @@ _stPlaceLayerSourceInSolidsFolder(adj);
 
             var animProp = (whichProp === "START") ? startProp : endProp;
 
+
+            // Make the layer bar start at the CTI (do this BEFORE setting keyframes)
+            try {
+                var __stDelta = t0 - lyr.inPoint;
+                lyr.startTime += __stDelta;
+                lyr.inPoint = t0;
+                // Preserve outPoint if possible; clamp to comp duration
+                try {
+                    if (lyr.outPoint < t0) lyr.outPoint = Math.min(c.duration, t0 + 1.0);
+                } catch (eOP) {}
+            } catch (eTimeTL) {}
             animProp.setValueAtTime(t0, 0);
             animProp.setValueAtTime(t1, 100);
 
@@ -4328,7 +4487,16 @@ _stPlaceLayerSourceInSolidsFolder(adj);
             } catch (eEase) {}
 
             try { animProp.selected = true; } catch (eSel) {}
-            lyr.moveToBeginning();
+            // Place Trim Line above the originally selected layer (if any)
+            try {
+                if (__stRefLayer) {
+                    lyr.moveBefore(__stRefLayer);
+                } else {
+                    lyr.moveToBeginning();
+                }
+            } catch (eMoveTL) {
+                try { lyr.moveToBeginning(); } catch (eMoveTL2) {}
+            }
 
         } catch (err) {
             warn("Animate Stroke failed: " + err.toString());
@@ -4730,10 +4898,9 @@ _stPlaceLayerSourceInSolidsFolder(adj);
                 try { preL.outPoint = Math.max(preL.outPoint, targetEndAbs); } catch (eOP) {}
             }
 
-            // Also extend the parent comp itself and its layers to match the CTI expectation
+            // Extend the parent comp duration so the selected precomp layer(s) can extend past the old end.
+            // (We intentionally do NOT extend any other parent-comp layers.)
             ensureCompDuration(comp, targetEndAbs - comp.displayStartTime, verbose ? log : null);
-            extendAllLayerOutPoints(comp, targetEndAbs - comp.displayStartTime, verbose ? log : null);
-
 
             // Force viewer refresh so the new duration propagates immediately
             try { var t = comp.time; comp.time = t + comp.frameDuration; comp.time = t; } catch (eT) {}
@@ -5102,7 +5269,11 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
                 }
                 if (!precomp || !(precomp instanceof CompItem)) continue;
 
-                // The new precomp layer in parent comp should still be at the same index
+                // Route the newly-created precomp comp into 07_PRECOMPS
+                try { var _pf2 = _stGetOrCreatePrecompsFolderRoot(); if (_pf2) precomp.parentFolder = _pf2; } catch (ePF2) {}
+
+                                try { if (precomp) precomp.comment = TAG_PRECOMP_COMP; } catch (eTag2) {}
+// The new precomp layer in parent comp should still be at the same index
                 var precompLayer = null;
                 try { precompLayer = comp.layer(lyr.index); } catch (eL) { precompLayer = null; }
                 if (!precompLayer) continue;
@@ -5399,7 +5570,7 @@ var rsTemplate = "Best Settings"; // Always Best Settings
 
             var suffix = use4444 ? "_PRORES4444_ALPHA.mov" : "_PRORES422.mov";
             var promptTitle = use4444 ? "Save PRORES 4444 (RGB+ALPHA) render as…" : "Save PRORES 422 render as…";
-            var outFile = File.saveDialog(promptTitle, "*.mov");
+            var outFile = __ST_saveDialogSafe__(promptTitle, "*.mov");
 
             if (!outFile) {
                 try { rqItem.remove(); } catch (eRm2) {}
@@ -5579,7 +5750,7 @@ var rsTemplate = "Best Settings"; // Always Best Settings
     }
 
     try {
-        outFile = File.saveDialog("Save current frame as PSD", "Photoshop:*.psd");
+        outFile = __ST_saveDialogSafe__("Save current frame as PSD", "Photoshop:*.psd");
         if (!outFile) return;
 
         var fs = outFile.fsName;
@@ -5655,7 +5826,7 @@ function saveCurrentFrameJPGStill() {
         if (!requireProject()) return;
         try {
             // Ask where to save (closest practical match to AE's "Save Frame As > File..." flow)
-            var outFile = File.saveDialog("Save current frame as JPG", "JPEG:*.jpg;*.jpeg");
+            var outFile = __ST_saveDialogSafe__("Save current frame as JPG", "JPEG:*.jpg;*.jpeg");
             if (!outFile) return;
 
             // Force .jpg extension
@@ -5793,7 +5964,18 @@ function saveCurrentFrameJPGStill() {
         function isComp(it) { return (it && (it instanceof CompItem)); }
         function isFootage(it) { return (it && (it instanceof FootageItem)); }
 
-        function normExt(e) {
+        function _stIsInVersionsFolder(item){
+                    try{
+                        var pf = item ? item.parentFolder : null;
+                        while (pf && pf !== root) {
+                            var nm = String(pf.name || "").replace(/^\s+|\s+$/g,"").toLowerCase();
+                            if (nm === "versions") return true;
+                            pf = pf.parentFolder;
+                        }
+                    }catch(e){}
+                    return false;
+                }
+                function normExt(e) {
             if (!e) return "";
             e = String(e).toLowerCase();
             if (e.charAt(0) !== ".") e = "." + e;
@@ -5811,18 +5993,71 @@ function saveCurrentFrameJPGStill() {
             } catch (e) { return ""; }
         }
 
-        function findOrCreateRootFolder(name) {
-            // Prefer the first folder with this name under root
-            for (var i = 1; i <= proj.numItems; i++) {
-                var it = proj.item(i);
-                if (isFolder(it) && it.name === name && it.parentFolder === root) return it;
-            }
-            var f = proj.items.addFolder(name);
-            f.parentFolder = root;
-            return f;
+        function _stGetFootageFilePath(it){
+            try { if (it && it.file) return String(it.file.fsName || it.file.fullName || ""); } catch(e) {}
+            try { if (it && it.mainSource && it.mainSource.file) return String(it.mainSource.file.fsName || it.mainSource.file.fullName || ""); } catch(e2) {}
+            return "";
+        }
+        function _stIsFromShineElementsDrive(it){
+            try{
+                var p = _stGetFootageFilePath(it);
+                if (!p) return false;
+                var u = String(p).toLowerCase();
+                // macOS volumes typically: /Volumes/<DRIVE_NAME>/...
+                // windows can vary; we simply look for the drive-name token in the path.
+                if (u.indexOf("library elements_1") !== -1) return true;
+                if (u.indexOf("stock elements") !== -1) return true;
+                return false;
+            }catch(e){ return false; }
         }
 
-        function listRootFoldersByName(name) {
+        
+function findOrCreateRootFolder(name) {
+    // Prefer the first folder with this name under root
+    for (var i = 1; i <= proj.numItems; i++) {
+        var it = proj.item(i);
+        if (isFolder(it) && it.name === name && it.parentFolder === root) return it;
+    }
+    var f = proj.items.addFolder(name);
+    f.parentFolder = root;
+    return f;
+}
+
+function _stFindRootFolderExact(name) {
+    for (var i = 1; i <= proj.numItems; i++) {
+        var it = proj.item(i);
+        if (isFolder(it) && it.parentFolder === root && it.name === name) return it;
+    }
+    return null;
+}
+
+function _stFindFirstRootFolderStartingWith(prefix) {
+    var p = String(prefix || "");
+    for (var i = 1; i <= proj.numItems; i++) {
+        var it = proj.item(i);
+        if (isFolder(it) && it.parentFolder === root) {
+            var n = String(it.name || "");
+            if (n.indexOf(p) === 0) return it;
+        }
+    }
+    return null;
+}
+
+function _stGetPrimary01Folder() {
+    // Preferred "primary" sequence folder. If you rename it later, keep the "01_" prefix.
+    var f = _stFindRootFolderExact("01_MAIN");
+    if (f) return f;
+    f = _stFindRootFolderExact("01_SEQ");
+    if (f) return f;
+    // Fall back to ANY root folder starting with "01_"
+    f = _stFindFirstRootFolderStartingWith("01_");
+    if (f) return f;
+    // If none exist, create the new default
+    return findOrCreateRootFolder("01_MAIN");
+}
+
+
+function listRootFoldersByName(name) {
             var out = [];
             for (var i = 1; i <= proj.numItems; i++) {
                 var it = proj.item(i);
@@ -5866,7 +6101,22 @@ function saveCurrentFrameJPGStill() {
                 for (var i = proj.numItems; i >= 1; i--) {
                     var it = proj.item(i);
                     if (isFolder(it) && it.numItems === 0) {
-                        try { it.remove(); changed = true; } catch (e) {}
+                        try {
+                            // Keep the standard bin structure folders even if empty
+                            var nm = String(it.name || "").toLowerCase();
+                            var protectedNames = {
+                                "01_seq":1, "02_video":1, "02_footage":1, "03_audio":1, "04_images":1, "04_photos":1,
+                                "05_graphics":1, "05_vectors":1, "06_elements":1, "06_shine elements":1, "07_precomps":1, "08_ref":1,
+                                "solids":1,
+                                // standard subfolders (keep even if empty)
+                                "versions":1, ".:06":1, ".:15":1, ".:30":1, ".:60":1,
+                                "color":1, "music":1, "vo":1, "disclaimer":1, "text":1,
+                                "old projects":1, "fades":1
+                            };
+                            if (protectedNames[nm]) continue;
+                            it.remove();
+                            changed = true;
+                        } catch (e) {}
                     }
                 }
             }
@@ -5874,14 +6124,141 @@ function saveCurrentFrameJPGStill() {
 
         // ------------------------------------------------------------
         // Target folders (created if missing)
+        //  - Matches Shine Creative structure (see reference screenshot)
+        //  - NOTE: We keep a SINGLE consolidated SOLIDS folder via
+        //    _stGetOrCreateCanonicalSolidsFolderRoot() (do not change).
         // ------------------------------------------------------------
-        var fFootage = findOrCreateRootFolder("FOOTAGE");
-        // SOLIDS folder: create/merge case-insensitively (e.g., "Solids", "SOLIDS.")
+        var fSEQ      = _stGetPrimary01Folder();
+        var fFootage  = findOrCreateRootFolder("02_FOOTAGE");
+        var fAudio    = findOrCreateRootFolder("03_AUDIO");
+        var fPhotos   = findOrCreateRootFolder("04_PHOTOS");
+        var fVectors  = findOrCreateRootFolder("05_VECTORS");
+        var fShineElements = findOrCreateRootFolder("06_SHINE ELEMENTS");
+        var fPrecomps = findOrCreateRootFolder("07_PRECOMPS");
+        var fRef      = findOrCreateRootFolder("08_REF");
 
-var fSolids  = _stGetOrCreateCanonicalSolidsFolderRoot();
-        var fImages  = findOrCreateRootFolder("IMAGES");
-        var fAudio   = findOrCreateRootFolder("AUDIO");
-        var fPrecomps= findOrCreateRootFolder("PRECOMPS");
+        // SOLIDS folder: create/merge case-insensitively (e.g., "Solids", "SOLIDS.")
+        var fSolids   = _stGetOrCreateCanonicalSolidsFolderRoot();
+
+        // ------------------------------------------------------------
+        // MIGRATION: If older bin names exist, merge contents into the
+        // new canonical folders and remove the old folders if empty.
+        // (Keeps existing project items safe and prevents duplicates.)
+        // ------------------------------------------------------------
+        function _migrateRootFolderName(oldName, newFolder){
+            try{
+                if (!newFolder) return;
+                var olds = listRootFoldersByName(oldName);
+                for (var i = 0; i < olds.length; i++){
+                    try{
+                        if (olds[i] && olds[i] !== newFolder){
+                            moveAllItems(olds[i], newFolder);
+                            removeFolderIfEmpty(olds[i]);
+                        }
+                    }catch(e){}
+                }
+            }catch(e){}
+        }
+
+        _migrateRootFolderName("02_VIDEO",   fFootage);
+        _migrateRootFolderName("04_IMAGES",  fPhotos);
+        _migrateRootFolderName("05_GRAPHICS",fVectors);
+        _migrateRootFolderName("06_ELEMENTS",fShineElements);
+
+
+        // ------------------------------------------------------------
+        // Ensure standard subfolder structure (do not move existing comps)
+        // ------------------------------------------------------------
+        function findOrCreateSubFolder(parent, name){
+            if (!parent || !(parent instanceof FolderItem)) return null;
+
+            var target = String(name || "");
+            var targetKey = target.toLowerCase();
+
+            for (var i = 1; i <= parent.numItems; i++){
+                var it = parent.item(i);
+                if (it && (it instanceof FolderItem)){
+                    var nm = String(it.name || "");
+                    if (nm === target) return it;
+                    if (nm.toLowerCase() === targetKey) return it;
+                    if (nm.replace(/^\s+|\s+$/g, "").toLowerCase() === targetKey) return it;
+                }
+            }
+
+            try{
+                var f = proj.items.addFolder(target);
+                f.parentFolder = parent;
+                return f;
+            }catch(e){ return null; }
+        }
+        // Versions bucket helper: prevents duplicates like ".:06" vs ":06" (and odd bullet/dot variants)
+        function findOrCreateVersionsBucket(parent, code){
+            if (!parent || !(parent instanceof FolderItem)) return null;
+
+            var c = String(code || "");
+            // ensure 2-digit for your buckets (06,15,30,60)
+            if (c.length === 1) c = "0" + c;
+
+            function normalizeBucketName(nm){
+                var s = String(nm || "");
+                // trim whitespace
+                s = s.replace(/^\s+|\s+$/g, "");
+                // normalize any leading punctuation before the colon (., •, ·, etc)
+                // e.g. ".:06", "•:06", "·:06", ":06"  -> ":06"
+                s = s.replace(/^[\.\u2022\u00B7\u25CF\u2219\u30FB\u0387\s]+:/, ":");
+                // if somehow it starts with ".:" without matching above, normalize that too
+                s = s.replace(/^\.\s*:/, ":");
+                // collapse any spaces around colon
+                s = s.replace(/\s*:\s*/, ":");
+                // lower for compare
+                return s.toLowerCase();
+            }
+
+            var target = ":" + c;
+            var targetKey = target.toLowerCase();
+
+            // First: reuse any existing folder that normalizes to ":XX"
+            for (var i = 1; i <= parent.numItems; i++){
+                var it = parent.item(i);
+                if (it && (it instanceof FolderItem)){
+                    var nk = normalizeBucketName(it.name);
+                    if (nk === targetKey) return it;
+                }
+            }
+
+            // Second: create using your preferred visible name (no leading dot)
+            try{
+                var f = proj.items.addFolder(target);
+                f.parentFolder = parent;
+                return f;
+            }catch(e){ return null; }
+        }
+
+
+        // 01_SEQ > Versions > :06 / :15 / :30 / :60 (reuses existing variants like ".:06")
+        var fVersions = findOrCreateSubFolder(fSEQ, "Versions");
+        if (fVersions){
+            findOrCreateVersionsBucket(fVersions, "06");
+            findOrCreateVersionsBucket(fVersions, "15");
+            findOrCreateVersionsBucket(fVersions, "30");
+            findOrCreateVersionsBucket(fVersions, "60");
+        }
+
+        // 02_FOOTAGE subfolders
+        findOrCreateSubFolder(fFootage, "Color");
+
+        // 03_AUDIO subfolders
+        findOrCreateSubFolder(fAudio, "Music");
+        findOrCreateSubFolder(fAudio, "VO");
+
+        // 07_PRECOMPS subfolders
+findOrCreateSubFolder(fPrecomps, "TEXT");
+
+        // 08_REF subfolders
+        findOrCreateSubFolder(fRef, "Old Projects");
+
+        // Solids subfolders
+        if (fSolids) findOrCreateSubFolder(fSolids, "FADES");
 
         // ------------------------------------------------------------
         // ------------------------------------------------------------
@@ -5893,16 +6270,20 @@ var fSolids  = _stGetOrCreateCanonicalSolidsFolderRoot();
         // Classification
         // ------------------------------------------------------------
         var audioExts = {
-            ".wav":1, ".aif":1, ".aiff":1, ".mp3":1
+            ".wav":1, ".wave":1, ".aif":1, ".aiff":1, ".mp3":1, ".m4a":1, ".ogg":1, ".flac":1
         };
         var imageExts = {
-            ".jpg":1, ".jpeg":1, ".png":1, ".gif":1, ".psd":1, ".ai":1, ".webp":1, ".avif":1,
-            // Common additional still/image formats (safe to keep in IMAGES)
+            ".jpg":1, ".jpeg":1, ".png":1, ".gif":1, ".psd":1, ".webp":1, ".avif":1,
+            // Common additional still/image formats (safe to keep in PHOTOS)
             ".tif":1, ".tiff":1, ".exr":1, ".dpx":1, ".bmp":1, ".heic":1, ".heif":1
         };
+        var vectorExts = {
+            ".ai":1, ".eps":1, ".svg":1, ".pdf":1
+        };
         var footageExts = {
-            ".mov":1, ".mp4":1, ".m4v":1, ".avi":1, ".mxf":1, ".r3d":1,
-            ".mpeg":1, ".mpg":1
+            ".mov":1, ".mp4":1, ".m4v":1, ".avi":1, ".mxf":1, ".xmf":1, ".mpg":1, ".mpeg":1,
+            ".wmv":1, ".flv":1, ".webm":1, ".m2v":1,
+            ".r3d":1, ".braw":1, ".ari":1, ".dng":1
         };
 
         function isStillFootage(it) {
@@ -5931,13 +6312,51 @@ var fSolids  = _stGetOrCreateCanonicalSolidsFolderRoot();
 
             try {
                 if (isComp(it)) {
-                    // PRECOMPS: only comps WITHOUT a leading underscore
-                    if (String(it.name).charAt(0) !== "_") {
-                        it.parentFolder = fPrecomps;
-                    } else {
-                        // leading underscore stays in ROOT
-                        it.parentFolder = root;
+                    // Do not move any premade comps that live under a VERSIONS folder (at any depth)
+                    // This preserves template/versioned comps exactly as authored.
+                    if (_stIsInVersionsFolder(it)) {
+                        continue;
                     }
+
+                    // RULE 1 (PRIMARY 01_):
+                    // If a comp name starts with "_" it ALWAYS belongs in the primary 01_ folder (e.g., 01_MAIN).
+                    // IMPORTANT: If it's already in the primary 01_ folder, leave it there.
+                    try {
+                        var _nm = String(it.name || "");
+                        if (_nm.length > 0 && _nm.charAt(0) === "_" && fSEQ) {
+                            if (it.parentFolder !== fSEQ) {
+                                it.parentFolder = fSEQ;
+                            }
+                            continue; // always stop here for underscore comps
+                        }
+                    } catch (eUnderscore) {}
+
+                    // RULE 2 (PRECOMPS):
+                    // Any NON-underscore comp that is sitting in the primary 01_ folder should be moved into 07_PRECOMPS.
+                    // (This fixes cases where precomps end up in 01_SEQ/01_MAIN and never get pulled out.)
+                    try {
+                        if (fSEQ && fPrecomps && it.parentFolder === fSEQ) {
+                            var _nm2 = String(it.name || "");
+                            if (!(_nm2.length > 0 && _nm2.charAt(0) === "_")) {
+                                it.parentFolder = fPrecomps;
+                                continue;
+                            }
+                        }
+                    } catch (eSeqToPrecomp) {}
+
+
+// Existing behavior:
+                    // We only route:
+                    //   (a) ShineTools-tagged precomp comps, and
+                    //   (b) loose ROOT-level comps (parentFolder === root)
+                    // into 07_PRECOMPS.
+                    try {
+                        var _isTaggedPrecomp = (it.comment && String(it.comment) === TAG_PRECOMP_COMP);
+                        var _isLooseRootComp = (it.parentFolder === root);
+                        if ((_isTaggedPrecomp || _isLooseRootComp) && fPrecomps && it.parentFolder !== fPrecomps) {
+                            it.parentFolder = fPrecomps;
+                        }
+                    } catch (eMovePC) {}
                     continue;
                 }
 
@@ -5946,9 +6365,30 @@ var fSolids  = _stGetOrCreateCanonicalSolidsFolderRoot();
                     it.parentFolder = fSolids;
                     continue;
                 }
+
+                // PRIORITY RULE:
+                // Any footage sourced from Shine drive roots goes into 06_SHINE ELEMENTS
+                // (e.g. /Volumes/LIBRARY ELEMENTS_1/... or /Volumes/STOCK ELEMENTS/...)
+                if (isFootage(it) && _stIsFromShineElementsDrive(it) && fShineElements) {
+                    it.parentFolder = fShineElements;
+                    continue;
+                }
+
+                // VECTORS FIRST:
+                // Illustrator/EPS/SVG (often marked as isStill in AE) must go to 05_VECTORS
+                try {
+                    if (isFootage(it)) {
+                        var _extV = getExt(it);
+                        if (_extV && vectorExts[_extV] && fVectors) {
+                            it.parentFolder = fVectors;
+                            continue;
+                        }
+                    }
+                } catch (eVecFirst) {}
+
                 // Stills by AE metadata (covers still sequences, etc.)
                 if (isStillFootage(it)) {
-                    it.parentFolder = fImages;
+                    it.parentFolder = fPhotos;
                     continue;
                 }
 
@@ -5956,8 +6396,10 @@ var fSolids  = _stGetOrCreateCanonicalSolidsFolderRoot();
                     var ext = getExt(it);
                     if (ext && audioExts[ext]) {
                         it.parentFolder = fAudio;
+                    } else if (ext && vectorExts[ext]) {
+                        it.parentFolder = fVectors;
                     } else if (ext && imageExts[ext]) {
-                        it.parentFolder = fImages;
+                        it.parentFolder = fPhotos;
                     } else if (ext && footageExts[ext]) {
                         it.parentFolder = fFootage;
                     } else {
@@ -7234,6 +7676,47 @@ function __ST_selectDialogSafe__(title){
     });
 }
 
+
+function __ST_saveDialogSafe__(title, filter){
+    return $.global.__ST_withModalSafety__(function(){
+        return File.saveDialog(title, filter);
+    });
+}
+
+// Patch global modal functions so any legacy alert/confirm/prompt calls
+// also pause background scheduleTask loops (prevents "modal dialog waiting" errors).
+try{
+    if (!$.global) $.global = {};
+    // Ensure the global alias points at the latest implementation
+    $.global.__ST_withModalSafety__ = __ST_withModalSafety__;
+
+    if (!$.global.__ST_ModalFnsPatched__) {
+        $.global.__ST_ModalFnsPatched__ = true;
+
+        $.global.__ST_alertOriginal__ = alert;
+        alert = function(message, title, errorIcon){
+            return __ST_withModalSafety__(function(){
+                return $.global.__ST_alertOriginal__(message, title, errorIcon);
+            });
+        };
+
+        $.global.__ST_confirmOriginal__ = confirm;
+        confirm = function(question){
+            return __ST_withModalSafety__(function(){
+                return $.global.__ST_confirmOriginal__(question);
+            });
+        };
+
+        $.global.__ST_promptOriginal__ = prompt;
+        prompt = function(question, defaultText){
+            return __ST_withModalSafety__(function(){
+                return $.global.__ST_promptOriginal__(question, defaultText);
+            });
+        };
+    }
+}catch(ePatch){}
+
+
 // Runs after a short delay (scheduled) so any in-flight scheduled tasks can finish
 // before we open a modal dialog.
 function __ST_RunOffsetLayersModal__(){
@@ -7333,7 +7816,11 @@ function buildUI(thisObj) {
             ? thisObj
             : new Window("palette", "ShineTools_v" + SHINE_VERSION, undefined, { resizeable: true });
 
-        // Failsafe: if the panel loses focus/deactivates, stop any hover tick so it can't stick running.
+        
+
+        // Install mousemove-driven hover label updates (no polling)
+        try { _stHoverInstallMouseHook(pal); } catch(eHook) {}
+// Failsafe: if the panel loses focus/deactivates, stop any hover tick so it can't stick running.
         try {
             pal.onDeactivate = function(){
                 try { _hoverClearInternal(); } catch(e0) {}
@@ -7455,36 +7942,7 @@ function buildUI(thisObj) {
             var tabLblHelp     = _makeTopTabLabel("HELP", tabBarRight);
             // PASS 13.1: CMD-click HELP toggles DEBUG INFO panel at bottom of HELP tab
             try {
-                tabLblHelp.addEventListener("mousedown", function () {
-                    try {
-                        var ks = ScriptUI.environment.keyboardState;
-                        if (ks && ks.metaKey) {
-                            ST.UI = ST.UI || {};
-                            var p = ST.UI._helpDebugPanel;
-                            if (p) {
-                                var newVis = !(ST.UI._helpDebugVisible === true);
-                                ST.UI._helpDebugVisible = newVis;
-
-                                try { p.visible = newVis; } catch (eV) {}
-                                try { p.enabled = newVis; } catch (eE) {}
-
-                                try {
-                                    if (newVis) {
-                                        try { p.minimumSize = ST.UI._dbgPanelMinSize || [0,0]; } catch(e1) {}
-                                        try { p.maximumSize = ST.UI._dbgPanelMaxSize || [10000,10000]; } catch(e2) {}
-                                        try { p.preferredSize = ST.UI._dbgPanelPrefSize || [0,0]; } catch(e3) {}
-                                        try { if (typeof ST.UI._helpDebugRefresh === "function") ST.UI._helpDebugRefresh(); } catch(eR) {}
-                                    } else {
-                                        try { p.minimumSize = [0,0]; p.maximumSize = [0,0]; p.preferredSize = [0,0]; } catch(e4) {}
-                                    }
-                                } catch (eSz) {}
-
-                                try { if (tabHelp && tabHelp.layout) { tabHelp.layout.layout(true); tabHelp.layout.resize(); } } catch (eL) {}
-                            }
-                        }
-                    } catch (e) {}
-                });
-            } catch (e) {}
+                } catch (e) {}
             var TAB_LABEL_ACTIVE = [1.0, 0.82, 0.0, 1];  // Shine yellow
             var TAB_LABEL_IDLE   = [0.85, 0.85, 0.85, 1];
 
@@ -8447,7 +8905,7 @@ try {
                   return;
                 }
 
-                var outFile = File.saveDialog("Save Font List", "Text:*.txt");
+                var outFile = __ST_saveDialogSafe__("Save Font List", "Text:*.txt");
                 if(!outFile) return;
 
                 try{
@@ -8977,7 +9435,7 @@ try {
                                     }
                                     animSave(arr);
                                     animRebuildDropdown();
-                                try { _ddShowTempMessage(animDD, 'Added', 1.0); } catch(eMsg) {}
+                                try { _ddFlashAddedFrames(animDD, 20); } catch(eMsg) {}
                                 };
 
                                                                 animDD.onChange = function () {
@@ -10826,7 +11284,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             helpWrap.orientation = "column";
             helpWrap.alignChildren = ["fill", "top"];
             helpWrap.alignment = ["fill", "top"];
-            helpWrap.margins = [12, 8, 12, 10];
+            helpWrap.margins = [12, 16, 12, 10];
             helpWrap.spacing = 0; // ultra-tight (per Jim)
 
             var SHINE_YELLOW_RGB = [1.0, 0.82, 0.0]; // Shine yellow
@@ -10912,6 +11370,14 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
             _spacer(24);
 
+            // --- RENDER SETTINGS ---
+            var hdrRender = helpWrap.add("statictext", undefined, "RENDER SETTINGS");
+            _setShineYellowBold(hdrRender);
+
+            _addHelpLine("• Must set up a render template labeled PRORES 422 and PRORES 4444");
+            _addHelpLine("  to use Render button");
+
+            _spacer(24);
             // --- REQUIRED SETTINGS ---
             var hdrReq = helpWrap.add("statictext", undefined, "REQUIRED SETTINGS");
             _setShineYellowBold(hdrReq);
@@ -10930,70 +11396,739 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
             _spacer(24);
 
-            // PASS 13: DEBUG INFO (bottom of HELP tab, hidden by default; toggled via CMD-click HELP)
-            try {
-                ST.UI = ST.UI || {};
-                ST.UI._helpDebugVisible = false;
 
-                var dbgPanel = tabHelp.add("panel", undefined, "DEBUG INFO");
-                dbgPanel.orientation   = "column";
-                dbgPanel.alignChildren = ["fill","top"];
-                dbgPanel.alignment     = ["fill","bottom"];
-                dbgPanel.margins       = 10;
-                dbgPanel.spacing       = 8;
+            // PASS TT: PROJECT TIME TRACKER (always visible under HELP)
+                        try {
+                            (function _ST_ProjectProjectTracker_RTF_v10_UI_inHelp(parent) {
+                                var STATE_KEY  = "__ST_PROJECT_TRACKER_STATE__";
+                                var UI_KEY     = "__ST_PROJECT_TRACKER_UI__";
+                                var PAL_KEY    = "__ST_PROJECT_TRACKER_PAL__";
 
-                // Save normal sizes for restore
-                try { ST.UI._dbgPanelPrefSize = dbgPanel.preferredSize; } catch (eS0) {}
-                try { ST.UI._dbgPanelMinSize  = dbgPanel.minimumSize; } catch (eS1) {}
-                try { ST.UI._dbgPanelMaxSize  = dbgPanel.maximumSize; } catch (eS2) {}
+                                function nowMs(){ return (new Date()).getTime(); }
 
-                var dbgTxt = dbgPanel.add("statictext", undefined, "", { multiline:true });
-                dbgTxt.alignment = ["fill","top"];
-                dbgTxt.preferredSize = [0, 120];
+function clean(s){
+                                    return (s||"")
+                                        .replace(/‚Äôs/g,"'s")
+                                        .replace(/â€™/g,"'")
+                                        .replace(/[’]/g,"'")
+                                        .replace(/[^\x20-\x7E]/g,"")
+                                        .replace(/\s{2,}/g," ")
+                                        .replace(/^\s+|\s+$/g,"");
+                                }
+                                
+                                
+                                // -------- Computer display formatting (Edit Room mapping) --------
+                                var __ST_PT_ROOM_MAP = {
+                                    "ShineCA": "Edit 6",
+                                    "ShineCF": "Edit 7",
+                                    "ShineCB": "Edit 2",
+                                    "ShineCC": "Edit 4",
+                                    "ShineCE": "Edit 1",
+                                    "ShineCD": "EDIT 5",
+                                    "Shine_SD": "Lucas"
+                                };
+                                function normalizeComputerKey(name){
+                                    if(!name) return "";
+                                    var n = (""+name);
+                                    // Remove common suffix like: "ShineCA's Mac Studio" or curly apostrophe variants
+                                    n = n.replace(/[’']/g, "'"); // normalize apostrophe
+                                    n = n.replace(/'s.*$/i, ""); // drop everything after "'s"
+                                    n = n.replace(/\s+Mac\s+Studio.*$/i, ""); // defensive
+                                    n = n.replace(/\s+MacBook.*$/i, "");
+                                    n = n.replace(/\s+iMac.*$/i, "");
+                                    n = n.replace(/\s+Mac\s*mini.*$/i, "");
+                                    n = n.replace(/\s+Pro.*$/i, "");
+                                    n = n.replace(/\s+Air.*$/i, "");
+                                    n = n.replace(/\s+$/,"").replace(/^\s+/,"");
+                                    // If still has spaces, keep first token (your machines are short codes)
+                                    if(n.indexOf(" ") > -1) n = n.split(" ")[0];
+                                    return n;
+                                }
+                                function formatComputerWithRoom(nameOrKey){
+                                    var key = normalizeComputerKey(nameOrKey);
+                                    if(!key) return "";
+                                    var room = __ST_PT_ROOM_MAP[key];
+                                    return room ? (key + " (" + room + ")") : key;
+                                }
 
-                var dbgBtns = dbgPanel.add("group");
-                dbgBtns.orientation = "row";
-                dbgBtns.alignChildren = ["left","center"];
-                dbgBtns.alignment = ["left","top"];
-                dbgBtns.margins = 0;
-                dbgBtns.spacing = 8;
+function getComputerDisplayName(){
+                                    try{
+                                        if($.global.__ST_pt_displayName) return $.global.__ST_pt_displayName;
+                                        var n = "";
+                                        if(system && system.callSystem){
+                                            n = clean(system.callSystem("scutil --get ComputerName"));
+                                            if(!n) n = clean(system.callSystem("hostname"));
+                                        }
+                                        if(!n) n = clean(Folder.userData ? Folder.userData.fsName : "");
+                                        if(!n) n = "Unknown";
+                                        
+                                        // Custom edit-room monikers
+                                        if(n === "ShineBC") n = "ShineBC (Shine Hub 3)";
+                                        else if(n === "ShineAF") n = "ShineAF (Shine Hub 1)";
+                                        else if(n === "ShineBB") n = "ShineBB (Shine Hub 2)";
+                                        $.global.__ST_pt_displayName = n;
+                                        return n;
+                                    }catch(e){ return "Unknown"; }
+                                }
 
-                var btnCopyDebug = dbgBtns.add("button", undefined, "COPY DEBUG INFO");
-                _setHelpTipBestEffort(btnCopyDebug, "Copies a short system/version snapshot + last error to the clipboard (for troubleshooting).");
+                                function getMachineId(){
+                                    try{
+                                        if($.global.__ST_pt_machineId) return $.global.__ST_pt_machineId;
+                                        var disp = getComputerDisplayName();
+                                        var user = "";
+                                        var serial = "";
+                                        if(system && system.callSystem){
+                                            user = clean(system.callSystem("id -un"));
+                                            // Fast serial lookup; last 4 chars are enough to disambiguate cloned names
+                                            var s = clean(system.callSystem("ioreg -rd1 -c IOPlatformExpertDevice | awk -F\" '/IOPlatformSerialNumber/ {print $(NF-1)}'"));
+                                            if(s && s.length >= 4) serial = s.substr(s.length-4);
+                                        }
+                                        var id = disp + "|" + (user||"") + "|" + (serial||"");
+                                        $.global.__ST_pt_machineId = id;
+                                        return id;
+                                    }catch(e){ return getComputerDisplayName(); }
+                                }
 
-                var btnRefreshDebug = dbgBtns.add("button", undefined, "REFRESH");
-                _setHelpTipBestEffort(btnRefreshDebug, "Refreshes the debug info panel.");
+                                // Backwards-compat wrapper used elsewhere
+                                function getComputerName(){
+                                    return normalizeComputerKey(getComputerDisplayName());
+                                }
+                                function getCurrentProjectPath(){
+                                    try{
+                                        if(app.project && app.project.file){
+                                            return app.project.file.fsName;
+                                        }
+                                    }catch(e){}
+                                    return null;
+                                }
+                                function getProjectKey(p){
+                                    try{ return new File(p).absoluteURI; }catch(e){ return p; }
+                                }
+                                function getFileModifiedMs(p){
+                                    try{
+                                        var f=new File(p);
+                                        return (f.exists && f.modified) ? f.modified.getTime() : null;
+                                    }catch(e){ return null; }
+                                }
+                                function getProjectFolder(p){
+                                    try{ return (new File(p)).parent; }
+                                    catch(e){ return null; }
+                                }
+                                function getProjectName(p){
+                                    try{ return decodeURI(File(p).name); }
+                                    catch(e){ return "Project.aep"; }
+                                }
+                                function buildRTFName(p){
+                                    try{
+                                        var now = new Date();
+                                        var dow = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()];
+                                        return "Daily Log_" + dow + ".rtf";
+                                    }catch(e){
+                                        return "Daily Log.rtf";
+                                    }
+                                }
+                                function prettyProjectPath(p){
+                                    // Show path starting at main volume name (no "/Volumes" and no leading "/")
+                                    if(p.indexOf("/Volumes/") === 0){
+                                        p = p.substring("/Volumes/".length);
+                                    }
+                                    // Remove any leading slashes
+                                    p = p.replace(/^\/\/+/, "");
+                                    return p;
+                                }
 
-                function _refreshDebugPanelText() {
-                    try { dbgTxt.text = _stGetDebugInfoString(); } catch (e) { try { dbgTxt.text = "Unable to gather debug info."; } catch(e2) {} }
-                }
+                                function shortProjectPath3(p){
+                                    // Display only first 3 folders after volume/root: Client / Their Client / Spot
+                                    if(!p) return "";
+                                    // Normalize to start after /Volumes/
+                                    if(p.indexOf("/Volumes/") === 0){
+                                        p = p.substring("/Volumes/".length);
+                                    }
+                                    // Remove leading slashes
+                                    p = p.replace(/^\/\/+/, "");
+                                    var parts = p.split("/");
+                                    var clean = [];
+                                    for(var i=0;i<parts.length;i++){
+                                        if(parts[i] && parts[i] !== ""){
+                                            clean.push(parts[i]);
+                                        }
+                                    }
+                                    var take = clean.slice(0, 3);
+                                    var out = take.join(" / ");
+                                    try{ out = out.toUpperCase(); }catch(e){}
+                                    return out;
+                                }
 
-                btnRefreshDebug.onClick = function () {
-                    _safeRun("ui", "Refresh debug info", function () { _refreshDebugPanelText(); }, false);
-                };
+                                                                function getState(){
+                                    $.global[STATE_KEY] = $.global[STATE_KEY] || {
+                                        computerName: null,
+                                        machineId: null,
+                                        meta: null
+                                    };
+                                    return $.global[STATE_KEY];
+                                }
 
-                btnCopyDebug.onClick = function () {
-                    _safeRun("ui", "Copy debug info", function () {
-                        var s = _stGetDebugInfoString();
-                        _refreshDebugPanelText();
-                        _stCopyToClipboardBestEffort(s);
-                    }, false);
-                };
+                                // -------- Persistence (project-bound + desktop RTF) --------
+                                // We persist totals in TWO places:
+                                //  1) app.project.comment (travels with the .aep after save)
+                                //  2) hidden blob in Desktop RTF (persists even if user closes w/out saving)
+                                var META_OPEN  = "[ST_PT_META]";
+                                var META_CLOSE = "[/ST_PT_META]";
+                                // -------- Project Store Item (more reliable than app.project.comment) --------
+                                // We store the same meta blob on a hidden-ish Project panel folder item.
+                                // This avoids collisions if other parts of the panel overwrite app.project.comment.
+                                                                // -------- Sidecar META store in 08_REFERENCES folder (no Project BIN items) --------
+                                // Stores a small blob per-project at: <project root>/08_REFERENCES/<project base>_ShineTools_ProjectTracker.meta
+                                
+                                // -------- Sidecar META store in 08_REFERENCES folder (per-project, per-day) --------
+                                // Stores a small blob at: <project root>/08_REFERENCES/<project base>_<YYYY-MM-DD>_ShineTools_ProjectTracker.meta
+                                function getProjectTrackerMetaFileForPath(projectPath){
+    try{
+        if(!projectPath) return null;
 
-                // Register for toggle
-                ST.UI._helpDebugPanel = dbgPanel;
-                ST.UI._helpDebugText = dbgTxt;
-                ST.UI._helpDebugRefresh = _refreshDebugPanelText;
+        var pf = new File(projectPath);
+        if(!pf.exists) return null;
 
-                // Hide/collapse by default
-                try { dbgPanel.visible = false; } catch (eV0) {}
-                try { dbgPanel.enabled = false; } catch (eE0) {}
-                try { dbgPanel.minimumSize = [0,0]; dbgPanel.maximumSize = [0,0]; dbgPanel.preferredSize = [0,0]; } catch (eSz0) {}
+        // Folder structure (example):
+        // ProjectRoot/01_PROJECT FILE/AE/PROJECT NAME.aep
+        // We want ProjectRoot/08_REFERENCES
+        var aeFolder = pf.parent;
+        if(!aeFolder) return null;
 
-                // Fill once (not visible until toggled)
-                try { _refreshDebugPanelText(); } catch (eF) {}
-            } catch (eDbg) {}
+        var projectFilesFolder = aeFolder.parent;     // 01_PROJECT FILE
+        if(!projectFilesFolder) return null;
+
+        var rootDir = projectFilesFolder.parent;      // ProjectRoot
+        if(!rootDir) return null;
+
+        // Target 08_REFERENCES at project root (auto-create if missing)
+        var refFolder = new Folder(rootDir.fsName + "/08_REFERENCE");
+        if(!refFolder.exists){ refFolder.create(); }
+
+        // Meta filename (one per project)
+        var base = pf.name.replace(/\.[^\.]+$/, "");
+        var mf = new File(refFolder.fsName + "/" + base + "_ShineTools_ProjectTracker.meta");
+
+        return mf;
+    }catch(e){}
+    return null;
+}
+
+                                function readMetaFromProjectStoreItem(projectPath){
+                                    // Reads from sidecar meta file stored next to the project.
+                                    try{
+                                        var p = projectPath || getCurrentProjectPath();
+                                        var f = getProjectTrackerMetaFileForPath(p);
+                                        if(!f || !f.exists) return null;
+                                        if(!f.open("r")) return null;
+                                        var c = f.read();
+                                        try{ f.close(); }catch(eClose){}
+                                        if(!c) return null;
+                                        var a = c.indexOf(META_OPEN);
+                                        var b = c.indexOf(META_CLOSE);
+                                        if(a>=0 && b>a){
+                                            var payload = c.substring(a+META_OPEN.length, b);
+                                            var src = base64Decode(payload);
+                                            if(src){
+                                                try { return (new Function("return " + src))(); } catch(eEval){ return null; }
+                                            }
+                                        }
+                                    }catch(e){}
+                                    return null;
+                                }
+
+                                function writeMetaToProjectStoreItem(meta, projectPath){
+                                    // writes to REF sidecar file (per-project, per-day)
+                                    try{
+                                        var f = getProjectTrackerMetaFileForPath(projectPath);
+                                        if(!f) return;
+                                        var payload = base64Encode(safeToSource(meta));
+                                        var c = META_OPEN + payload + META_CLOSE;
+                                        if(!f.open("w")) return;
+                                        f.write(c);
+                                        try{ f.close(); }catch(eClose){}
+                                    }catch(e){}
+                                }
+
+function safeToSource(obj){
+                                    try { return obj.toSource(); } catch(e){ return "({})"; }
+                                }
+                                function base64Encode(str){
+                                    try { return $.global.__ST_b64e ? $.global.__ST_b64e(str) : (function(s){
+                                        var c="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+                                        var out="", i=0, len=s.length;
+                                        while(i<len){
+                                            var chr1=s.charCodeAt(i++)&0xff;
+                                            var chr2=s.charCodeAt(i++)&0xff;
+                                            var chr3=s.charCodeAt(i++)&0xff;
+                                            var enc1=chr1>>2;
+                                            var enc2=((chr1&3)<<4)|(chr2>>4);
+                                            var enc3=((chr2&15)<<2)|(chr3>>6);
+                                            var enc4=chr3&63;
+                                            if(isNaN(chr2)){ enc3=enc4=64; }
+                                            else if(isNaN(chr3)){ enc4=64; }
+                                            out += c.charAt(enc1)+c.charAt(enc2)+ (enc3===64?"=":c.charAt(enc3)) + (enc4===64?"=":c.charAt(enc4));
+                                        }
+                                        return out;
+                                    })(str); } catch(e){ return ""; }
+                                }
+                                function base64Decode(str){
+                                    try { return $.global.__ST_b64d ? $.global.__ST_b64d(str) : (function(s){
+                                        var c="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+                                        var out="", i=0;
+                                        s = (s||"").replace(/[^A-Za-z0-9\+\/\=]/g,"");
+                                        while(i<s.length){
+                                            var enc1=c.indexOf(s.charAt(i++));
+                                            var enc2=c.indexOf(s.charAt(i++));
+                                            var enc3=c.indexOf(s.charAt(i++));
+                                            var enc4=c.indexOf(s.charAt(i++));
+                                            var chr1=(enc1<<2)|(enc2>>4);
+                                            var chr2=((enc2&15)<<4)|(enc3>>2);
+                                            var chr3=((enc3&3)<<6)|enc4;
+                                            out += String.fromCharCode(chr1);
+                                            if(enc3!==64 && enc3!==-1) out += String.fromCharCode(chr2);
+                                            if(enc4!==64 && enc4!==-1) out += String.fromCharCode(chr3);
+                                        }
+                                        return out;
+                                    })(str); } catch(e){ return ""; }
+                                }
+
+                                function makeEmptyMeta(){
+                                    return {
+                                        v: 1,
+                                        lastComputer: "",
+                                        previousComputer: "",
+                                        lastMachineId: "",
+                                        perMachineLastSeen: {}
+                                    };
+                                }
+
+                                function readMetaFromProjectComment(){
+                                    try{
+                                        // Prefer the project store item if present
+                                        var sm = readMetaFromProjectStoreItem();
+                                        if(sm) return sm;
+                                        if(!app || !app.project) return null;
+                                        var c = app.project.comment || "";
+                                        var a = c.indexOf(META_OPEN);
+                                        var b = c.indexOf(META_CLOSE);
+                                        if(a>=0 && b>a){
+                                            var payload = c.substring(a+META_OPEN.length, b);
+                                            payload = payload.replace(/^\s+|\s+$/g,"");
+                                            var decoded = base64Decode(payload);
+                                            if(decoded){
+                                                return (new Function("return " + decoded))(); // decoded is toSource() of an object
+                                            }
+                                        }
+                                    }catch(e){}
+                                    return null;
+                                }
+
+                                function writeMetaToProjectComment(meta){
+                                    try{
+                                        // Write to store item first (most reliable)
+                                        try{ writeMetaToProjectStoreItem(meta, getCurrentProjectPath()); }catch(e){}
+                                        if(!app || !app.project) return;
+                                        var c = app.project.comment || "";
+                                        var a = c.indexOf(META_OPEN);
+                                        var b = c.indexOf(META_CLOSE);
+                                        if(a>=0 && b>a){
+                                            c = c.substring(0,a) + c.substring(b+META_CLOSE.length);
+                                        }
+                                        var payload = base64Encode(safeToSource(meta));
+                                        c += "\n" + META_OPEN + payload + META_CLOSE;
+                                        app.project.comment = c;
+                                    }catch(e){}
+                                }
+
+                                
+                                // ------------------------------------------------------------
+                                // Time tracking REMOVED.
+                                // Keep only per-project machine metadata so we can display
+                                // "Previous Computer" without accumulating active time.
+                                // ------------------------------------------------------------
+
+                                function makeEmptyMeta(){
+                                    return {
+                                        v: 1,
+                                        lastComputer: "",
+                                        previousComputer: "",
+                                        lastMachineId: "",
+                                        perMachineLastSeen: {}
+                                    };
+                                }
+
+                                function mergeMeta(fromComment, fromRTF){
+                                    // Desktop-RTF merge removed; fromRTF is ignored for compatibility.
+                                    var a = fromComment || null;
+                                    if(!a) return null;
+
+                                    // Normalize fields
+                                    if(!a.perMachineLastSeen) a.perMachineLastSeen = {};
+                                    if(!a.lastComputer) a.lastComputer = "";
+                                    if(!a.previousComputer) a.previousComputer = "";
+                                    if(!a.lastMachineId) a.lastMachineId = a.lastComputer || "";
+
+                                    return a;
+                                }
+
+                                function ensureMetaForProject(p){
+                                    var st = getState();
+                                    if(!p) return null;
+
+                                    st.computerName = st.computerName || getComputerName();
+                                    st.machineId    = st.machineId || (st.computerName || "Unknown");
+
+                                    // Read existing meta (store item preferred, then project comment)
+                                    var metaFromComment = null;
+                                    try{ metaFromComment = readMetaFromProjectComment(); }catch(e){}
+                                    var meta = mergeMeta(metaFromComment, null);
+
+                                    if(!meta){
+                                        meta = makeEmptyMeta();
+                                    }
+
+                                    // Attach to state
+                                    st.meta = meta;
+
+                                    var cur = st.computerName || "Unknown";
+                                    var curId = st.machineId || cur;
+
+                                    if(!st.meta.perMachineLastSeen) st.meta.perMachineLastSeen = {};
+
+                                    function computePrevByLastSeen(){
+                                        var bestName = "";
+                                        var bestT = -1;
+                                        try{
+                                            for(var nm in st.meta.perMachineLastSeen){
+                                                if(!st.meta.perMachineLastSeen.hasOwnProperty(nm)) continue;
+                                                if(nm === cur) continue;
+                                                var t = st.meta.perMachineLastSeen[nm];
+                                                if(typeof t === "number" && t > bestT){
+                                                    bestT = t;
+                                                    bestName = nm;
+                                                }
+                                            }
+                                        }catch(e){}
+                                        return bestName;
+                                    }
+
+                                    // Legacy upgrade: if older meta has lastComputer but no lastMachineId
+                                    if(st.meta.lastComputer && !st.meta.lastMachineId){
+                                        st.meta.lastMachineId = st.meta.lastComputer; // best-effort legacy
+                                    }
+
+                                    // Update previous/last ONLY when a *different machine* opens the project
+                                    if(st.meta.lastMachineId && st.meta.lastMachineId !== curId){
+                                        var _prev = st.meta.lastComputer || computePrevByLastSeen() || "";
+                                        if(_prev === cur){ _prev = ""; }
+                                        st.meta.previousComputer = _prev;
+                                        st.meta.lastComputer = cur;
+                                        st.meta.lastMachineId = curId;
+                                    }else if(!st.meta.lastComputer){
+                                        st.meta.lastComputer = cur;
+                                        st.meta.lastMachineId = curId;
+                                    }
+
+                                    // Stamp last-seen for this computer
+                                    st.meta.perMachineLastSeen[cur] = (new Date()).getTime();
+
+                                    // Persist immediately (store item + comment)
+                                    try{ writeMetaToProjectStoreItem(st.meta, p); }catch(e){}
+                                    try{ if(getCurrentProjectPath && getCurrentProjectPath()===p) writeMetaToProjectComment(st.meta); }catch(e){}
+
+                                    return st.meta;
+                                }
+
+                                function persistMeta(p){
+                                    var st = getState();
+                                    if(!st.meta || !p) return;
+                                    try{ writeMetaToProjectStoreItem(st.meta, p); }catch(e){}
+                                    try{ if(getCurrentProjectPath && getCurrentProjectPath()===p) writeMetaToProjectComment(st.meta); }catch(e){}
+                                }
+
+function ensureUI(){
+                                    // Rebuild-safe: AE can destroy/recreate ScriptUI trees when a docked panel is closed/reopened.
+                                    // We only reuse cached UI if it is still attached to the CURRENT parent AND the launch row exists.
+                                    function _isChildOf(el, ancestor){
+                                        try{
+                                            var p = el;
+                                            while(p){
+                                                if(p === ancestor) return true;
+                                                p = p.parent;
+                                            }
+                                        }catch(e){}
+                                        return false;
+                                    }
+                                    function _hasChildNamed(p, nm){
+                                        try{
+                                            if(!p || !p.children) return false;
+                                            for(var i=0; i<p.children.length; i++){
+                                                if(p.children[i] && p.children[i].name === nm) return true;
+                                            }
+                                        }catch(e){}
+                                        return false;
+                                    }
+
+                                    var cached = $.global[UI_KEY];
+                                    if(cached && cached.panel){
+                                        var stillAttached = _isChildOf(cached.panel, parent) && (parent.children && parent.children.length);
+                                        // launch row is created as a sibling of the PROJECT TRACKER panel
+                                        var hasLaunch = _hasChildNamed(parent, "__ST_PT_LAUNCH_ROW__");
+                                        if(stillAttached && hasLaunch){
+                                            return cached;
+                                        }
+                                        // Stale cache: clear so we can rebuild into the new parent
+                                        try{ $.global[UI_KEY] = null; }catch(e){}
+                                        try{ $.global[PAL_KEY] = null; }catch(e2){}
+                                    }
+
+                                    var ttPanel = parent.add("panel", undefined, "");
+                                    ttPanel.name = "__ST_PT_PANEL__";
+                                    ttPanel.orientation   = "column";
+                                    ttPanel.alignChildren = ["fill","top"];
+                                    ttPanel.alignment     = ["fill","top"];
+                                    ttPanel.margins       = 10;
+                                    ttPanel.spacing       = 6;
+                                    // Spacer removed (no panel title)
+                                    function addRow(label, chars){
+                                        var g = ttPanel.add("group");
+                                        g.orientation = "row";
+                                        g.alignChildren = ["left","center"];
+                                        g.spacing = 4;
+
+                                        var l = g.add("statictext", undefined, label);
+                                        l.preferredSize.width = 120;
+
+                                        var v = g.add("statictext", undefined, "—");
+                                        v.characters = chars || 44;
+                                        return v;
+                                    }
+
+                                    var ui = {
+                                        panel: ttPanel,
+                                        previous: addRow("Previous Computer:", 44)
+                                    };
+
+                                    // Spacer removed (compact panel)
+// Button Row (outside PROJECT TRACKER panel): Launch ShineTracker (icon + label, hover swap)
+var launchRow = parent.add("group");
+launchRow.name = "__ST_PT_LAUNCH_ROW__";
+launchRow.orientation = "row";
+launchRow.alignChildren = ["left","center"];
+launchRow.alignment = ["fill","top"];
+launchRow.margins = [10, 6, 0, 0];
+launchRow.spacing = 0;
+
+launchRow.minimumSize.height = 36;
+// Clickable icon + label (no ScriptUI button chrome)
+var launchTrackerIconCtl, launchTrackerLabel, launchClickGroup;
+var __stLaunchImgNormal = null;
+var __stLaunchImgHover  = null;
+
+function _stLaunchShineTracker() {
+    try {
+        var trackerPath = "/Applications/ShineTracker.app";
+        if (Folder(trackerPath).exists) {
+            system.callSystem('open "' + trackerPath + '"');
+        } else {
+            alert("ShineTracker.app not found in /Applications.");
         }
+    } catch (err) {
+        alert("Error launching ShineTracker:\\n" + err.toString());
+    }
+}
+
+function _stSetLaunchIcon(isHover) {
+    try {
+        if (!launchTrackerIconCtl) return;
+        if (isHover && __stLaunchImgHover) {
+            launchTrackerIconCtl.image = __stLaunchImgHover;
+        } else if (__stLaunchImgNormal) {
+            launchTrackerIconCtl.image = __stLaunchImgNormal;
+        }
+    } catch (e) {}
+}
+
+try {
+    var _stRoot = _stGetSharedRootFolder();
+
+    // Prefer shared root icons folder, fallback to system path
+    var _iconNormal = (_stRoot && _stRoot.exists) ? new File(_stRoot.fsName + "/icons/launch_tracker_normal_32.png")
+                                                  : new File("/Library/Application Support/ShineTools/icons/launch_tracker_normal_32.png");
+
+    var _iconHover  = (_stRoot && _stRoot.exists) ? new File(_stRoot.fsName + "/icons/launch_tracker_hover_32.png")
+                                                  : new File("/Library/Application Support/ShineTools/icons/launch_tracker_hover_32.png");
+
+    if (_iconNormal && _iconNormal.exists) {
+
+        __stLaunchImgNormal = ScriptUI.newImage(_iconNormal);
+        if (_iconHover && _iconHover.exists) __stLaunchImgHover = ScriptUI.newImage(_iconHover);
+
+        // Group that holds icon + text (left-justified and non-stretching)
+        launchClickGroup = launchRow.add("group");
+        launchClickGroup.orientation = "row";
+        launchClickGroup.alignChildren = ["left","center"];
+        launchClickGroup.alignment = ["left","center"];
+        launchClickGroup.margins = 0;
+        launchClickGroup.spacing = 8;
+        launchClickGroup.helpTip = "Launch ShineTracker";
+
+        // Image control: no border / no button chrome
+        launchTrackerIconCtl = launchClickGroup.add("image", undefined, __stLaunchImgNormal);
+
+        // IMPORTANT: ScriptUI does not reliably scale images; this sets the control box size.
+        // For a true 40x40 render, your PNG should be 40x40 (or accept it rendering at native size if larger).
+        launchTrackerIconCtl.preferredSize = [28, 28];
+        launchTrackerIconCtl.minimumSize   = [28, 28];
+        launchTrackerIconCtl.maximumSize   = [28, 28];
+
+        // Label to the right
+        launchTrackerLabel = launchClickGroup.add("statictext", undefined, "Launch ShineTracker");
+        launchTrackerLabel.justify = "left";
+
+        // Make both icon and label clickable
+        launchTrackerIconCtl.addEventListener("mousedown", function () { _stLaunchShineTracker(); });
+        launchTrackerLabel.addEventListener("mousedown",   function () { _stLaunchShineTracker(); });
+        launchClickGroup.addEventListener("mousedown",     function () { _stLaunchShineTracker(); });
+
+        // Hover swap (icon + label + container)
+        launchTrackerIconCtl.addEventListener("mouseover", function () { _stSetLaunchIcon(true); });
+        launchTrackerIconCtl.addEventListener("mouseout",  function () { _stSetLaunchIcon(false); });
+
+        launchTrackerLabel.addEventListener("mouseover", function () { _stSetLaunchIcon(true); });
+        launchTrackerLabel.addEventListener("mouseout",  function () { _stSetLaunchIcon(false); });
+
+        launchClickGroup.addEventListener("mouseover", function () { _stSetLaunchIcon(true); });
+        launchClickGroup.addEventListener("mouseout",  function () { _stSetLaunchIcon(false); });
+    }
+
+} catch (eIcon) {}
+
+if (!launchClickGroup) {
+    // Fallback: standard text button if icon(s) missing
+    var launchCell = launchRow.add("group");
+    launchCell.orientation   = "stack";
+    launchCell.alignChildren = ["fill","fill"];
+    launchCell.alignment     = ["left","center"];
+    launchCell.margins       = 0;
+
+    var launchTrackerBtnFallback = launchCell.add("button", undefined, "Launch ShineTracker");
+    launchTrackerBtnFallback.minimumSize.height = 28;
+    try { defocusButtonBestEffort(launchTrackerBtnFallback); } catch (eDF) {}
+    launchTrackerBtnFallback.onClick = function () { _stLaunchShineTracker(); };
+}
+
+                                    $.global[UI_KEY] = ui;
+                                    $.global[PAL_KEY] = parent;
+
+                                    return ui;
+                                }
+
+                                // We are NOT tracking time here. We only "stamp" which computer last saw this project
+                                // so we can display the previous computer when the project moves machines.
+                                function touchProjectForPreviousComputer(p){
+                                    if(!p) return;
+
+                                    var st = getState();
+                                    st.computerName = st.computerName || getComputerName();
+
+                                    try {
+                                        ensureMetaForProject(p);
+
+                                        var curName = (st.computerName || getComputerName() || "Unknown");
+
+                                        // Ensure buckets exist
+                                        if(!st.meta.perMachineLastSeen) st.meta.perMachineLastSeen = {};
+
+                                        // Stamp "last seen" for this computer
+                                        var t = nowMs();
+                                        st.meta.perMachineLastSeen[curName] = t;
+
+                                        // Update "lastComputer" (useful fallback)
+                                        st.meta.lastComputer = curName;
+
+                                        // Derive previous computer as the most recently seen OTHER machine
+                                        var best = "";
+                                        var bestT = -1;
+                                        for(var nm in st.meta.perMachineLastSeen){
+                                            if(!st.meta.perMachineLastSeen.hasOwnProperty(nm)) continue;
+                                            if(nm === curName) continue;
+                                            var tSeen = st.meta.perMachineLastSeen[nm];
+                                            if(typeof tSeen === "number" && tSeen > bestT){
+                                                bestT = tSeen;
+                                                best = nm;
+                                            }
+                                        }
+
+                                        if(best){
+                                            st.meta.previousComputer = best;
+                                        }
+
+                                        // Persist immediately so it survives app quit / crash
+                                        persistMeta(p);
+                                    } catch(e) {}
+                                }
+
+                                function updateUI(){
+                                    var ui = ensureUI();
+                                    var st = getState();
+                                    var p = getCurrentProjectPath();
+
+                                    // Stamp current computer for this project (no polling / time accumulation)
+                                    if(p){
+                                        touchProjectForPreviousComputer(p);
+                                    }
+
+                                    // Previous Computer line (UI only)
+                                    try{
+                                        var curName = (st.computerName || getComputerName() || "Unknown");
+                                        var prev = "";
+
+                                        if(st.meta){
+                                            prev = st.meta.previousComputer || "";
+
+                                            // Fallback: infer from perMachineLastSeen (most recent other machine)
+                                            if(!prev && st.meta.perMachineLastSeen){
+                                                var best = "";
+                                                var bestT = -1;
+                                                for(var nm in st.meta.perMachineLastSeen){
+                                                    if(!st.meta.perMachineLastSeen.hasOwnProperty(nm)) continue;
+                                                    if(nm === curName) continue;
+                                                    var tSeen = st.meta.perMachineLastSeen[nm];
+                                                    if(typeof tSeen === "number" && tSeen > bestT){
+                                                        bestT = tSeen;
+                                                        best = nm;
+                                                    }
+                                                }
+                                                if(best) prev = best;
+                                            }
+
+                                            // Final fallback: lastComputer (if not the current)
+                                            if(!prev && st.meta.lastComputer && st.meta.lastComputer !== curName){
+                                                prev = st.meta.lastComputer;
+                                            }
+                                        }
+
+                                        var curKey  = normalizeComputerKey(curName);
+                                        var prevKey = normalizeComputerKey(prev);
+                                        if(prevKey === curKey) prevKey = "";
+
+                                        ui.previous.text = prevKey ? formatComputerWithRoom(prevKey) : "—";
+                                    }catch(ePrev){}
+                                }
+
+                                ensureUI();
+                                updateUI();
+
+                                try { if(parent && parent.layout) { parent.layout.layout(true); parent.layout.resize(); } } catch(e) {}
+})(tabHelp);
+                        } catch (eTT) {}
+
+
+
+
+            }
 
         _buildUpdatesTab(tabUpdates);
 
@@ -11685,91 +12820,49 @@ function addDropdownHeader(col, text, insetPx) {
             _hoverLastShift = null;
 
             _hoverUpdateIfChanged(); // initial set (uses current modifiers)
-            _stHoverEnsureTick();
-        }
+            // NOTE: We no longer run a scheduleTask tick here.
+            // Labels will refresh on mouse movement while hovered.
+}
 
         function _hoverStop(btn, baseText) {
             if (_hoverBtn === btn) _hoverClearInternal();
             _hoverSafeSetText(btn, baseText);
-            _stHoverStopTickIfIdle();
-        }
-
+            // No tick to stop (mousemove-driven hover updates).
+}
         // ------------------------------------------------------------
-        // Modifier-hover live update WITHOUT a permanent background loop
+        // Modifier-hover label update via MOUSE MOVE (no scheduleTask polling)
         // ------------------------------------------------------------
-        // NOTE: ScriptUI doesn't emit reliable modifier-key events. To allow
-        // labels to flip the instant Option/Shift is pressed (even if the mouse
-        // is still), we run a tiny scheduleTask poll ONLY while a button is hovered.
-        // We hard-stop on mouseout and on panel deactivation.
+        // ScriptUI doesn't reliably emit events for modifier key changes.
+        // Previously we used a tiny scheduleTask tick while hovered to flip labels instantly.
+        // To avoid ANY background tasks (and reduce panel lockups), we now refresh hover labels
+        // ONLY when the mouse moves while a button is hovered (or on mouseover/mouseout).
 
-        var __ST_HOVER_TICK_NAME__ = "__ST_ShineTools_HoverTick__";
+        // Backwards-compat no-ops (some older code paths may still call these)
+        function _stHoverIsRunning(){ return false; }
+        function _stHoverSetRunning(v){}
+        function _stHoverCancelTask(){}
+        function _stHoverEnsureTick(){}          // replaced by mousemove hook
+        function _stHoverStopTickIfIdle(){}      // replaced by mousemove hook
 
-        function _stHoverIsRunning(){
-            try { return !!$.global.__ST_hoverTickRunning; } catch(e) { return false; }
-        }
-
-        function _stHoverSetRunning(v){
-            try { $.global.__ST_hoverTickRunning = !!v; } catch(e) {}
-        }
-
-        function _stHoverCancelTask(){
+        // Install a single mousemove listener on the palette/panel to refresh hovered button label.
+        function _stHoverInstallMouseHook(root){
             try {
-                var tid = $.global.__ST_hoverTickTaskId;
-                if (tid != null && app.cancelTask) {
-                    try { app.cancelTask(tid); } catch(e0) {}
-                }
-            } catch(e) {}
-            try { $.global.__ST_hoverTickTaskId = null; } catch(e1) {}
-        }
+                if (!root) return;
+                if (root.__ST_hoverMouseHooked) return;
+                root.__ST_hoverMouseHooked = true;
 
-        function _stHoverEnsureTick(){
-            try {
-                if (_stHoverIsRunning()) return;
-                _stHoverSetRunning(true);
-                // Expose tick in global scope (required for scheduleTask string)
-                $.global[__ST_HOVER_TICK_NAME__] = function(){
+                root.addEventListener("mousemove", function(){
                     try {
-                        // Stop if nothing hovered
-                        if (!_hoverBtn) {
-                            _stHoverSetRunning(false);
-                            _stHoverCancelTask();
-                            return;
-                        }
-                        // Update label if modifiers changed
-                        _hoverUpdateIfChanged();
-                    } catch(eTick) {}
+                        if (_hoverBtn) _hoverUpdateIfChanged();
+                    } catch(e0) {}
+                });
 
-                    // Re-schedule only if still hovered
+                // Also refresh once on mouseover anywhere in the panel (helps first enter)
+                root.addEventListener("mouseover", function(){
                     try {
-                        if (_hoverBtn) {
-                            $.global.__ST_hoverTickTaskId = app.scheduleTask("$.global." + __ST_HOVER_TICK_NAME__ + "()", 120, false);
-                        } else {
-                            _stHoverSetRunning(false);
-                            _stHoverCancelTask();
-                        }
-                    } catch(eRes) {
-                        _stHoverSetRunning(false);
-                        _stHoverCancelTask();
-                    }
-                };
-
-                // Kick first tick
-                try {
-                    $.global.__ST_hoverTickTaskId = app.scheduleTask("$.global." + __ST_HOVER_TICK_NAME__ + "()", 120, false);
-                } catch(eKick) {
-                    _stHoverSetRunning(false);
-                }
-            } catch(e) {
-                _stHoverSetRunning(false);
-            }
-        }
-
-        function _stHoverStopTickIfIdle(){
-            // If nothing is hovered, stop any scheduled tick.
-            try {
-                if (_hoverBtn) return;
-                _stHoverSetRunning(false);
-                _stHoverCancelTask();
+                        if (_hoverBtn) _hoverUpdateIfChanged();
+                    } catch(e1) {}
+                });
             } catch(e) {}
         }
 
@@ -13259,7 +14352,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                         favAddPath(f.fsName);
                     }
                     favRebuildDropdown();
-                    try { _ddShowTempMessage(favDD, 'Added', 1.0); } catch(eMsg) {}
+                    try { _ddFlashAddedFrames(favDD, 20); } catch(eMsg) {}
                     // Cmd+click = add to list AND import into bin + active comp timeline.
                     if (doImport) {
                         for (var j = 0; j < picked.length; j++) {
@@ -14070,4 +15163,4 @@ if (myPal instanceof Window) {
     try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 120, false); } catch (e12) {}
 }
 
-})(this);
+})((($.global.__ST_HOST_PANEL__ !== undefined) && ($.global.__ST_HOST_PANEL__ !== null)) ? $.global.__ST_HOST_PANEL__ : this);
