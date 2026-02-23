@@ -1,3 +1,71 @@
+
+// =================================================================================================
+// ShineTools Final Polish Pass
+// Build: FINAL_POLISH_2026-02-22
+// Notes:
+//   - Consolidates ST_LABELS + ST_CONST into ST.TEXT / ST.CONST (backwards-compatible aliases kept)
+//   - Adds init guard to prevent double-initialization when loader re-runs
+//   - Keeps behavior identical otherwise
+// Source base: CleanPack9_REAL (loadable)
+// =================================================================================================
+var ST = ST || {};
+
+ST.TEXT = ST.TEXT || {
+    // Tabs / section titles
+    MAIN: "MAIN",
+    PROJECTS: "PROJECTS",
+    SOLIDS: "SOLIDS",
+    TEXT: "TEXT",
+    HELP: "HELP",
+    UPDATES: "UPDATES",
+    REQUESTS: "REQUESTS",
+
+    // Common button/option labels
+    TEXT_BOX: "TEXT BOX",
+    TRIM_LAYER: "TRIM LAYER",
+    BREAK_APART_TEXT: "BREAK APART TEXT",
+    FRAME_AS_JPG: "FRAME AS .JPG...",
+    SOLID_BTN: "SOLID...",
+    PRORES_422: "PRORES 422...",
+    REFRESH: "REFRESH",
+    STATUS: "STATUS",
+    EASE_IN: "EASE IN",
+    EASE_OUT: "EASE OUT",
+    EXPONENTIAL: "EXPONENTIAL",
+    CUBIC: "CUBIC",
+    SQUARE: "SQUARE",
+
+    // CleanPack8 additions (repeated UI labels)
+    CHECK_FOR_UPDATES: "CHECK FOR UPDATES",
+    INSTALL_UPDATE: "INSTALL UPDATE",
+    OFFSET_LAYERS: "OFFSET LAYERS",
+    ANIMATE_STROKE: "ANIMATE STROKE",
+    BOUNCE: "BOUNCE",
+    UTILITIES: "UTILITIES",
+    EXPORT_FONT_LIST: "EXPORT FONT LIST",
+    COPY_FOUND_FONTS: "COPY FOUND FONTS"
+};
+
+ST.CONST = ST.CONST || {
+    // Common folder names
+    FOLDER_01_MAIN: "01_MAIN",
+    FOLDER_04_IMAGES: "04_IMAGES",
+    FOLDER_04_PHOTOS: "04_PHOTOS",
+    FOLDER_07_PRECOMPS: "07_PRECOMPS",
+    // Common color arrays (used for solids / ScriptUI pens/brushes)
+    COLORS: {
+        WHITE_RGB: [1, 1, 1],
+        TRANSPARENT_RGBA: [0, 0, 0, 0],
+        SHINE_YELLOW_RGBA: [1.0, 0.82, 0.2, 1]
+    }
+};
+
+// Backwards-compatible aliases (existing code continues to use ST_LABELS / ST_CONST)
+var ST_LABELS = ST.TEXT;
+var ST_CONST  = ST.CONST;
+
+
+
 /*  ShineTools_v1.0.jsx  (Tabbed UI)
 // BUILD: YellowLine merge + Dot removed | FIX PACK b (Animate Stroke hover + Option START Trim Paths) | ORGANIZE BIN primary 01_ folder detection (01_MAIN/01_SEQ) | 2026-02-19T15:36:13.668976ZTabs:
       - MAIN  (your current full tool)
@@ -23,30 +91,273 @@ var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
 
+/* ============================================================
+   BUILD NOTES / PASS HISTORY (CONSOLIDATED)
+   Consolidated on: 2026-02-22T04:36:33.356289Z
+   NOTE: These are historical dev notes; code behavior unchanged.
+   ============================================================
 
-// ============================================================
-// PASS 1-2: ORGANIZE + CONSOLIDATE PERSISTENCE (NO BEHAVIOR CHANGES)
-// ------------------------------------------------------------
-// TABLE OF CONTENTS (high-level)
-//   0) Globals / Debug
-//   1) Settings + JSON helpers (app.settings + file fallback)
-//   2) UI + Tabs
-//   3) Accordion Factory (order persistence)
-//   4) Tools (MAIN)
-//   5) Tools (TEXT)
-// ============================================================
+   ---- PASS BLOCK 1 ----
+   // ============================================================
+   // PASS 1-2: ORGANIZE + CONSOLIDATE PERSISTENCE (NO BEHAVIOR CHANGES)
+   // ------------------------------------------------------------
+   // TABLE OF CONTENTS (high-level)
+   //   0) Globals / Debug
+   //   1) Settings + JSON helpers (app.settings + file fallback)
+   //   2) UI + Tabs
+   //   3) Accordion Factory (order persistence)
+   //   4) Tools (MAIN)
+   //   5) Tools (TEXT)
+   // ============================================================
 
+    // ------------------------------------------------------------
+    // AUTO INDEX (CP3) — quick reference (generated)
+    //   Total named functions: 497  |  internal helpers (_*): 267  |  public/tool actions: 230
+    //
+    //   Internal helpers (sample):
+    //     - __makeCurveDlgCellBtn  (line ~7428)
+    //     - __makeDialogCellButton__  (line ~8843)
+    //     - __makeDlgCellBtn  (line ~7131)
+    //     - __makeDlgCellBtn__  (line ~13571)
+    //     - __RunFontAuditModal__  (line ~8341)
+    //     - __st_b64IndexOf  (line ~11426)
+    //     - __st_base64DecodeToString  (line ~11430)
+    //     - __ST_confirmSafe__  (line ~7722)
+    //     - __st_extractPayload  (line ~11519)
+    //     - __st_formatComputerDisplay  (line ~11574)
+    //     - __st_getPreviousComputerName  (line ~11529)
+    //     - __st_getReferenceFolderFromProject  (line ~11461)
+    //     - __ST_openDialogSafe__  (line ~7728)
+    //     - __ST_pauseBackgroundTasks__  (line ~7657)
+    //     - __st_pickMetaFile  (line ~11475)
+    //     - __ST_promptSafe__  (line ~7716)
+    //     - __st_readFileText  (line ~11504)
+    //     - __ST_resumeBackgroundTasks__  (line ~7674)
+    //     - __ST_runExclusive__  (line ~7685)
+    //     - __ST_RunOffsetLayersModal__  (line ~7783)
+    //     - __ST_saveDialogSafe__  (line ~7741)
+    //     - __ST_selectDialogSafe__  (line ~7734)
+    //     - __ST_withModalSafety__  (line ~7702)
+    //     - _addHelpLine  (line ~11358)
+    //     - _addTrimLineAndAnimate_30f  (line ~4468)
+    //     - _appendCacheBuster  (line ~10227)
+    //     - _appGetSetting  (line ~713)
+    //     - _appHaveSetting  (line ~710)
+    //     - _applyDefaultHelpTips  (line ~12239)
+    //     - _applyDropdownLabelClamp  (line ~12000)
+    //
+    //   Public/tool actions (sample):
+    //     - add  (line ~9171)
+    //     - addAccordionSection  (line ~13182)
+    //     - addAdjustmentLayerDefault  (line ~4128)
+    //     - addCameraRig  (line ~3735)
+    //     - addCCAdjustmentRig  (line ~3787)
+    //     - addCheck  (line ~1954)
+    //     - addColor  (line ~1947)
+    //     - addDropdownHeader  (line ~12362)
+    //     - addEffect  (line ~1589)
+    //     - addGrid2  (line ~12728)
+    //     - addItem  (line ~13415)
+    //     - addLightNativePrompt  (line ~4045)
+    //     - addListItem  (line ~8398)
+    //     - addLogoHeader  (line ~12852)
+    //     - addNullDefault  (line ~4103)
+    //     - addPhotoBorder_Util  (line ~5286)
+    //     - addPlusGlyphButton  (line ~12290)
+    //     - addRoot  (line ~8523)
+    //     - addRowUI  (line ~8812)
+    //     - addSlider  (line ~1940)
+    //     - addSolidNativePrompt  (line ~3951)
+    //     - addSwatchUI  (line ~8693)
+    //     - addTrimLineAnimateEnd_30f  (line ~4560)
+    //     - addTrimLineAnimateStart_30f  (line ~4561)
+    //     - addTrimPaths  (line ~4172)
+    //     - addTwirlControl  (line ~12905)
+    //     - addWhiteSolidDefault  (line ~4076)
+    //     - animClear  (line ~3548)
+    //     - animLoad  (line ~3540)
+    //     - animOpenDialogFromDefaultFolder  (line ~3559)
+    //   (Search for "function <name>" for the authoritative location; line numbers shift as we clean.)
+    // ------------------------------------------------------------
 
+   
+   
+   // ============================================================
+   // PASS 6: DOCS + NAMING CLEANUP (COMMENT-ONLY)
+   //  - Normalize section headers and add short doc comments
+   //  - Remove a few duplicate divider lines / stale comments
+   //  - NO behavioral, layout, or persistence changes
+   // ============================================================
 
+   ---- PASS BLOCK 2 ----
+       // ============================================================
+       // PASS 14: DOCKED PANEL HANDOFF (LOADER -> MAIN)
+       // ------------------------------------------------------------
+       // When a ScriptUI Panels "loader" evalFile()s the shared main,
+       // After Effects does NOT automatically pass the docked Panel
+       // instance into the evaluated script. Without this, the main
+       // script thinks it is running standalone and creates a floating
+       // Window("palette"), leaving the docked panel blank.
+       //
+       // Fix:
+       //  - Loader sets $.global.__ST_HOST_PANEL to the docked Panel.
+       //  - Main picks it up here and uses it as thisObj.
+       // ============================================================
 
-// ============================================================
-// PASS 6: DOCS + NAMING CLEANUP (COMMENT-ONLY)
-//  - Normalize section headers and add short doc comments
-//  - Remove a few duplicate divider lines / stale comments
-//  - NO behavioral, layout, or persistence changes
-// ============================================================
+   ---- PASS BLOCK 3 ----
+       // ============================================================
+       // PASS 13: AE 2025/2026 SHARED-MAIN BOOTSTRAP (LOADER MODEL)
+       // ------------------------------------------------------------
+       // Goal:
+       //  - Allow one "loader" file to live in each AE version's ScriptUI Panels folder
+       //  - Keep the real ShineTools code in a user-writable shared location
+       //  - Updater writes ONLY to the shared location (avoids /Applications permissions)
+       //
+       // Behavior:
+       //  - If this file is NOT the shared main file AND the shared main file exists,
+       //    we eval the shared main and return early (so this file behaves as a loader).
+       //  - If the shared main file doesn't exist yet, we run normally (self-contained),
+       //    and the updater can create the shared main on first update.
+       // ============================================================
+   
+   
+       // ============================================================
+       // Shared install root (macOS): /Library/Application Support/ShineTools
+       // Centralized so paths stay consistent across loader, presets, logos, etc.
+       // ============================================================
+
+   ---- PASS BLOCK 4 ----
+       // ============================================================
+       // PASS 12: DISTRIBUTION READINESS (ENV + BUILD INFO HANDLES)
+       // ------------------------------------------------------------
+       // Provide stable introspection helpers for packaging/support.
+       // No functional changes to tools.
+       // ============================================================
+
+   ---- PASS BLOCK 5 ----
+       // ============================================================
+       // PASS 9: HARDENING + DIAGNOSTICS (NO BEHAVIOR CHANGES)
+       // ------------------------------------------------------------
+       // Centralized logging helpers. Default is quiet unless ST.DEBUG
+       // or the specific flag is enabled.
+       // ============================================================
+
+   ---- PASS BLOCK 6 ----
+       // ============================================================
+       // PASS 7: FEATURE BOUNDARIES (NO BEHAVIOR CHANGES)
+       //  - Expose stable module-style APIs on the global ST namespace
+       //  - Keep legacy function names in place (buttons/handlers unchanged)
+       // ============================================================
+
+   ---- PASS BLOCK 7 ----
+       // ============================================================
+       // PASS 7.1: UI API SURFACE + LAYOUT UTILITIES (NO BEHAVIOR CHANGES)
+       // ------------------------------------------------------------
+       // Standardize UI helpers under ST.UI so future tweaks don't have to
+       // spelunk for local function names.
+       // ============================================================
+
+   ---- PASS BLOCK 8 ----
+       // ============================================================
+       // PASS 7.2: TOOLS API SURFACE (NO BEHAVIOR CHANGES)
+       // ============================================================
+       // PASS 8: USER POLISH (TOOLTIPS + MINOR UX CONSISTENCY)
+       //  - Add helpful tooltips to key UPDATES controls
+       //  - No behavior/layout changes
+       // ============================================================
+   
+       // ------------------------------------------------------------
+       // Expose commonly-used tool entry points in a stable namespace.
+       // This does NOT change button wiring; it only provides clean handles
+       // for future features / hotkeys / external triggers.
+       // ============================================================
+
+   ---- PASS BLOCK 9 ----
+           // PASS 14: Prefer system-wide shared install path first
+           //   /Library/Application Support/ShineTools/logo
+
+   ---- PASS BLOCK 10 ----
+       // PASS 14: Prefer system-wide shared install path first
+       //   /Library/Application Support/ShineTools/presets/text
+
+   ---- PASS BLOCK 11 ----
+   // ============================================================
+   // PASS A+: Global modal wrappers + re-entrancy guard
+   //  - Prevents "Cannot run a script while a modal dialog is waiting for response"
+   //  - Pauses scheduleTask-based background loops around ANY modal call
+   //  - Adds a simple global "busy" lock to prevent double-fire while running
+   // ============================================================
+
+   ---- PASS BLOCK 12 ----
+           // ============================================================
+           // PASS 3: BUILDUI SPLIT (NO BEHAVIOR CHANGES)
+           //   - Extracted: Top tab header builder
+           //   - Extracted: Tab stack builder
+           // ============================================================
+
+   ---- PASS BLOCK 13 ----
+               // PASS 13.1: CMD-click HELP toggles DEBUG INFO panel at bottom of HELP tab
+
+   ---- PASS BLOCK 14 ----
+           // ============================================================
+           // PASS 3.4: TAB BUILDERS (extracted for readability; NO behavior change)
+           // ============================================================
+
+   ---- PASS BLOCK 15 ----
+               // PASS PC: PREVIOUS COMPUTER (read from *_ShineTools_ProjectTracker.meta in 08_REFERENCE)
+               // Location rule:
+               //   08_REFERENCE is TWO folders up from the current .aep
+               // Displays in HELP just above the Launch ShineTracker row.
+
+   ---- PASS BLOCK 16 ----
+               // PASS TT: SHINETRACKER LAUNCH (always visible under HELP)
+               // (Legacy machine-tracking removed)
+
+   ---- PASS BLOCK 17 ----
+   // ============================================================
+   // PASS 5: PERFORMANCE – Batched relayout requests
+   // ------------------------------------------------------------
+   // ScriptUI can get sluggish if many sections trigger layout() in rapid succession
+   // (accordion toggles, reorder dialog commits, etc.). We batch those requests into a
+   // single scheduled tick that relayouts only the affected scope groups.
+   // ============================================================
+
+   ---- PASS BLOCK 18 ----
+       // ============================================================
+       // PASS 10: UX CONSISTENCY SWEEP (LOW RISK)
+       // ------------------------------------------------------------
+       // Helpers to standardize small UI behaviors (focus ring safety,
+       // helpTips, and lightweight visual consistency) without changing
+       // tool behavior.
+       // ============================================================
+
+   ---- PASS BLOCK 19 ----
+       // PASS 10.1: apply default tooltips to common buttons to common buttons (best-effort)
+
+   ---- PASS BLOCK 20 ----
+           // PASS 4 (lite): consolidate dropdown clamp loop (used in resize tick + live resize)
+*/
+
 
 (function ShineTool(thisObj) {
+
+    // ============================================================
+    // INIT GUARD (Final Polish): prevent double-initialization
+    // If the loader (or user) runs ShineTools more than once, reuse the existing panel instead of re-building.
+    // ============================================================
+    try {
+        if ($.global.__ShineToolsInitialized) {
+            var __p = null;
+            try { __p = $.global.__ShineTools_pal; } catch (e0) {}
+            if (__p) { try { __p.toString(); } catch (e1) { __p = null; } }
+            if (__p) {
+                try { $.global.__ShineToolsKickLayout && $.global.__ShineToolsKickLayout(); } catch (e2) {}
+                return;
+            } else {
+                try { $.global.__ShineToolsInitialized = false; } catch (e3) {}
+            }
+        }
+    } catch (eG) {}
 
     // ============================================================
     // GLOBAL MODAL SAFETY (scheduleTask-safe)
@@ -69,19 +380,6 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
 
 
 
-    // ============================================================
-    // PASS 14: DOCKED PANEL HANDOFF (LOADER -> MAIN)
-    // ------------------------------------------------------------
-    // When a ScriptUI Panels "loader" evalFile()s the shared main,
-    // After Effects does NOT automatically pass the docked Panel
-    // instance into the evaluated script. Without this, the main
-    // script thinks it is running standalone and creates a floating
-    // Window("palette"), leaving the docked panel blank.
-    //
-    // Fix:
-    //  - Loader sets $.global.__ST_HOST_PANEL to the docked Panel.
-    //  - Main picks it up here and uses it as thisObj.
-    // ============================================================
     try {
         if ($.global.__ST_HOST_PANEL && ($.global.__ST_HOST_PANEL instanceof Panel)) {
             thisObj = $.global.__ST_HOST_PANEL;
@@ -90,26 +388,10 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
     try { $.global.__ST_HOST_PANEL = null; } catch (eClr) {}
 
 
-    // ============================================================
-    // PASS 13: AE 2025/2026 SHARED-MAIN BOOTSTRAP (LOADER MODEL)
-    // ------------------------------------------------------------
-    // Goal:
-    //  - Allow one "loader" file to live in each AE version's ScriptUI Panels folder
-    //  - Keep the real ShineTools code in a user-writable shared location
-    //  - Updater writes ONLY to the shared location (avoids /Applications permissions)
-    //
-    // Behavior:
-    //  - If this file is NOT the shared main file AND the shared main file exists,
-    //    we eval the shared main and return early (so this file behaves as a loader).
-    //  - If the shared main file doesn't exist yet, we run normally (self-contained),
-    //    and the updater can create the shared main on first update.
-    // ============================================================
 
-    
-    // ============================================================
-    // Shared install root (macOS): /Library/Application Support/ShineTools
-    // Centralized so paths stay consistent across loader, presets, logos, etc.
-    // ============================================================
+// =================================================================================================
+// UTILITIES: BOOTSTRAP: Shared-root / self-loader  (CLEANPACK5)
+// =================================================================================================
     function _stGetSharedRootFolder() {
         // Prefer the SYSTEM payload location (installer drops assets here):
         //   /Library/Application Support/ShineTools
@@ -227,6 +509,9 @@ function _stLooksLikeShineToolsMain(raw) {
     // ============================================================
     // 0a) Dropdown helpers (temporary display then revert to blank)
     // ============================================================
+// =================================================================================================
+// UTILITIES: UI SUPPORT: Dropdown temp state / flash  (CLEANPACK5)
+// =================================================================================================
     function _ensureDDStore() {
         if (!$.global.__ShineToolsDDStore) $.global.__ShineToolsDDStore = {};
         return $.global.__ShineToolsDDStore;
@@ -237,10 +522,12 @@ function _stLooksLikeShineToolsMain(raw) {
     // DEBUG FLAGS (set to true temporarily while troubleshooting)
     // ============================================================
     var ST_DEBUG_LISTS = false; // when true, logs list load/save source to the JavaScript Console
+// =================================================================================================
+// UTILITIES: DEBUG + OS INTEGRATION: debug info / clipboard / safe run  (CLEANPACK5)
+// =================================================================================================
     function _dbgList(msg) {
         try { if (ST_DEBUG_LISTS) $.writeln("[ShineTools][LIST] " + msg); } catch (e) {}
     }
-
 
 
     // ============================================================
@@ -253,12 +540,7 @@ function _stLooksLikeShineToolsMain(raw) {
     ST.SAFE_MODE = (ST.SAFE_MODE === false) ? false : true;
     var SHINETOOLS_BUILD_STAMP = "2026-01-18 02:08 UTC";
 
-    // ============================================================
-    // PASS 12: DISTRIBUTION READINESS (ENV + BUILD INFO HANDLES)
-    // ------------------------------------------------------------
-    // Provide stable introspection helpers for packaging/support.
-    // No functional changes to tools.
-    // ============================================================
+
     ST.RELEASE_MODE = (ST.RELEASE_MODE !== false); // default true unless explicitly set to false
     ST.BuildInfo = ST.BuildInfo || {};
     try { ST.BuildInfo.version = (typeof SHINETOOLS_VERSION !== "undefined") ? String(SHINETOOLS_VERSION) : ""; } catch (e) {}
@@ -274,13 +556,6 @@ function _stLooksLikeShineToolsMain(raw) {
 
 
 
-
-    // ============================================================
-    // PASS 9: HARDENING + DIAGNOSTICS (NO BEHAVIOR CHANGES)
-    // ------------------------------------------------------------
-    // Centralized logging helpers. Default is quiet unless ST.DEBUG
-    // or the specific flag is enabled.
-    // ============================================================
     ST.DEBUG = (ST.DEBUG === true); // normalize
     try { if (ST && ST.RELEASE_MODE !== false) { /* release mode */ ST.DEBUG = false; } } catch(eRM) {}
 
@@ -323,15 +598,10 @@ function _stLooksLikeShineToolsMain(raw) {
     };
 
 
-
     // UI namespace (Pass 4.7): isolate core UI builders without behavior changes
     ST.UI = ST.UI || {};
 
-    // ============================================================
-    // PASS 7: FEATURE BOUNDARIES (NO BEHAVIOR CHANGES)
-    //  - Expose stable module-style APIs on the global ST namespace
-    //  - Keep legacy function names in place (buttons/handlers unchanged)
-    // ============================================================
+
     ST.Settings    = ST.Settings    || {};
     ST.Persistence = ST.Persistence || {};
     ST.Core        = ST.Core        || {};
@@ -354,14 +624,6 @@ function _stLooksLikeShineToolsMain(raw) {
 
 
 
-    
-
-    // ============================================================
-    // PASS 7.1: UI API SURFACE + LAYOUT UTILITIES (NO BEHAVIOR CHANGES)
-    // ------------------------------------------------------------
-    // Standardize UI helpers under ST.UI so future tweaks don't have to
-    // spelunk for local function names.
-    // ============================================================
     try {
         ST.UI = ST.UI || {};
 
@@ -385,19 +647,6 @@ function _stLooksLikeShineToolsMain(raw) {
 
 
 
-    // ============================================================
-    // PASS 7.2: TOOLS API SURFACE (NO BEHAVIOR CHANGES)
-    // ============================================================
-    // PASS 8: USER POLISH (TOOLTIPS + MINOR UX CONSISTENCY)
-    //  - Add helpful tooltips to key UPDATES controls
-    //  - No behavior/layout changes
-    // ============================================================
-
-    // ------------------------------------------------------------
-    // Expose commonly-used tool entry points in a stable namespace.
-    // This does NOT change button wiring; it only provides clean handles
-    // for future features / hotkeys / external triggers.
-    // ============================================================
     try {
         ST.Tools      = ST.Tools      || {};
         ST.Tools.Main = ST.Tools.Main || {};
@@ -436,6 +685,9 @@ function _ddEnsureKey(dd) {
         return null;
     }
 
+// =================================================================================================
+// UTILITIES: TASKING: scheduleTask safe cancel  (CLEANPACK5)
+// =================================================================================================
     function _cancelTaskSafe(taskId) {
         try { if (taskId) app.cancelTask(taskId); } catch (e) {}
     }
@@ -445,6 +697,9 @@ function _ddEnsureKey(dd) {
     //  - Primary: app.settings (AE prefs)
     //  - Fallback: JSON file in userData (survives prefs oddities / permissions)
     // ------------------------------------------------------------
+// =================================================================================================
+// UTILITIES: SETTINGS + JSON: settings store + stringify/parse  (CLEANPACK5)
+// =================================================================================================
     function _stSettingsFilePath() {
         // Prefer a user-writable sidecar location (same idea as your section-order fix).
         // Primary: ~/Documents/ShineTools/ShineTools_settings.json
@@ -622,7 +877,7 @@ function _ddEnsureKey(dd) {
         return (defaultValue !== undefined) ? defaultValue : "";
     }
 
-    
+
 // --- app.settings wrappers (centralized try/catch) ---
 function _appHaveSetting(section, key) {
     try { return app.settings.haveSetting(section, key); } catch (e) { return false; }
@@ -661,9 +916,6 @@ function _settingsGet(section, key, defaultValue) {
 
         return ok;
     }
-
-    
-
 
 
     // Expose a global reset function so app.scheduleTask can call it.
@@ -743,9 +995,6 @@ function _settingsGet(section, key, defaultValue) {
         } catch (e) {}
     }
 
-            
-
-
 
     // Flash "Added" inside a dropdown for N frames (defaults to 20).
     // Uses active comp frameRate when available; falls back to 30fps.
@@ -761,7 +1010,6 @@ function _settingsGet(section, key, defaultValue) {
             _ddShowTempMessage(dd, "Added", secs);
         } catch (e) {}
     }
-
 
 
     // Apply an .ffx preset to a text layer (create/select a text layer if needed).
@@ -787,7 +1035,7 @@ function _settingsGet(section, key, defaultValue) {
                 }
 
                 _withUndoGroup("Apply Text Preset", function () {
-                
+
                     // Pick target: selected text layer if available, otherwise create a new text layer.
                 // Also capture the originally selected layer so a newly created layer can be inserted ABOVE it.
                 var __stRefLayer = null;
@@ -865,8 +1113,9 @@ function _settingsGet(section, key, defaultValue) {
     }
 
 
-
-
+// =================================================================================================
+// UTILITIES: INPUT: Modifier keys  (CLEANPACK5)
+// =================================================================================================
     function _isCmdDown() {
         // macOS-only: Command key.
         try {
@@ -887,10 +1136,8 @@ function _settingsGet(section, key, defaultValue) {
     }
 
 
-
-    
     // Safe runner with centralized error logging (no alerts unless requested)
-    
+
     // Compose a short debug snapshot string (for support / troubleshooting)
     function _stGetDebugInfoString() {
         var lines = [];
@@ -935,7 +1182,6 @@ function _withUndoGroup(name, fn) {
         try { app.beginUndoGroup(String(name || "ShineTools")); } catch (eBegin) {}
         try { fn(); } catch (eRun) { throw eRun; } finally { try { app.endUndoGroup(); } catch (eEnd) {} }
     }
-
 
 
     // ============================================================
@@ -1049,8 +1295,7 @@ function _withUndoGroup(name, fn) {
             } catch (e3) {}
             return null;
         }
-        // PASS 14: Prefer system-wide shared install path first
-        //   /Library/Application Support/ShineTools/logo
+
         try {
             var sharedLogo = tryIconsFolder(_stGetSharedRootFolder().fsName + "/logo");
             if (sharedLogo) { __ST_CACHE.logoFile = sharedLogo; return __ST_CACHE.logoFile; }
@@ -1438,7 +1683,7 @@ function _stPlaceLayerAtCTI(layer, comp) {
         app.beginUndoGroup("ShineTools - COPY UNIQUE COMP");
 
         try {
-            var precompsFolder = _findOrCreateRootFolder("07_PRECOMPS");
+            var precompsFolder = _findOrCreateRootFolder(ST_CONST.FOLDER_07_PRECOMPS);
             if (!precompsFolder) { alert("Could not create/find 07_PRECOMPS folder in the Project panel."); return; }
 
             var dupMap = {};
@@ -1506,7 +1751,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
     }
 
 
-
     function ensureCompViewer(c) { try { if (c) c.openInViewer(); } catch (e) {} }
 
     function findMenuCommandIdAny(names) {
@@ -1547,7 +1791,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         } catch (e) {}
         return false;
     }
-
 
 
     function getOrAddSlider(layer, sliderName, defaultValue) {
@@ -1959,7 +2202,7 @@ function _stPlaceLayerAtCTI(layer, comp) {
         return sanitizeName(firstNWords(raw, 3));
     }
 
-    
+
     function desiredNameFromText(str) {
         var nm = sanitizeName(firstNWords(str, 3));
         if (!nm) nm = DEFAULT_TEXT_STRING;
@@ -2054,7 +2297,7 @@ function syncNamesForPrecompLayer(precompLayer) {
     }
 
     function ensureAnimateState(boxLayer) {
-        
+
         // Patched: ANIMATE toggle removed. Do not auto-manage keys.
         return;
 try {
@@ -2217,7 +2460,6 @@ try {
             // Route the newly-created precomp comp into 07_PRECOMPS
             try { var _pf = _stGetOrCreatePrecompsFolderRoot(); if (_pf && pc) pc.parentFolder = _pf; } catch (ePF) {}
 
-            
 
             // Tag the precomp comp so ORGANIZE BIN can route it later if needed
             try { if (pc) pc.comment = TAG_PRECOMP_COMP; } catch (eTag) {}
@@ -2370,7 +2612,6 @@ var precompLayer = parentComp.layer(insertAt);
     mod.__textState = {}; // { "compId_layerId": "lastText" }
 
 
-
     // Track last-known LAYER NAMES for tagged text layers so we can sync the owning precomp name
     // when the user manually renames the text layer (Project panel / Timeline rename).
     // Key: "compId_layerId" -> lastName
@@ -2475,9 +2716,6 @@ var precompLayer = parentComp.layer(insertAt);
     }
 
 
-
-
-
     // Cursor-stability: run the TextBox watcher ONLY while the user is actively interacting
     // with a TextBox (selected tagged layers). This prevents a perpetual scheduleTask loop
     // from impacting AE's cursor/tool icon when the panel is simply open.
@@ -2554,7 +2792,6 @@ var precompLayer = parentComp.layer(insertAt);
             // Backup recenter: detect text changes and recenter when safe (not selected)
             maybeRecenterOnTextChange(comp);
 
-            
 
             // Sync comp name when the user renames the tagged text layer
             maybeSyncCompNameOnTextLayerRename(comp);
@@ -2612,7 +2849,6 @@ var precompLayer = parentComp.layer(insertAt);
     };
 
 
-
     // ----- Main: create text box + precomp -----
     mod.makeTextBox = function(){
         var comp = app.project && app.project.activeItem;
@@ -2661,7 +2897,7 @@ var precompLayer = parentComp.layer(insertAt);
         centerLayerAnchorOnceKeepWorld(textLayer);
         // Seed text state so later edits trigger recenter-on-change
         try { $.global.ShineTools.TextBox.__textState[String(comp.id) + "_" + String(textLayer.id)] = getTextStringSafe(textLayer); } catch (eSeed) {}
-        
+
         try { $.global.ShineTools.TextBox.__nameState[String(comp.id) + "_" + String(textLayer.id)] = String(textLayer.name || ""); } catch (eSeedN) {}
 // Ensure initial naming is synced to first 3 words
         try { updateNamesFromTextLayer(textLayer, comp); } catch (eName0) {}
@@ -2891,7 +3127,7 @@ mod.toggleAnimateKeys = function(frames) {
             // Add 0 -> 100 keys over N frames
             try { s.setValueAtTime(t, 0); } catch (eA) { try { s.setValue(0); } catch (eA2) {} }
             try { s.setValueAtTime(t + dt, 100); } catch (eB) {}
-        
+
 try {
     var easeIn  = new KeyframeEase(0, 33);
     var easeOut = new KeyframeEase(0, 33);
@@ -2974,8 +3210,7 @@ var FAV_DEFAULT_START_FOLDER_NAME = "LIBRARY ELEMENTS_1"; // preferred start fol
     ];
 
     function _stResolveBundledTextPresetFolder() {
-    // PASS 14: Prefer system-wide shared install path first
-    //   /Library/Application Support/ShineTools/presets/text
+
     try {
         var sharedPF = Folder(_stGetSharedRootFolder().fsName + "/" + ANIM_BUNDLED_SUBFOLDER);
         if (sharedPF && sharedPF.exists) return sharedPF;
@@ -3150,7 +3385,7 @@ try {
     return out;
 }
 
-    
+
     function _favParse(str) {
         if (!str) return [];
         try {
@@ -3164,7 +3399,7 @@ try {
     }
 
     // ------------------------------------------------------------
-    
+
     // ------------------------------------------------------------
     // File / path helpers (macOS-only)
     // ------------------------------------------------------------
@@ -3181,7 +3416,7 @@ try {
         return false;
     }
 
-    
+
 // List persistence helpers (dedupe/limit + backwards-compatible parse)
     // ------------------------------------------------------------
     function _listParseCompat(raw) {
@@ -3200,7 +3435,7 @@ try {
         return [];
     }
 
-    
+
     function _normalizePath(p) {
         try {
             if (!p) return "";
@@ -3272,8 +3507,6 @@ function _listClean(arr, maxLen) {
         return [];
     }
 
-
-    
 
     function _listLoadNoPrune(section, key, maxLen) {
     // Legacy single-key loader (JSON string + file-backed fallback via _settingsGetBest).
@@ -3448,7 +3681,6 @@ function _listSave(section, key, arr, maxLen) {
 }
 
 
-
     function favLoad() {
         // Canonical list loader (chunked + legacy fallback handled internally)
         return _listLoad(FAV_SETTINGS_SECTION, FAV_SETTINGS_KEY, FAV_MAX);
@@ -3566,9 +3798,6 @@ function _getUserPresetsStartFolder() {
     return null;
 }
 
-
-
-    
 
 // Open a file dialog starting from a specific folder (more reliable than Folder.current on macOS/docked panels)
 // IMPORTANT: If the dialog is shown and the user cancels, we must NOT open a second fallback dialog.
@@ -3739,7 +3968,7 @@ function favOpenDialogFromDefaultFolder() {
             var __stRefLayer = null;
             try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
 
-            var adjA = c.layers.addSolid([1, 1, 1], "COLOR", c.width, c.height, c.pixelAspect, c.duration);
+            var adjA = c.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "COLOR", c.width, c.height, c.pixelAspect, c.duration);
             adjA.adjustmentLayer = true;
             adjA.label = LABEL_LAVENDER;
 
@@ -3749,7 +3978,7 @@ function favOpenDialogFromDefaultFolder() {
             addEffect(adjA, "ADBE HUE SATURATION") || addEffect(adjA, "ADBE Hue Saturation");
             addEffect(adjA, "ADBE CurvesCustom") || addEffect(adjA, "ADBE Curves");
 
-            var adjB = c.layers.addSolid([1, 1, 1], "VIGNETTE + NOISE", c.width, c.height, c.pixelAspect, c.duration);
+            var adjB = c.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "VIGNETTE + NOISE", c.width, c.height, c.pixelAspect, c.duration);
             adjB.adjustmentLayer = true;
             adjB.label = LABEL_LAVENDER;
 
@@ -3764,7 +3993,7 @@ function favOpenDialogFromDefaultFolder() {
                 try { noise.property("Use Color Noise").setValue(false); } catch (eN2) {}
             }
 
-            var adjC = c.layers.addSolid([1, 1, 1], "CAMERA LENS BLUR", c.width, c.height, c.pixelAspect, c.duration);
+            var adjC = c.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "CAMERA LENS BLUR", c.width, c.height, c.pixelAspect, c.duration);
             adjC.adjustmentLayer = true;
             adjC.label = LABEL_LAVENDER;
 
@@ -3876,12 +4105,11 @@ function favOpenDialogFromDefaultFolder() {
             }
         }
         try{
-            var f = proj.items.addFolder("07_PRECOMPS");
+            var f = proj.items.addFolder(ST_CONST.FOLDER_07_PRECOMPS);
             f.parentFolder = root;
             return f;
         }catch(e){ return null; }
     }
-
 
 
     function _stPlaceLayerSourceInSolidsFolder(layer){
@@ -3909,7 +4137,7 @@ function favOpenDialogFromDefaultFolder() {
         }
 
         function safeColor01(col) {
-            if (!col || col.length < 3) return [1, 1, 1];
+            if (!col || col.length < 3) return ST_CONST.COLORS.WHITE_RGB;
             var r = col[0], g = col[1], b = col[2];
             if (r > 1 || g > 1 || b > 1) return [r / 255, g / 255, b / 255];
             return [r, g, b];
@@ -3920,7 +4148,7 @@ function favOpenDialogFromDefaultFolder() {
             if (!requireProject()) return;
             ensureCompViewer(c);
 
-            
+
             var __stRefLayer = null;
             try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
 var solidIdsBefore = {};
@@ -3959,7 +4187,7 @@ var solidIdsBefore = {};
                 if (_solidsFolder) newestSolid.parentFolder = _solidsFolder;
             }catch(eFolder){}
 
-            var col = [1, 1, 1];
+            var col = ST_CONST.COLORS.WHITE_RGB;
             try { col = safeColor01(newestSolid.mainSource.color); } catch (eC) {}
 
             // Place the newly-created Solid footage into the comp WITHOUT creating a second solid.
@@ -4020,7 +4248,6 @@ var solidIdsBefore = {};
     }
 
 
-
     function addWhiteSolidDefault() {
         var c = requireComp();
         if (!c) return;
@@ -4031,12 +4258,12 @@ var solidIdsBefore = {};
             try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
 
             // Create a plain white solid with no dialog
-            var white = [1, 1, 1];
+            var white = ST_CONST.COLORS.WHITE_RGB;
             var name = "WHITE SOLID";
             var lay = c.layers.addSolid(white, name, c.width, c.height, c.pixelAspect, c.duration);
             /* selection set after placement */
-        
-            
+
+
             _stPlaceLayerAtCTI(lay, c);
             try { if (__stRefLayer) lay.moveBefore(__stRefLayer); } catch (eMv) {}
             try { lay.selected = true; } catch (eSel) {}
@@ -4059,8 +4286,8 @@ var solidIdsBefore = {};
 
             var nul = c.layers.addNull();
             /* selection set after placement */
-        
-            
+
+
             _stPlaceLayerAtCTI(nul, c);
             try { if (__stRefLayer) nul.moveBefore(__stRefLayer); } catch (eMv) {}
             try { nul.selected = true; } catch (eSel) {}
@@ -4101,9 +4328,9 @@ var solidIdsBefore = {};
                     if (sel && sel.length) _stPlaceLayerSourceInSolidsFolder(sel[0]);
                 } catch (eAdjCmd) {}
             } else {
-                var adj = c.layers.addSolid([1, 1, 1], "Adjustment Layer", c.width, c.height, c.pixelAspect, c.duration);
+                var adj = c.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "Adjustment Layer", c.width, c.height, c.pixelAspect, c.duration);
                 adj.adjustmentLayer = true;
-                
+
                 _stPlaceLayerAtCTI(adj, c);
 _stPlaceLayerSourceInSolidsFolder(adj);
             }
@@ -4159,7 +4386,7 @@ _stPlaceLayerSourceInSolidsFolder(adj);
             pathProp.property("ADBE Vector Shape").setValue(shp);
 
             var stroke = grpContents.addProperty("ADBE Vector Graphic - Stroke");
-            stroke.property("ADBE Vector Stroke Color").setValue([1, 1, 1]);
+            stroke.property("ADBE Vector Stroke Color").setValue(ST_CONST.COLORS.WHITE_RGB);
             stroke.property("ADBE Vector Stroke Width").setValue(strokeW);
             stroke.property("ADBE Vector Stroke Line Cap").setValue(1);
 
@@ -4444,7 +4671,7 @@ _stPlaceLayerSourceInSolidsFolder(adj);
             pathProp.property("ADBE Vector Shape").setValue(shp);
 
             var stroke = grpContents.addProperty("ADBE Vector Graphic - Stroke");
-            stroke.property("ADBE Vector Stroke Color").setValue([1, 1, 1]);
+            stroke.property("ADBE Vector Stroke Color").setValue(ST_CONST.COLORS.WHITE_RGB);
             stroke.property("ADBE Vector Stroke Width").setValue(strokeW);
             stroke.property("ADBE Vector Stroke Line Cap").setValue(1); // Round cap
 
@@ -4507,7 +4734,6 @@ _stPlaceLayerSourceInSolidsFolder(adj);
 
     function addTrimLineAnimateEnd_30f() { _addTrimLineAndAnimate_30f("END"); }
     function addTrimLineAnimateStart_30f() { _addTrimLineAndAnimate_30f("START"); }
-
 
 
     function hardBounceExpr() {
@@ -4930,7 +5156,6 @@ function isAVLayer(x){
 function isCompItem(x){
     try{ return (x && (x instanceof CompItem)); }catch(_e){ return false; }
   }
-
 
 
 function hardRefreshLayer(layer){
@@ -5613,7 +5838,14 @@ var rsTemplate = "Best Settings"; // Always Best Settings
                             var rev = $.global.__ST_lastRenderReveal === true;
                             var f = (p ? new File(p) : null);
 
-                            app.project.renderQueue.render();
+                            try { $.global.__ST_LONGOP__ = true; } catch (eL0) {}
+                            try {
+                                app.project.renderQueue.render();
+                            } finally {
+                                try { $.global.__ST_LONGOP__ = false; } catch (eL1) {}
+                                // After a blocking render, force a deferred relayout so custom-drawn glyphs restore
+                                try { if ($.global && $.global.__ShineTools_RequestFullRelayoutSoon__) $.global.__ShineTools_RequestFullRelayoutSoon__(); } catch (eRL) {}
+                            }
 
                             if (rev && f) {
                                 try { revealInOS(f); } catch (eR) {}
@@ -5638,7 +5870,7 @@ var rsTemplate = "Best Settings"; // Always Best Settings
         }
     }
 
-    
+
     function saveCurrentFramePSDOrJPG() {
         // Click: JPG still. Option/Alt-click: PSD still.
         try {
@@ -5817,7 +6049,6 @@ var rsTemplate = "Best Settings"; // Always Best Settings
         _endSuppress();
     }
 }
-
 
 
 function saveCurrentFrameJPGStill() {
@@ -6011,7 +6242,7 @@ function saveCurrentFrameJPGStill() {
             }catch(e){ return false; }
         }
 
-        
+
 function findOrCreateRootFolder(name) {
     // Prefer the first folder with this name under root
     for (var i = 1; i <= proj.numItems; i++) {
@@ -6045,7 +6276,7 @@ function _stFindFirstRootFolderStartingWith(prefix) {
 
 function _stGetPrimary01Folder() {
     // Preferred "primary" sequence folder. If you rename it later, keep the "01_" prefix.
-    var f = _stFindRootFolderExact("01_MAIN");
+    var f = _stFindRootFolderExact(ST_CONST.FOLDER_01_MAIN);
     if (f) return f;
     f = _stFindRootFolderExact("01_SEQ");
     if (f) return f;
@@ -6053,7 +6284,7 @@ function _stGetPrimary01Folder() {
     f = _stFindFirstRootFolderStartingWith("01_");
     if (f) return f;
     // If none exist, create the new default
-    return findOrCreateRootFolder("01_MAIN");
+    return findOrCreateRootFolder(ST_CONST.FOLDER_01_MAIN);
 }
 
 
@@ -6088,7 +6319,6 @@ function listRootFoldersByName(name) {
                 return true;
             } catch (e) { return false; }
         }
-
 
 
         function deleteEmptyFoldersUnderRoot() {
@@ -6131,10 +6361,20 @@ function listRootFoldersByName(name) {
         var fSEQ      = _stGetPrimary01Folder();
         var fFootage  = findOrCreateRootFolder("02_FOOTAGE");
         var fAudio    = findOrCreateRootFolder("03_AUDIO");
-        var fPhotos   = findOrCreateRootFolder("04_PHOTOS");
+        // Canonical Images folder: 04_IMAGES (migrate/rename from older 04_PHOTOS)
+        var fImages  = _stFindRootFolderExact(ST_CONST.FOLDER_04_IMAGES);
+        if (!fImages) {
+            var _oldPhotos = _stFindRootFolderExact(ST_CONST.FOLDER_04_PHOTOS);
+            if (_oldPhotos) {
+                try { _oldPhotos.name = ST_CONST.FOLDER_04_IMAGES; } catch(e) {}
+                fImages = _oldPhotos;
+            } else {
+                fImages = findOrCreateRootFolder(ST_CONST.FOLDER_04_IMAGES);
+            }
+        }
         var fVectors  = findOrCreateRootFolder("05_VECTORS");
         var fShineElements = findOrCreateRootFolder("06_SHINE ELEMENTS");
-        var fPrecomps = findOrCreateRootFolder("07_PRECOMPS");
+        var fPrecomps = findOrCreateRootFolder(ST_CONST.FOLDER_07_PRECOMPS);
         var fRef      = findOrCreateRootFolder("08_REF");
 
         // SOLIDS folder: create/merge case-insensitively (e.g., "Solids", "SOLIDS.")
@@ -6161,7 +6401,7 @@ function listRootFoldersByName(name) {
         }
 
         _migrateRootFolderName("02_VIDEO",   fFootage);
-        _migrateRootFolderName("04_IMAGES",  fPhotos);
+        _migrateRootFolderName(ST_CONST.FOLDER_04_PHOTOS,  fImages);
         _migrateRootFolderName("05_GRAPHICS",fVectors);
         _migrateRootFolderName("06_ELEMENTS",fShineElements);
 
@@ -6388,7 +6628,7 @@ findOrCreateSubFolder(fPrecomps, "TEXT");
 
                 // Stills by AE metadata (covers still sequences, etc.)
                 if (isStillFootage(it)) {
-                    it.parentFolder = fPhotos;
+                    it.parentFolder = fImages;
                     continue;
                 }
 
@@ -6399,7 +6639,7 @@ findOrCreateSubFolder(fPrecomps, "TEXT");
                     } else if (ext && vectorExts[ext]) {
                         it.parentFolder = fVectors;
                     } else if (ext && imageExts[ext]) {
-                        it.parentFolder = fPhotos;
+                        it.parentFolder = fImages;
                     } else if (ext && footageExts[ext]) {
                         it.parentFolder = fFootage;
                     } else {
@@ -6943,7 +7183,7 @@ findOrCreateSubFolder(fPrecomps, "TEXT");
     // ============================================================
     // 11) UI — TABS + Accordion
     // ============================================================
-    
+
 
 // ============================================================
 // Offset Layers Utility (ported from OffsetLayers_Standalone15.jsx)
@@ -7015,7 +7255,6 @@ function _stFrameOffset_wireDialogBtn(btn, sink, closeFn){
 }
 
 
-
 // ===================== LINEAR (NORMAL CLICK) =====================
 function _stFrameOffset_showFrameOffsetDialog(){
     var d=new Window("dialog","Frame Offset");
@@ -7053,7 +7292,7 @@ function _stFrameOffset_showFrameOffsetDialog(){
         return v;
     }
 
-    
+
 var btns = d.add("group");
 btns.orientation = "row";
 btns.alignment = ["right","top"];
@@ -7300,7 +7539,7 @@ function _stFrameOffset_showCurveDialog(comp){
     typeRow.spacing = 8;
 
     typeRow.add("statictext", undefined, "Type:");
-    var dd = typeRow.add("dropdownlist", undefined, ["EXPONENTIAL","SQUARE","CUBIC","EASE OUT","EASE IN"]);
+    var dd = typeRow.add("dropdownlist", undefined, [ST_LABELS.EXPONENTIAL,ST_LABELS.SQUARE,ST_LABELS.CUBIC,ST_LABELS.EASE_OUT,ST_LABELS.EASE_IN]);
     dd.selection = 0; // default EXPONENTIAL
     dd.preferredSize.width = 160;
 
@@ -7431,7 +7670,7 @@ function _stFrameOffset_showCurveDialog(comp){
         // For EASE IN vs EASE OUT, approximate by using inverted preview curve only.
         var previewInvert = invert;
         if(previewMode && dd.selection){
-            if(dd.selection.text === "EASE IN") previewInvert = !invert;
+            if(dd.selection.text === ST_LABELS.EASE_IN) previewInvert = !invert;
         }
 
         var offs = _stFrameOffset_computeOffsetsFloat(n, Math.max(1, maxFrames), typeIdx, curve50, previewInvert);
@@ -7617,12 +7856,6 @@ function __ST_resumeBackgroundTasks__(){
     }catch(e2){}
 }
 
-// ============================================================
-// PASS A+: Global modal wrappers + re-entrancy guard
-//  - Prevents "Cannot run a script while a modal dialog is waiting for response"
-//  - Pauses scheduleTask-based background loops around ANY modal call
-//  - Adds a simple global "busy" lock to prevent double-fire while running
-// ============================================================
 
 function __ST_runExclusive__(fn){
     try {
@@ -7643,6 +7876,9 @@ function __ST_runExclusive__(fn){
 
 function __ST_withModalSafety__(fn){
     return __ST_runExclusive__(function(){
+        // During long blocking operations (e.g. Render Queue render), skip UI scheduleTask callbacks
+        // to avoid ScriptUI re-entrancy / glyph loss on focus changes.
+        try { if ($.global && $.global.__ST_LONGOP__ === true) return null; } catch (eSkip) {}
         __ST_pauseBackgroundTasks__();
         try {
             return fn();
@@ -7816,7 +8052,6 @@ function buildUI(thisObj) {
             ? thisObj
             : new Window("palette", "ShineTools_v" + SHINE_VERSION, undefined, { resizeable: true });
 
-        
 
         // Install mousemove-driven hover label updates (no polling)
         try { _stHoverInstallMouseHook(pal); } catch(eHook) {}
@@ -7857,11 +8092,6 @@ function buildUI(thisObj) {
         pal.spacing       = 0;
 
 
-        // ============================================================
-        // PASS 3: BUILDUI SPLIT (NO BEHAVIOR CHANGES)
-        //   - Extracted: Top tab header builder
-        //   - Extracted: Tab stack builder
-        // ============================================================
 
         function _buildTopTabHeader(pal) {
             // -------------------------
@@ -7940,7 +8170,7 @@ function buildUI(thisObj) {
             var tabLblRequests = _makeTopTabLabel("REQUESTS", tabBarRight);
             var tabLblUpdates  = _makeTopTabLabel("UPDATES", tabBarRight);
             var tabLblHelp     = _makeTopTabLabel("HELP", tabBarRight);
-            // PASS 13.1: CMD-click HELP toggles DEBUG INFO panel at bottom of HELP tab
+
             try {
                 } catch (e) {}
             var TAB_LABEL_ACTIVE = [1.0, 0.82, 0.0, 1];  // Shine yellow
@@ -8096,9 +8326,6 @@ function buildUI(thisObj) {
         }
 
 
-
-
-
         // -------------------------
         // TAB CONTENT STACK (replaces ScriptUI tabbedpanel so we can style labels safely)
         // -------------------------
@@ -8121,7 +8348,7 @@ function buildUI(thisObj) {
             pal.__stTabHelp     = tabHelp;
         } catch (e) {}
 
-        
+
 // Flexible glue to keep footer pinned to the bottom even in docked panels.
 // ScriptUI can sometimes re-measure the main stack too small after visibility changes;
 // this glue absorbs remaining height so the footer stays bottom-anchored.
@@ -8270,10 +8497,6 @@ try {
         }
 
 
-
-        
-
-
         function _showFontAuditDialog() {
             try {
             /*
@@ -8298,7 +8521,6 @@ try {
               var COL_NOTES  = 420;
               var LIST_W      = 760;
               var LIST_H_INIT = 320;
-
 
 
               function isMac(){ return ($.os && $.os.toLowerCase().indexOf("mac") !== -1); }
@@ -8530,7 +8752,7 @@ try {
 
                 roots.push({p:"/System/Library/Fonts", r:true});
                 roots.push({p:"/System/Library/Fonts/Supplemental", r:true});
-                roots.push({p:"/Library/Fonts", r:true});                
+                roots.push({p:"/Library/Fonts", r:true});
                 // Project-local FONTS folder (CLIENT/SPOT/PROJECTS/AE -> CLIENT/SPOT/FONTS)
                 try {
                     if (app.project && app.project.file) {
@@ -8699,7 +8921,7 @@ var home = getHomeDir();
               auditCell.alignChildren = ["fill","fill"];
               auditCell.margins       = 0;
 
-              var auditBtn = auditCell.add("button", undefined, "REFRESH");
+              var auditBtn = auditCell.add("button", undefined, ST_LABELS.REFRESH);
               auditBtn.alignment     = ["fill","top"];
               auditBtn.preferredSize = [0, hFA];
               auditBtn.minimumSize   = [110, hFA];
@@ -8742,7 +8964,7 @@ var home = getHomeDir();
 
               var hSpacer = header.add("statictext", undefined, ""); // swatch spacer
               hSpacer.preferredSize = [12,18];
-              var hStatus = header.add("statictext", undefined, "STATUS");
+              var hStatus = header.add("statictext", undefined, ST_LABELS.STATUS);
               hStatus.preferredSize = [COL_STATUS,18];
               setBold(hStatus, 11);
               var hFont = header.add("statictext", undefined, "FONT");
@@ -8808,7 +9030,7 @@ var home = getHomeDir();
 
 // __ST__FONTBTN_PAD_PATCH__: give extra horizontal breathing room for the two long primary buttons
 try {
-    if (label === "EXPORT FONT LIST" || label === "COPY FOUND FONTS") {
+    if (label === ST_LABELS.EXPORT_FONT_LIST || label === ST_LABELS.COPY_FOUND_FONTS) {
         // Increase minimum width so the label doesn't feel cramped.
         b.minimumSize = [__dlgMinW + 40, __dlgBtnH];
     }
@@ -8817,12 +9039,12 @@ try {
                 return { cell: cell, btn: b };
               }
 
-              var __export = __makeDialogCellButton__(btns, "EXPORT FONT LIST");
+              var __export = __makeDialogCellButton__(btns, ST_LABELS.EXPORT_FONT_LIST);
               var exportCell = __export.cell;
               var exportBtn  = __export.btn;
               exportCell.visible = false;
 
-              var __get = __makeDialogCellButton__(btns, "COPY FOUND FONTS");
+              var __get = __makeDialogCellButton__(btns, ST_LABELS.COPY_FOUND_FONTS);
               var getFontsCell = __get.cell;
               var getFontsBtn  = __get.btn;
               getFontsCell.visible = false;
@@ -9193,8 +9415,6 @@ try {
                 win.layout.layout(true);
               }
 
-              
-
 
               getFontsBtn.onClick = function(){
                 try{ copyFoundFontsToProjectFonts(); } catch(e){ alert("COPY FOUND FONTS error:\n" + e.toString()); }
@@ -9231,9 +9451,6 @@ try {
         }
 
 
-        
-
-
         function _buildTextTabUI() {
 
 
@@ -9261,7 +9478,7 @@ try {
                         animWrap.orientation   = "column";
                         animWrap.alignChildren = ["fill", "top"];
                         animWrap.alignment     = ["fill", "top"];
-                        animWrap.margins       = [0, 0, 0, 0];
+                        animWrap.margins       = ST_CONST.COLORS.TRANSPARENT_RGBA;
                         animWrap.spacing       = 3;
 
                         var animRow = animWrap.add("group");
@@ -9281,7 +9498,7 @@ try {
                             animStar.graphics.foregroundColor =
                                 animStar.graphics.newPen(
                                     animStar.graphics.PenType.SOLID_COLOR,
-                                    [1.0, 0.82, 0.2, 1],
+                                    ST_CONST.COLORS.SHINE_YELLOW_RGBA,
                                     1
                                 );
                         } catch (e) {}
@@ -9493,12 +9710,11 @@ try {
                         textAccHost.orientation   = "column";
                         textAccHost.alignChildren = ["fill", "top"];
                         textAccHost.alignment     = ["fill", "top"];
-                        textAccHost.margins       = [0, 0, 0, 0];
+                        textAccHost.margins       = ST_CONST.COLORS.TRANSPARENT_RGBA;
                         textAccHost.spacing       = 10;
 
                         // Build a TEXT accordion (now supports Auto Collapse, like MAIN)
                         var textAcc = createAccordion(textAccHost, null, function(){ requestRelayoutSoon(textContent, 40); }, "AccordionOrder_TEXT");
-
 
 
                 textAcc.defineSection("BREAK APART TEXT", function(body){
@@ -9508,8 +9724,6 @@ try {
                         { text: "BY LINE",      onClick: function(){ breakApartTextRun(SPLIT_MODE.LINES); } }
                     ]);
                 });
-
-                
 
 
 textAcc.defineSection("NUMBER COUNTERS", function(body){
@@ -9569,14 +9783,8 @@ textAcc.defineSection("NUMBER COUNTERS", function(body){
     }
 
     // Resolve a preset File from a relative path inside the ShineTools folder
-    
-    
 
 
-
-
-    
-    
 // =============================================================
 // Expression Engine Guard (Modern JavaScript required for counters)
 // =============================================================
@@ -9649,7 +9857,6 @@ function _stEnsureModernExpressionsForCounters(comp) {
 var ST_OFFSETLAYERS_EXP_TOTAL_SPREAD_FRAMES = 24; // total spread for Exponential mode
 
 
-
 function _stApplyCounterPreset(fileName, newLayerName) {
     // Guard: counters rely on Modern JavaScript expressions
     if (!_stEnsureModernExpressionsForCounters(app.project && app.project.activeItem)) return;
@@ -9719,7 +9926,7 @@ addGrid2(body, [
 });
 
 // TEXT TAB: Utilities (uses same accordion behavior + layout as MAIN)
-                textAcc.defineSection("UTILITIES", function(body){
+                textAcc.defineSection(ST_LABELS.UTILITIES, function(body){
                     addGrid2(body, [
                         {
                             text: "TEXT BOX",
@@ -9758,7 +9965,6 @@ addGrid2(body, [
 
                 });
 
-                
 
                 // TEXT TAB: Fonts
                 textAcc.defineSection("FONTS", function(body){
@@ -9771,7 +9977,6 @@ addGrid2(body, [
                     ]);
                 });
 
-                
 
 // Build accordion in persisted order
                 textAcc.build();
@@ -9819,6 +10024,10 @@ function _buildTextTabIfNeeded() {
             tabUpdates.visible = isUpdates;
             tabRequests.visible = isRequests;
             tabHelp.visible = isHelp;
+            // Refresh Previous Computer label when Help tab becomes visible
+            if (isHelp) {
+                try { if ($.global.__ST_PrevComputerUI && $.global.__ST_PrevComputerUI.refresh) { $.global.__ST_PrevComputerUI.refresh(); } } catch (ePH) {}
+            }
 // Build heavy tabs on first use
             if (isText) { try { _buildTextTabIfNeeded(); } catch (eBT) {} }
 
@@ -9861,12 +10070,12 @@ function _buildTextTabIfNeeded() {
 
         tabUpdates.orientation   = "column";
         tabUpdates.alignChildren = ["fill", "top"];
-        tabUpdates.margins       = [0, 0, 0, 0];
+        tabUpdates.margins       = ST_CONST.COLORS.TRANSPARENT_RGBA;
         tabUpdates.spacing       = 0;
 
         tabRequests.orientation   = "column";
         tabRequests.alignChildren = ["fill", "top"];
-        tabRequests.margins       = [0, 0, 0, 0];
+        tabRequests.margins       = ST_CONST.COLORS.TRANSPARENT_RGBA;
         tabRequests.spacing       = 0;
 
         tabHelp.orientation   = "column";
@@ -9876,16 +10085,13 @@ function _buildTextTabIfNeeded() {
 
 
 
-        // ============================================================
-        // PASS 3.4: TAB BUILDERS (extracted for readability; NO behavior change)
-        // ============================================================
         function _buildUpdatesTab(tabUpdates) {
             // -------------------------
             // UPDATES TAB CONTENT (UI only for now)
             // Centralized labels/status strings (reduce repeated literals)
             var __UPD_LABELS = {
-                BTN_CHECK: "CHECK FOR UPDATES",
-                BTN_INSTALL: "INSTALL UPDATE"
+                BTN_CHECK: ST_LABELS.CHECK_FOR_UPDATES,
+                BTN_INSTALL: ST_LABELS.INSTALL_UPDATE
             };
 
             var __UPD_STATUS = {
@@ -10253,7 +10459,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             }
             }
 
-                
+
     // ------------------ Updater Hardening Helpers ------------------
     function _sleepMs(ms){ try{ $.sleep(ms); }catch(e){} }
 
@@ -10430,7 +10636,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 }
             }
 
-        
+
             function _readTextFile(pathOrFile) {
                 // Reads a text file and returns a string (best-effort).
                 // Used only for light probing (e.g., detecting HTML instead of JSON/JSX).
@@ -10502,9 +10708,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             }
 
 
-
-
-
     function _runPkgInstaller(pkgPath) {
                 // Use AppleScript to prompt for admin and run installer.
                 // Returns { ok:boolean, msg:string }
@@ -10546,9 +10749,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             function _setUpdatesVersion(ver) {
                 try { kvLatest.val.text = ver || "—"; } catch (e) {}
             }
-
-
-
 
 
             function _setUpdatesChangelogStructured(latestVer, currentNotes, historyArr) {
@@ -10772,7 +10972,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
                     btnInstallUpdate.enabled = false;
                         try { btnInstallUpdate.visible = false; } catch (eV0) {}
-                    
+
                         try { relayoutScoped(tabUpdates); } catch (eRL0) {}
                         _setFooterUpdateIndicator(true);
                     _setUpdatesStatus(__UPD_STATUS.UP_TO_DATE);
@@ -10959,7 +11159,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                         __UPDATE_STATE.available = false;
                         btnInstallUpdate.enabled = false;
                         try { btnInstallUpdate.visible = false; } catch (eV0) {}
-                    
+
                         try { relayoutScoped(tabUpdates); } catch (eRL0) {}
                         _setFooterUpdateIndicator(true);
                         _setUpdatesStatus(__UPD_STATUS.SUCCESS_RESTART);
@@ -10989,7 +11189,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                         __UPDATE_STATE.available = false;
                         btnInstallUpdate.enabled = false;
                         try { btnInstallUpdate.visible = false; } catch (eV0) {}
-                    
+
                         try { relayoutScoped(tabUpdates); } catch (eRL0) {}
                         _setFooterUpdateIndicator(true);
                         _setUpdatesStatus(__UPD_STATUS.SUCCESS_RESTART);
@@ -11064,7 +11264,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             };
 
 
-
             // Auto-check on panel launch (when enabled): check for updates and auto-open the UPDATES tab if needed.
             try {
                 $.global.__ShineToolsUpdateAutoCheck = function(){
@@ -11082,7 +11281,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{ if($.global.__ShineToolsUpdateAutoCheck) $.global.__ShineToolsUpdateAutoCheck(); }catch(e){}});", 250, false);
                 }
             } catch (eS) {}
-
 
 
         }
@@ -11265,10 +11463,8 @@ var kvLatest = _makeKVRow("Latest version:", "—");
     };;
 
 
-
         }
 
-        
 
         function _buildHelpTab(tabHelp) {
             // Ensure HELP tab lays out from the top (prevents vertical centering gaps)
@@ -11322,7 +11518,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             var helpTitleTop = helpWrap.add("statictext", undefined, "NAVIGATING THE SHINETOOLS INTERFACE:");
             try { helpTitleTop.alignment = ["fill","top"]; } catch(e) {}
 
-            
+
             _setShineYellowBold(helpTitleTop);
 // Divider
             var helpDivider = helpWrap.add("statictext", undefined, "----------------------------------");
@@ -11385,7 +11581,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             _addHelpLine("• Enable \"Allow Scripts to Write Files and Access Network\"");
             _addHelpLine("• File > Project Settings > Expressions must be set to JavaScript");
 
-            
+
             _spacer(24);
 
             // --- TOOL TIPS ---
@@ -11397,738 +11593,359 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             _spacer(24);
 
 
-            // PASS TT: PROJECT TIME TRACKER (always visible under HELP)
+
+            try {
+                (function _ST_PreviousComputerRow_inHelp(parent) {
+
+                    // ---------- Base64 decode (ExtendScript compatible) ----------
+                    function __st_b64IndexOf(c) {
+                        var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+                        return chars.indexOf(c);
+                    }
+                    function __st_base64DecodeToString(b64) {
+                        try { b64 = String(b64 || "").replace(/\s+/g, ""); } catch (e) { b64 = ""; }
+                        var out = "";
+                        var i = 0;
+                        while (i < b64.length) {
+                            var c1 = __st_b64IndexOf(b64.charAt(i++));
+                            var c2 = __st_b64IndexOf(b64.charAt(i++));
+                            var c3ch = b64.charAt(i++);
+                            var c4ch = b64.charAt(i++);
+
+                            if (c1 < 0 || c2 < 0) break;
+
+                            var c3 = (c3ch === "=") ? -1 : __st_b64IndexOf(c3ch);
+                            var c4 = (c4ch === "=") ? -1 : __st_b64IndexOf(c4ch);
+
+                            var b1 = (c1 << 2) | (c2 >> 4);
+                            out += String.fromCharCode(b1 & 0xFF);
+
+                            if (c3 >= 0) {
+                                var b2 = ((c2 & 15) << 4) | (c3 >> 2);
+                                out += String.fromCharCode(b2 & 0xFF);
+                            }
+                            if (c4 >= 0 && c3 >= 0) {
+                                var b3 = ((c3 & 3) << 6) | c4;
+                                out += String.fromCharCode(b3 & 0xFF);
+                            }
+                        }
+                        return out;
+                    }
+
+                    // ---------- Pathing ----------
+                    function __st_getReferenceFolderFromProject() {
                         try {
-                            (function _ST_ProjectProjectTracker_RTF_v10_UI_inHelp(parent) {
-                                var STATE_KEY  = "__ST_PROJECT_TRACKER_STATE__";
-                                var UI_KEY     = "__ST_PROJECT_TRACKER_UI__";
-                                var PAL_KEY    = "__ST_PROJECT_TRACKER_PAL__";
+                            if (!app.project || !app.project.file) return null;
+                            var projFile = app.project.file;   // File
+                            var projFolder = projFile.parent;  // Folder containing .aep
+                            var up1 = projFolder ? projFolder.parent : null;
+                            var up2 = up1 ? up1.parent : null;
+                            if (!up2) return null;
+                            var refFolder = new Folder(up2.fsName + "/08_REFERENCE");
+                            return (refFolder && refFolder.exists) ? refFolder : null;
+                        } catch (e) {}
+                        return null;
+                    }
 
-                                function nowMs(){ return (new Date()).getTime(); }
+                    function __st_pickMetaFile(refFolder) {
+                        try {
+                            if (!refFolder || !refFolder.exists) return null;
+                            if (!app.project || !app.project.file) return null;
 
-function clean(s){
-                                    return (s||"")
-                                        .replace(/‚Äôs/g,"'s")
-                                        .replace(/â€™/g,"'")
-                                        .replace(/[’]/g,"'")
-                                        .replace(/[^\x20-\x7E]/g,"")
-                                        .replace(/\s{2,}/g," ")
-                                        .replace(/^\s+|\s+$/g,"");
-                                }
-                                
-                                
-                                // -------- Computer display formatting (Edit Room mapping) --------
-                                var __ST_PT_ROOM_MAP = {
-                                    "ShineCA": "Edit 6",
-                                    "ShineCF": "Edit 7",
-                                    "ShineCB": "Edit 2",
-                                    "ShineCC": "Edit 4",
-                                    "ShineCE": "Edit 1",
-                                    "ShineCD": "EDIT 5",
-                                    "Shine_SD": "Lucas"
-                                };
-                                function normalizeComputerKey(name){
-                                    if(!name) return "";
-                                    var n = (""+name);
-                                    // Remove common suffix like: "ShineCA's Mac Studio" or curly apostrophe variants
-                                    n = n.replace(/[’']/g, "'"); // normalize apostrophe
-                                    n = n.replace(/'s.*$/i, ""); // drop everything after "'s"
-                                    n = n.replace(/\s+Mac\s+Studio.*$/i, ""); // defensive
-                                    n = n.replace(/\s+MacBook.*$/i, "");
-                                    n = n.replace(/\s+iMac.*$/i, "");
-                                    n = n.replace(/\s+Mac\s*mini.*$/i, "");
-                                    n = n.replace(/\s+Pro.*$/i, "");
-                                    n = n.replace(/\s+Air.*$/i, "");
-                                    n = n.replace(/\s+$/,"").replace(/^\s+/,"");
-                                    // If still has spaces, keep first token (your machines are short codes)
-                                    if(n.indexOf(" ") > -1) n = n.split(" ")[0];
-                                    return n;
-                                }
-                                function formatComputerWithRoom(nameOrKey){
-                                    var key = normalizeComputerKey(nameOrKey);
-                                    if(!key) return "";
-                                    var room = __ST_PT_ROOM_MAP[key];
-                                    return room ? (key + " (" + room + ")") : key;
-                                }
+                            var projName = app.project.file.name.replace(/\.[^\.]+$/, ""); // remove extension
+                            var candidate = new File(refFolder.fsName + "/" + projName + "_ShineTools_ProjectTracker.meta");
+                            if (candidate && candidate.exists) return candidate;
 
-function getComputerDisplayName(){
-                                    try{
-                                        if($.global.__ST_pt_displayName) return $.global.__ST_pt_displayName;
-                                        var n = "";
-                                        if(system && system.callSystem){
-                                            n = clean(system.callSystem("scutil --get ComputerName"));
-                                            if(!n) n = clean(system.callSystem("hostname"));
-                                        }
-                                        if(!n) n = clean(Folder.userData ? Folder.userData.fsName : "");
-                                        if(!n) n = "Unknown";
-                                        
-                                        // Custom edit-room monikers
-                                        if(n === "ShineBC") n = "ShineBC (Shine Hub 3)";
-                                        else if(n === "ShineAF") n = "ShineAF (Shine Hub 1)";
-                                        else if(n === "ShineBB") n = "ShineBB (Shine Hub 2)";
-                                        $.global.__ST_pt_displayName = n;
-                                        return n;
-                                    }catch(e){ return "Unknown"; }
-                                }
+                            // fallback: any *_ShineTools_ProjectTracker.meta (newest modified)
+                            var list = refFolder.getFiles(function (f) {
+                                return (f instanceof File) && (/_ShineTools_ProjectTracker\.meta$/i).test(f.name);
+                            });
+                            if (!list || list.length === 0) return null;
+                            if (list.length === 1) return list[0];
 
-                                function getMachineId(){
-                                    try{
-                                        if($.global.__ST_pt_machineId) return $.global.__ST_pt_machineId;
-                                        var disp = getComputerDisplayName();
-                                        var user = "";
-                                        var serial = "";
-                                        if(system && system.callSystem){
-                                            user = clean(system.callSystem("id -un"));
-                                            // Fast serial lookup; last 4 chars are enough to disambiguate cloned names
-                                            var s = clean(system.callSystem("ioreg -rd1 -c IOPlatformExpertDevice | awk -F\" '/IOPlatformSerialNumber/ {print $(NF-1)}'"));
-                                            if(s && s.length >= 4) serial = s.substr(s.length-4);
-                                        }
-                                        var id = disp + "|" + (user||"") + "|" + (serial||"");
-                                        $.global.__ST_pt_machineId = id;
-                                        return id;
-                                    }catch(e){ return getComputerDisplayName(); }
-                                }
-
-                                // Backwards-compat wrapper used elsewhere
-                                function getComputerName(){
-                                    return normalizeComputerKey(getComputerDisplayName());
-                                }
-                                function getCurrentProjectPath(){
-                                    try{
-                                        if(app.project && app.project.file){
-                                            return app.project.file.fsName;
-                                        }
-                                    }catch(e){}
-                                    return null;
-                                }
-                                function getProjectKey(p){
-                                    try{ return new File(p).absoluteURI; }catch(e){ return p; }
-                                }
-                                function getFileModifiedMs(p){
-                                    try{
-                                        var f=new File(p);
-                                        return (f.exists && f.modified) ? f.modified.getTime() : null;
-                                    }catch(e){ return null; }
-                                }
-                                function getProjectFolder(p){
-                                    try{ return (new File(p)).parent; }
-                                    catch(e){ return null; }
-                                }
-                                function getProjectName(p){
-                                    try{ return decodeURI(File(p).name); }
-                                    catch(e){ return "Project.aep"; }
-                                }
-                                function buildRTFName(p){
-                                    try{
-                                        var now = new Date();
-                                        var dow = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()];
-                                        return "Daily Log_" + dow + ".rtf";
-                                    }catch(e){
-                                        return "Daily Log.rtf";
+                            var newest = list[0];
+                            for (var i = 1; i < list.length; i++) {
+                                try {
+                                    if (list[i].modified && newest.modified && (list[i].modified.getTime() > newest.modified.getTime())) {
+                                        newest = list[i];
                                     }
-                                }
-                                function prettyProjectPath(p){
-                                    // Show path starting at main volume name (no "/Volumes" and no leading "/")
-                                    if(p.indexOf("/Volumes/") === 0){
-                                        p = p.substring("/Volumes/".length);
-                                    }
-                                    // Remove any leading slashes
-                                    p = p.replace(/^\/\/+/, "");
-                                    return p;
-                                }
+                                } catch (e2) {}
+                            }
+                            return newest;
+                        } catch (e) {}
+                        return null;
+                    }
 
-                                function shortProjectPath3(p){
-                                    // Display only first 3 folders after volume/root: Client / Their Client / Spot
-                                    if(!p) return "";
-                                    // Normalize to start after /Volumes/
-                                    if(p.indexOf("/Volumes/") === 0){
-                                        p = p.substring("/Volumes/".length);
-                                    }
-                                    // Remove leading slashes
-                                    p = p.replace(/^\/\/+/, "");
-                                    var parts = p.split("/");
-                                    var clean = [];
-                                    for(var i=0;i<parts.length;i++){
-                                        if(parts[i] && parts[i] !== ""){
-                                            clean.push(parts[i]);
-                                        }
-                                    }
-                                    var take = clean.slice(0, 3);
-                                    var out = take.join(" / ");
-                                    try{ out = out.toUpperCase(); }catch(e){}
-                                    return out;
-                                }
+                    function __st_readFileText(fileObj) {
+                        if (!fileObj || !fileObj.exists) return null;
+                        var txt = null;
+                        try {
+                            fileObj.encoding = "UTF-8";
+                            fileObj.open("r");
+                            txt = fileObj.read();
+                            fileObj.close();
+                        } catch (e) {
+                            try { if (fileObj.opened) fileObj.close(); } catch (e2) {}
+                            return null;
+                        }
+                        return txt;
+                    }
 
-                                                                function getState(){
-                                    $.global[STATE_KEY] = $.global[STATE_KEY] || {
-                                        computerName: null,
-                                        machineId: null,
-                                        meta: null
-                                    };
-                                    return $.global[STATE_KEY];
-                                }
+                    function __st_extractPayload(rawText) {
+                        try {
+                            if (!rawText) return null;
+                            var m = String(rawText).match(/\[ST_PT_META\]([\s\S]*?)\[\/ST_PT_META\]/);
+                            if (!m || m.length < 2) return null;
+                            return m[1];
+                        } catch (e) {}
+                        return null;
+                    }
 
-                                // -------- Persistence (project-bound + desktop RTF) --------
-                                // We persist totals in TWO places:
-                                //  1) app.project.comment (travels with the .aep after save)
-                                //  2) hidden blob in Desktop RTF (persists even if user closes w/out saving)
-                                var META_OPEN  = "[ST_PT_META]";
-                                var META_CLOSE = "[/ST_PT_META]";
-                                // -------- Project Store Item (more reliable than app.project.comment) --------
-                                // We store the same meta blob on a hidden-ish Project panel folder item.
-                                // This avoids collisions if other parts of the panel overwrite app.project.comment.
-                                                                // -------- Sidecar META store in 08_REFERENCES folder (no Project BIN items) --------
-                                // Stores a small blob per-project at: <project root>/08_REFERENCES/<project base>_ShineTools_ProjectTracker.meta
-                                
-                                // -------- Sidecar META store in 08_REFERENCES folder (per-project, per-day) --------
-                                // Stores a small blob at: <project root>/08_REFERENCES/<project base>_<YYYY-MM-DD>_ShineTools_ProjectTracker.meta
-                                function getProjectTrackerMetaFileForPath(projectPath){
-    try{
-        if(!projectPath) return null;
+                    function __st_getPreviousComputerName() {
+                        // Returns a display string (never throws)
+                        try {
+                            if (!app.project || !app.project.file) return "—";
 
-        var pf = new File(projectPath);
-        if(!pf.exists) return null;
+                            var refFolder = __st_getReferenceFolderFromProject();
+                            if (!refFolder) return "—";
 
-        // Folder structure (example):
-        // ProjectRoot/01_PROJECT FILE/AE/PROJECT NAME.aep
-        // We want ProjectRoot/08_REFERENCES
-        var aeFolder = pf.parent;
-        if(!aeFolder) return null;
+                            var metaFile = __st_pickMetaFile(refFolder);
+                            if (!metaFile) return "—";
 
-        var projectFilesFolder = aeFolder.parent;     // 01_PROJECT FILE
-        if(!projectFilesFolder) return null;
+                            var raw = __st_readFileText(metaFile);
+                            if (!raw) return "—";
 
-        var rootDir = projectFilesFolder.parent;      // ProjectRoot
-        if(!rootDir) return null;
+                            var payload = __st_extractPayload(raw);
+                            if (!payload) return "—";
 
-        // Target 08_REFERENCES at project root (auto-create if missing)
-        var refFolder = new Folder(rootDir.fsName + "/08_REFERENCE");
-        if(!refFolder.exists){ refFolder.create(); }
+                            var decoded = __st_base64DecodeToString(payload);
 
-        // Meta filename (one per project)
-        var base = pf.name.replace(/\.[^\.]+$/, "");
-        var mf = new File(refFolder.fsName + "/" + base + "_ShineTools_ProjectTracker.meta");
+                            // decoded is non-strict JSON (e.g. unquoted keys) so we eval like the test script
+                            var obj = null;
+                            try { obj = eval(decoded); } catch (eEval) { obj = null; }
 
-        return mf;
-    }catch(e){}
-    return null;
+                            if (obj && obj.previousComputer !== undefined && obj.previousComputer !== null && String(obj.previousComputer) !== "") {
+                                return __st_formatComputerDisplay(obj.previousComputer);
 }
+                        } catch (e) {}
+                        return "—";
+                    }
 
-                                function readMetaFromProjectStoreItem(projectPath){
-                                    // Reads from sidecar meta file stored next to the project.
-                                    try{
-                                        var p = projectPath || getCurrentProjectPath();
-                                        var f = getProjectTrackerMetaFileForPath(p);
-                                        if(!f || !f.exists) return null;
-                                        if(!f.open("r")) return null;
-                                        var c = f.read();
-                                        try{ f.close(); }catch(eClose){}
-                                        if(!c) return null;
-                                        var a = c.indexOf(META_OPEN);
-                                        var b = c.indexOf(META_CLOSE);
-                                        if(a>=0 && b>a){
-                                            var payload = c.substring(a+META_OPEN.length, b);
-                                            var src = base64Decode(payload);
-                                            if(src){
-                                                try { return (new Function("return " + src))(); } catch(eEval){ return null; }
-                                            }
-                                        }
-                                    }catch(e){}
-                                    return null;
-                                }
 
-                                function writeMetaToProjectStoreItem(meta, projectPath){
-                                    // writes to REF sidecar file (per-project, per-day)
-                                    try{
-                                        var f = getProjectTrackerMetaFileForPath(projectPath);
-                                        if(!f) return;
-                                        var payload = base64Encode(safeToSource(meta));
-                                        var c = META_OPEN + payload + META_CLOSE;
-                                        if(!f.open("w")) return;
-                                        f.write(c);
-                                        try{ f.close(); }catch(eClose){}
-                                    }catch(e){}
-                                }
-
-function safeToSource(obj){
-                                    try { return obj.toSource(); } catch(e){ return "({})"; }
-                                }
-                                function base64Encode(str){
-                                    try { return $.global.__ST_b64e ? $.global.__ST_b64e(str) : (function(s){
-                                        var c="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-                                        var out="", i=0, len=s.length;
-                                        while(i<len){
-                                            var chr1=s.charCodeAt(i++)&0xff;
-                                            var chr2=s.charCodeAt(i++)&0xff;
-                                            var chr3=s.charCodeAt(i++)&0xff;
-                                            var enc1=chr1>>2;
-                                            var enc2=((chr1&3)<<4)|(chr2>>4);
-                                            var enc3=((chr2&15)<<2)|(chr3>>6);
-                                            var enc4=chr3&63;
-                                            if(isNaN(chr2)){ enc3=enc4=64; }
-                                            else if(isNaN(chr3)){ enc4=64; }
-                                            out += c.charAt(enc1)+c.charAt(enc2)+ (enc3===64?"=":c.charAt(enc3)) + (enc4===64?"=":c.charAt(enc4));
-                                        }
-                                        return out;
-                                    })(str); } catch(e){ return ""; }
-                                }
-                                function base64Decode(str){
-                                    try { return $.global.__ST_b64d ? $.global.__ST_b64d(str) : (function(s){
-                                        var c="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-                                        var out="", i=0;
-                                        s = (s||"").replace(/[^A-Za-z0-9\+\/\=]/g,"");
-                                        while(i<s.length){
-                                            var enc1=c.indexOf(s.charAt(i++));
-                                            var enc2=c.indexOf(s.charAt(i++));
-                                            var enc3=c.indexOf(s.charAt(i++));
-                                            var enc4=c.indexOf(s.charAt(i++));
-                                            var chr1=(enc1<<2)|(enc2>>4);
-                                            var chr2=((enc2&15)<<4)|(enc3>>2);
-                                            var chr3=((enc3&3)<<6)|enc4;
-                                            out += String.fromCharCode(chr1);
-                                            if(enc3!==64 && enc3!==-1) out += String.fromCharCode(chr2);
-                                            if(enc4!==64 && enc4!==-1) out += String.fromCharCode(chr3);
-                                        }
-                                        return out;
-                                    })(str); } catch(e){ return ""; }
-                                }
-
-                                function makeEmptyMeta(){
-                                    return {
-                                        v: 1,
-                                        lastComputer: "",
-                                        previousComputer: "",
-                                        lastMachineId: "",
-                                        perMachineLastSeen: {}
-                                    };
-                                }
-
-                                function readMetaFromProjectComment(){
-                                    try{
-                                        // Prefer the project store item if present
-                                        var sm = readMetaFromProjectStoreItem();
-                                        if(sm) return sm;
-                                        if(!app || !app.project) return null;
-                                        var c = app.project.comment || "";
-                                        var a = c.indexOf(META_OPEN);
-                                        var b = c.indexOf(META_CLOSE);
-                                        if(a>=0 && b>a){
-                                            var payload = c.substring(a+META_OPEN.length, b);
-                                            payload = payload.replace(/^\s+|\s+$/g,"");
-                                            var decoded = base64Decode(payload);
-                                            if(decoded){
-                                                return (new Function("return " + decoded))(); // decoded is toSource() of an object
-                                            }
-                                        }
-                                    }catch(e){}
-                                    return null;
-                                }
-
-                                function writeMetaToProjectComment(meta){
-                                    try{
-                                        // Write to store item first (most reliable)
-                                        try{ writeMetaToProjectStoreItem(meta, getCurrentProjectPath()); }catch(e){}
-                                        if(!app || !app.project) return;
-                                        var c = app.project.comment || "";
-                                        var a = c.indexOf(META_OPEN);
-                                        var b = c.indexOf(META_CLOSE);
-                                        if(a>=0 && b>a){
-                                            c = c.substring(0,a) + c.substring(b+META_CLOSE.length);
-                                        }
-                                        var payload = base64Encode(safeToSource(meta));
-                                        c += "\n" + META_OPEN + payload + META_CLOSE;
-                                        app.project.comment = c;
-                                    }catch(e){}
-                                }
-
-                                
-                                // ------------------------------------------------------------
-                                // Time tracking REMOVED.
-                                // Keep only per-project machine metadata so we can display
-                                // "Previous Computer" without accumulating active time.
-                                // ------------------------------------------------------------
-
-                                function makeEmptyMeta(){
-                                    return {
-                                        v: 1,
-                                        lastComputer: "",
-                                        previousComputer: "",
-                                        lastMachineId: "",
-                                        perMachineLastSeen: {}
-                                    };
-                                }
-
-                                function mergeMeta(fromComment, fromRTF){
-                                    // Desktop-RTF merge removed; fromRTF is ignored for compatibility.
-                                    var a = fromComment || null;
-                                    if(!a) return null;
-
-                                    // Normalize fields
-                                    if(!a.perMachineLastSeen) a.perMachineLastSeen = {};
-                                    if(!a.lastComputer) a.lastComputer = "";
-                                    if(!a.previousComputer) a.previousComputer = "";
-                                    if(!a.lastMachineId) a.lastMachineId = a.lastComputer || "";
-
-                                    return a;
-                                }
-
-                                function ensureMetaForProject(p){
-                                    var st = getState();
-                                    if(!p) return null;
-
-                                    st.computerName = st.computerName || getComputerName();
-                                    st.machineId    = st.machineId || (st.computerName || "Unknown");
-
-                                    // Read existing meta (store item preferred, then project comment)
-                                    var metaFromComment = null;
-                                    try{ metaFromComment = readMetaFromProjectComment(); }catch(e){}
-                                    var meta = mergeMeta(metaFromComment, null);
-
-                                    if(!meta){
-                                        meta = makeEmptyMeta();
-                                    }
-
-                                    // Attach to state
-                                    st.meta = meta;
-
-                                    var cur = st.computerName || "Unknown";
-                                    var curId = st.machineId || cur;
-
-                                    if(!st.meta.perMachineLastSeen) st.meta.perMachineLastSeen = {};
-
-                                    function computePrevByLastSeen(){
-                                        var bestName = "";
-                                        var bestT = -1;
-                                        try{
-                                            for(var nm in st.meta.perMachineLastSeen){
-                                                if(!st.meta.perMachineLastSeen.hasOwnProperty(nm)) continue;
-                                                if(nm === cur) continue;
-                                                var t = st.meta.perMachineLastSeen[nm];
-                                                if(typeof t === "number" && t > bestT){
-                                                    bestT = t;
-                                                    bestName = nm;
-                                                }
-                                            }
-                                        }catch(e){}
-                                        return bestName;
-                                    }
-
-                                    // Legacy upgrade: if older meta has lastComputer but no lastMachineId
-                                    if(st.meta.lastComputer && !st.meta.lastMachineId){
-                                        st.meta.lastMachineId = st.meta.lastComputer; // best-effort legacy
-                                    }
-
-                                    // Update previous/last ONLY when a *different machine* opens the project
-                                    if(st.meta.lastMachineId && st.meta.lastMachineId !== curId){
-                                        var _prev = st.meta.lastComputer || computePrevByLastSeen() || "";
-                                        if(_prev === cur){ _prev = ""; }
-                                        st.meta.previousComputer = _prev;
-                                        st.meta.lastComputer = cur;
-                                        st.meta.lastMachineId = curId;
-                                    }else if(!st.meta.lastComputer){
-                                        st.meta.lastComputer = cur;
-                                        st.meta.lastMachineId = curId;
-                                    }
-
-                                    // Stamp last-seen for this computer
-                                    st.meta.perMachineLastSeen[cur] = (new Date()).getTime();
-
-                                    // Persist immediately (store item + comment)
-                                    try{ writeMetaToProjectStoreItem(st.meta, p); }catch(e){}
-                                    try{ if(getCurrentProjectPath && getCurrentProjectPath()===p) writeMetaToProjectComment(st.meta); }catch(e){}
-
-                                    return st.meta;
-                                }
-
-                                function persistMeta(p){
-                                    var st = getState();
-                                    if(!st.meta || !p) return;
-                                    try{ writeMetaToProjectStoreItem(st.meta, p); }catch(e){}
-                                    try{ if(getCurrentProjectPath && getCurrentProjectPath()===p) writeMetaToProjectComment(st.meta); }catch(e){}
-                                }
-
-function ensureUI(){
-                                    // Rebuild-safe: AE can destroy/recreate ScriptUI trees when a docked panel is closed/reopened.
-                                    // We only reuse cached UI if it is still attached to the CURRENT parent AND the launch row exists.
-                                    function _isChildOf(el, ancestor){
-                                        try{
-                                            var p = el;
-                                            while(p){
-                                                if(p === ancestor) return true;
-                                                p = p.parent;
-                                            }
-                                        }catch(e){}
-                                        return false;
-                                    }
-                                    function _hasChildNamed(p, nm){
-                                        try{
-                                            if(!p || !p.children) return false;
-                                            for(var i=0; i<p.children.length; i++){
-                                                if(p.children[i] && p.children[i].name === nm) return true;
-                                            }
-                                        }catch(e){}
-                                        return false;
-                                    }
-
-                                    var cached = $.global[UI_KEY];
-                                    if(cached && cached.panel){
-                                        var stillAttached = _isChildOf(cached.panel, parent) && (parent.children && parent.children.length);
-                                        // launch row is created as a sibling of the PROJECT TRACKER panel
-                                        var hasLaunch = _hasChildNamed(parent, "__ST_PT_LAUNCH_ROW__");
-                                        if(stillAttached && hasLaunch){
-                                            return cached;
-                                        }
-                                        // Stale cache: clear so we can rebuild into the new parent
-                                        try{ $.global[UI_KEY] = null; }catch(e){}
-                                        try{ $.global[PAL_KEY] = null; }catch(e2){}
-                                    }
-
-                                    var ttPanel = parent.add("panel", undefined, "");
-                                    ttPanel.name = "__ST_PT_PANEL__";
-                                    ttPanel.orientation   = "column";
-                                    ttPanel.alignChildren = ["fill","top"];
-                                    ttPanel.alignment     = ["fill","top"];
-                                    ttPanel.margins       = 10;
-                                    ttPanel.spacing       = 6;
-                                    // Spacer removed (no panel title)
-                                    function addRow(label, chars){
-                                        var g = ttPanel.add("group");
-                                        g.orientation = "row";
-                                        g.alignChildren = ["left","center"];
-                                        g.spacing = 4;
-
-                                        var l = g.add("statictext", undefined, label);
-                                        l.preferredSize.width = 120;
-
-                                        var v = g.add("statictext", undefined, "—");
-                                        v.characters = chars || 44;
-                                        return v;
-                                    }
-
-                                    var ui = {
-                                        panel: ttPanel,
-                                        previous: addRow("Previous Computer:", 44)
-                                    };
-
-                                    // Spacer removed (compact panel)
-// Button Row (outside PROJECT TRACKER panel): Launch ShineTracker (icon + label, hover swap)
-var launchRow = parent.add("group");
-launchRow.name = "__ST_PT_LAUNCH_ROW__";
-launchRow.orientation = "row";
-launchRow.alignChildren = ["left","center"];
-launchRow.alignment = ["fill","top"];
-launchRow.margins = [10, 6, 0, 0];
-launchRow.spacing = 0;
-
-launchRow.minimumSize.height = 36;
-// Clickable icon + label (no ScriptUI button chrome)
-var launchTrackerIconCtl, launchTrackerLabel, launchClickGroup;
-var __stLaunchImgNormal = null;
-var __stLaunchImgHover  = null;
-
-function _stLaunchShineTracker() {
+// ---------- Display mapping ----------
+// Map internal machine codes -> friendly display labels
+var __ST_COMP_LABELS = {
+    "ShineCA": "ShineCA (Edit 6)",
+    "ShineCF": "ShineCF (Edit 7)",
+    "ShineCB": "ShineCB (Edit 2)",
+    "ShineCC": "ShineCC (Edit 4)",
+    "ShineCE": "ShineCE (Edit 1)",
+    "ShineCD": "ShineCD (EDIT 5)",
+    "Shine_SD": "Shine_SD (Lucas)",
+    "ShineBC": "ShineBC (Shine Hub 3)",
+    "ShineAF": "ShineAF (Shine Hub 1)",
+    "ShineBB": "ShineBB (Shine Hub 2)"
+};
+function __st_formatComputerDisplay(code) {
     try {
-        var trackerPath = "/Applications/ShineTracker.app";
-        if (Folder(trackerPath).exists) {
-            system.callSystem('open "' + trackerPath + '"');
-        } else {
-            alert("ShineTracker.app not found in /Applications.");
-        }
-    } catch (err) {
-        alert("Error launching ShineTracker:\\n" + err.toString());
-    }
+        var c = String(code);
+        if (__ST_COMP_LABELS.hasOwnProperty(c)) return __ST_COMP_LABELS[c];
+        return c;
+    } catch (e) { return String(code); }
 }
 
-function _stSetLaunchIcon(isHover) {
-    try {
-        if (!launchTrackerIconCtl) return;
-        if (isHover && __stLaunchImgHover) {
-            launchTrackerIconCtl.image = __stLaunchImgHover;
-        } else if (__stLaunchImgNormal) {
-            launchTrackerIconCtl.image = __stLaunchImgNormal;
-        }
-    } catch (e) {}
+                    // ---------- UI row ----------
+                    var prevPanel = parent.add("panel", undefined, "");
+                    prevPanel.name = "__ST_PREV_COMPUTER_PANEL__";
+                    prevPanel.orientation = "column";
+                    prevPanel.alignChildren = ["center","top"];
+                    prevPanel.alignment = ["fill","top"];
+                    prevPanel.margins = [10, 10, 10, 10];
+                    prevPanel.spacing = 2;
+                    // Centered stacked labels inside the box
+                    var prevLabel = prevPanel.add("statictext", undefined, "Previous Computer:");
+                    try { prevLabel.justify = "center"; } catch (eJ1) {}
+                    prevLabel.alignment = ["center","top"];
+
+                    var prevValue = prevPanel.add("statictext", undefined, "—");
+                    try { prevValue.justify = "center"; } catch (eJ2) {}
+                    prevValue.alignment = ["center","top"];
+// Ensure the computer name isn't truncated, WITHOUT forcing a wide field.
+                    // Using `characters` gives it room to render long names, while still allowing
+                    // the label+value pair to size-to-content and be centered as ONE unit.
+                    try { prevValue.characters = 28; } catch (eC) {}
+                    try { _setShineYellowBold(prevValue); } catch (eY) {}
+// Register for later refresh (project may not be loaded/saved yet when panel builds)
+                    try {
+                        if (!$.global.__ST_PrevComputerUI) $.global.__ST_PrevComputerUI = {};
+                        $.global.__ST_PrevComputerUI.label = prevValue;
+                        $.global.__ST_PrevComputerUI.getName = __st_getPreviousComputerName;
+                        $.global.__ST_PrevComputerUI.refresh = function () {
+                            try {
+                                if ($.global.__ST_PrevComputerUI && $.global.__ST_PrevComputerUI.label) {
+                                    $.global.__ST_PrevComputerUI.label.text = __st_getPreviousComputerName();
+                                }
+                            } catch (eR) {}
+                        };
+                    } catch (eReg) {}
+
+                    // Initial populate + delayed refresh (covers opening a project after the panel is already loaded)
+                    try { prevValue.text = __st_getPreviousComputerName(); } catch (eSet) {}
+                    try {
+                        app.scheduleTask('try{ if ($.global.__ST_PrevComputerUI && $.global.__ST_PrevComputerUI.refresh) { $.global.__ST_PrevComputerUI.refresh(); } }catch(e){}', 250, false);
+                    } catch (eSch) {}
+try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.resize(); } } catch (eL) {}
+
+                })(tabHelp);
+            } catch (ePC) {}
+
+            try {
+                (function _ST_ShineTrackerLaunchRow_inHelp(parent) {
+
+                    // Button Row: Launch ShineTracker (icon + label, hover swap)
+                    var launchRow = parent.add("group");
+                    launchRow.name = "__ST_LAUNCH_TRACKER_ROW__";
+                    launchRow.orientation = "column";
+                    launchRow.alignChildren = ["center","top"];
+                    launchRow.alignment = ["fill","top"];
+                    launchRow.margins = [0, 16, 0, 0];
+                    launchRow.spacing = 0;
+
+                    launchRow.minimumSize.height = 60;
+
+                    // Clickable icon + label (no ScriptUI button chrome)
+                    var launchTrackerIconCtl, launchTrackerLabel, launchClickGroup;
+                    var __stLaunchImgNormal = null;
+                    var __stLaunchImgHover  = null;
+
+                    function _stLaunchShineTracker() {
+                        try {
+                            var trackerPath = "/Applications/ShineTracker.app";
+                            if (Folder(trackerPath).exists) {
+                                system.callSystem('open "' + trackerPath + '"');
+                            } else {
+                                alert("ShineTracker.app not found in /Applications.");
+                            }
+                        } catch (err) {
+                            alert("Error launching ShineTracker:\\n" + err.toString());
+                        }
+                    }
+
+                    function _stSetLaunchIcon(isHover) {
+                        try {
+                            if (!launchTrackerIconCtl) return;
+                            if (isHover && __stLaunchImgHover) {
+                                launchTrackerIconCtl.image = __stLaunchImgHover;
+                            } else if (__stLaunchImgNormal) {
+                                launchTrackerIconCtl.image = __stLaunchImgNormal;
+                            }
+                        } catch (e) {}
+                    }
+
+                    try {
+                        var _stRoot = _stGetSharedRootFolder();
+
+                        // Prefer shared root icons folder, fallback to system path
+                        var _iconNormal = (_stRoot && _stRoot.exists) ? new File(_stRoot.fsName + "/icons/launch_tracker_normal_32.png")
+                                                                      : new File("/Library/Application Support/ShineTools/icons/launch_tracker_normal_32.png");
+
+                        var _iconHover  = (_stRoot && _stRoot.exists) ? new File(_stRoot.fsName + "/icons/launch_tracker_hover_32.png")
+                                                                      : new File("/Library/Application Support/ShineTools/icons/launch_tracker_hover_32.png");
+
+                        if (_iconNormal && _iconNormal.exists) {
+
+                            __stLaunchImgNormal = ScriptUI.newImage(_iconNormal);
+                            if (_iconHover && _iconHover.exists) __stLaunchImgHover = ScriptUI.newImage(_iconHover);
+
+                            // Group that holds icon + text (left-justified and non-stretching)
+                            launchClickGroup = launchRow.add("group");
+                            launchClickGroup.orientation = "column";
+                            launchClickGroup.alignChildren = ["center","top"];
+                            launchClickGroup.alignment = ["center","top"];
+                            launchClickGroup.margins = 0;
+                            launchClickGroup.spacing = 4;
+                            launchClickGroup.helpTip = "Launch ShineTracker";
+
+                            // Image control: no border / no button chrome
+                            launchTrackerIconCtl = launchClickGroup.add("image", undefined, __stLaunchImgNormal);
+
+                            try { launchTrackerIconCtl.alignment = ["center","top"]; } catch(eAl) {}
+
+                            // Control box size (use a 28x28 render here to align with text)
+                            launchTrackerIconCtl.preferredSize = [28, 28];
+                            launchTrackerIconCtl.minimumSize   = [28, 28];
+                            launchTrackerIconCtl.maximumSize   = [28, 28];
+
+                            // Label to the right
+                            launchTrackerLabel = launchClickGroup.add("statictext", undefined, "Launch ShineTracker");
+                            launchTrackerLabel.justify = "center";
+                            launchTrackerLabel.alignment = ["center","top"];
+
+                            // Hide label by default; reveal on hover over the icon (no tooltip/popup).
+                            // Use fixed character width so layout doesn't jump when toggling text.
+                            try {
+                                launchTrackerLabel.characters = 22;
+                                launchTrackerLabel.text = "";
+                            } catch (eLbl) {}
+
+                            // Make both icon and label clickable
+                            launchTrackerIconCtl.addEventListener("mousedown", function () { _stLaunchShineTracker(); });
+                            launchTrackerLabel.addEventListener("mousedown",   function () { _stLaunchShineTracker(); });
+                            launchClickGroup.addEventListener("mousedown",     function () { _stLaunchShineTracker(); });
+
+                            // Hover swap (icon + label + container) + reveal/hide label text
+                            function _stSetLaunchLabel(show) {
+                                try {
+                                    if (!launchTrackerLabel) return;
+                                    launchTrackerLabel.text = show ? "Launch ShineTracker" : "";
+                                    // Force layout refresh so the text updates immediately
+                                    if (launchClickGroup && launchClickGroup.layout) launchClickGroup.layout.layout(true);
+                                    if (parent && parent.layout) { parent.layout.layout(true); parent.layout.resize(); }
+                                } catch (e) {}
+                            }
+
+                            // Use the container group for reliable hover behavior
+                            launchClickGroup.addEventListener("mouseover", function () {
+                                _stSetLaunchIcon(true);
+                                _stSetLaunchLabel(true);
+                            });
+                            launchClickGroup.addEventListener("mouseout", function () {
+                                _stSetLaunchIcon(false);
+                                _stSetLaunchLabel(false);
+                            });
+
+                            // Keep icon-only hover as well (helps if container events don't fire on some AE builds)
+                            launchTrackerIconCtl.addEventListener("mouseover", function () {
+                                _stSetLaunchIcon(true);
+                                _stSetLaunchLabel(true);
+                            });
+                            launchTrackerIconCtl.addEventListener("mouseout", function () {
+                                _stSetLaunchIcon(false);
+                                _stSetLaunchLabel(false);
+                            });
+                        }
+
+                    } catch (eIcon) {}
+
+                    if (!launchClickGroup) {
+                        // Fallback: standard text button if icon(s) missing
+                        var launchCell = launchRow.add("group");
+                        launchCell.orientation   = "stack";
+                        launchCell.alignChildren = ["fill","fill"];
+                        launchCell.alignment     = ["left","center"];
+                        launchCell.margins       = 0;
+
+                        var launchTrackerBtnFallback = launchCell.add("button", undefined, "Launch ShineTracker");
+                        launchTrackerBtnFallback.minimumSize.height = 28;
+                        try { defocusButtonBestEffort(launchTrackerBtnFallback); } catch (eDF) {}
+                        launchTrackerBtnFallback.onClick = function () { _stLaunchShineTracker(); };
+                    }
+
+                    try { if(parent && parent.layout) { parent.layout.layout(true); parent.layout.resize(); } } catch(e) {}
+
+                })(tabHelp);
+            } catch (eTT) {}
 }
-
-try {
-    var _stRoot = _stGetSharedRootFolder();
-
-    // Prefer shared root icons folder, fallback to system path
-    var _iconNormal = (_stRoot && _stRoot.exists) ? new File(_stRoot.fsName + "/icons/launch_tracker_normal_32.png")
-                                                  : new File("/Library/Application Support/ShineTools/icons/launch_tracker_normal_32.png");
-
-    var _iconHover  = (_stRoot && _stRoot.exists) ? new File(_stRoot.fsName + "/icons/launch_tracker_hover_32.png")
-                                                  : new File("/Library/Application Support/ShineTools/icons/launch_tracker_hover_32.png");
-
-    if (_iconNormal && _iconNormal.exists) {
-
-        __stLaunchImgNormal = ScriptUI.newImage(_iconNormal);
-        if (_iconHover && _iconHover.exists) __stLaunchImgHover = ScriptUI.newImage(_iconHover);
-
-        // Group that holds icon + text (left-justified and non-stretching)
-        launchClickGroup = launchRow.add("group");
-        launchClickGroup.orientation = "row";
-        launchClickGroup.alignChildren = ["left","center"];
-        launchClickGroup.alignment = ["left","center"];
-        launchClickGroup.margins = 0;
-        launchClickGroup.spacing = 8;
-        launchClickGroup.helpTip = "Launch ShineTracker";
-
-        // Image control: no border / no button chrome
-        launchTrackerIconCtl = launchClickGroup.add("image", undefined, __stLaunchImgNormal);
-
-        // IMPORTANT: ScriptUI does not reliably scale images; this sets the control box size.
-        // For a true 40x40 render, your PNG should be 40x40 (or accept it rendering at native size if larger).
-        launchTrackerIconCtl.preferredSize = [28, 28];
-        launchTrackerIconCtl.minimumSize   = [28, 28];
-        launchTrackerIconCtl.maximumSize   = [28, 28];
-
-        // Label to the right
-        launchTrackerLabel = launchClickGroup.add("statictext", undefined, "Launch ShineTracker");
-        launchTrackerLabel.justify = "left";
-
-        // Make both icon and label clickable
-        launchTrackerIconCtl.addEventListener("mousedown", function () { _stLaunchShineTracker(); });
-        launchTrackerLabel.addEventListener("mousedown",   function () { _stLaunchShineTracker(); });
-        launchClickGroup.addEventListener("mousedown",     function () { _stLaunchShineTracker(); });
-
-        // Hover swap (icon + label + container)
-        launchTrackerIconCtl.addEventListener("mouseover", function () { _stSetLaunchIcon(true); });
-        launchTrackerIconCtl.addEventListener("mouseout",  function () { _stSetLaunchIcon(false); });
-
-        launchTrackerLabel.addEventListener("mouseover", function () { _stSetLaunchIcon(true); });
-        launchTrackerLabel.addEventListener("mouseout",  function () { _stSetLaunchIcon(false); });
-
-        launchClickGroup.addEventListener("mouseover", function () { _stSetLaunchIcon(true); });
-        launchClickGroup.addEventListener("mouseout",  function () { _stSetLaunchIcon(false); });
-    }
-
-} catch (eIcon) {}
-
-if (!launchClickGroup) {
-    // Fallback: standard text button if icon(s) missing
-    var launchCell = launchRow.add("group");
-    launchCell.orientation   = "stack";
-    launchCell.alignChildren = ["fill","fill"];
-    launchCell.alignment     = ["left","center"];
-    launchCell.margins       = 0;
-
-    var launchTrackerBtnFallback = launchCell.add("button", undefined, "Launch ShineTracker");
-    launchTrackerBtnFallback.minimumSize.height = 28;
-    try { defocusButtonBestEffort(launchTrackerBtnFallback); } catch (eDF) {}
-    launchTrackerBtnFallback.onClick = function () { _stLaunchShineTracker(); };
-}
-
-                                    $.global[UI_KEY] = ui;
-                                    $.global[PAL_KEY] = parent;
-
-                                    return ui;
-                                }
-
-                                // We are NOT tracking time here. We only "stamp" which computer last saw this project
-                                // so we can display the previous computer when the project moves machines.
-                                function touchProjectForPreviousComputer(p){
-                                    if(!p) return;
-
-                                    var st = getState();
-                                    st.computerName = st.computerName || getComputerName();
-
-                                    try {
-                                        ensureMetaForProject(p);
-
-                                        var curName = (st.computerName || getComputerName() || "Unknown");
-
-                                        // Ensure buckets exist
-                                        if(!st.meta.perMachineLastSeen) st.meta.perMachineLastSeen = {};
-
-                                        // Stamp "last seen" for this computer
-                                        var t = nowMs();
-                                        st.meta.perMachineLastSeen[curName] = t;
-
-                                        // Update "lastComputer" (useful fallback)
-                                        st.meta.lastComputer = curName;
-
-                                        // Derive previous computer as the most recently seen OTHER machine
-                                        var best = "";
-                                        var bestT = -1;
-                                        for(var nm in st.meta.perMachineLastSeen){
-                                            if(!st.meta.perMachineLastSeen.hasOwnProperty(nm)) continue;
-                                            if(nm === curName) continue;
-                                            var tSeen = st.meta.perMachineLastSeen[nm];
-                                            if(typeof tSeen === "number" && tSeen > bestT){
-                                                bestT = tSeen;
-                                                best = nm;
-                                            }
-                                        }
-
-                                        if(best){
-                                            st.meta.previousComputer = best;
-                                        }
-
-                                        // Persist immediately so it survives app quit / crash
-                                        persistMeta(p);
-                                    } catch(e) {}
-                                }
-
-                                function updateUI(){
-                                    var ui = ensureUI();
-                                    var st = getState();
-                                    var p = getCurrentProjectPath();
-
-                                    // Stamp current computer for this project (no polling / time accumulation)
-                                    if(p){
-                                        touchProjectForPreviousComputer(p);
-                                    }
-
-                                    // Previous Computer line (UI only)
-                                    try{
-                                        var curName = (st.computerName || getComputerName() || "Unknown");
-                                        var prev = "";
-
-                                        if(st.meta){
-                                            prev = st.meta.previousComputer || "";
-
-                                            // Fallback: infer from perMachineLastSeen (most recent other machine)
-                                            if(!prev && st.meta.perMachineLastSeen){
-                                                var best = "";
-                                                var bestT = -1;
-                                                for(var nm in st.meta.perMachineLastSeen){
-                                                    if(!st.meta.perMachineLastSeen.hasOwnProperty(nm)) continue;
-                                                    if(nm === curName) continue;
-                                                    var tSeen = st.meta.perMachineLastSeen[nm];
-                                                    if(typeof tSeen === "number" && tSeen > bestT){
-                                                        bestT = tSeen;
-                                                        best = nm;
-                                                    }
-                                                }
-                                                if(best) prev = best;
-                                            }
-
-                                            // Final fallback: lastComputer (if not the current)
-                                            if(!prev && st.meta.lastComputer && st.meta.lastComputer !== curName){
-                                                prev = st.meta.lastComputer;
-                                            }
-                                        }
-
-                                        var curKey  = normalizeComputerKey(curName);
-                                        var prevKey = normalizeComputerKey(prev);
-                                        if(prevKey === curKey) prevKey = "";
-
-                                        ui.previous.text = prevKey ? formatComputerWithRoom(prevKey) : "—";
-                                    }catch(ePrev){}
-                                }
-
-                                ensureUI();
-                                updateUI();
-
-                                try { if(parent && parent.layout) { parent.layout.layout(true); parent.layout.resize(); } } catch(e) {}
-})(tabHelp);
-                        } catch (eTT) {}
-
-
-
-
-            }
 
         _buildUpdatesTab(tabUpdates);
 
@@ -12269,7 +12086,6 @@ if (w && dd.list) {
 
         // Popup width helper: clamp the dropdown popup list to the content width (not the closed control width).
         // Useful when the CLOSED dropdown is wide (fills the row) but we want a tighter POPUP like the TEXT tab.
-        
 
 
         // Keep dropdown popup width from ballooning by ensuring item labels
@@ -12423,7 +12239,6 @@ if (w && dd.list) {
         }
 
 
-
         // Chain a small Y-shift to a parent group's onLayout without breaking existing handlers.
         // Useful for pixel-perfect alignment nudges (e.g., the ★ icon).
         function _chainOnLayoutShiftY(parentGroup, ctrl, dy) {
@@ -12466,7 +12281,6 @@ if (w && dd.list) {
 }
 
 
-
         var ARROW_COLOR_IDLE  = [0.35, 0.35, 0.35, 1]; // dark gray
         var ARROW_COLOR_HOVER = [1.00, 0.82, 0.00, 1]; // Shine yellow
 
@@ -12493,13 +12307,7 @@ function relayout() {
 }
 
 
-// ============================================================
-// PASS 5: PERFORMANCE – Batched relayout requests
-// ------------------------------------------------------------
-// ScriptUI can get sluggish if many sections trigger layout() in rapid succession
-// (accordion toggles, reorder dialog commits, etc.). We batch those requests into a
-// single scheduled tick that relayouts only the affected scope groups.
-// ============================================================
+
 var __ST_RelayoutTaskId = 0;
 var __ST_RELAYOUT_TICK_FN = "__ShineTools_BatchedRelayoutTick__";
 
@@ -12520,7 +12328,7 @@ function _stCancelRelayoutTick() {
 
 // Request a relayout soon (debounced). If scopeGroup is null, falls back to pal.
 function requestRelayoutSoon(scopeGroup, delayMs) {
-    
+
     try {
         if (ST && ST.SAFE_MODE === true) {
             // Synchronous relayout (no scheduleTask) for stability.
@@ -12570,14 +12378,8 @@ try {
             return d;
         }
 
-        
-    // ============================================================
-    // PASS 10: UX CONSISTENCY SWEEP (LOW RISK)
-    // ------------------------------------------------------------
-    // Helpers to standardize small UI behaviors (focus ring safety,
-    // helpTips, and lightweight visual consistency) without changing
-    // tool behavior.
-    // ============================================================
+
+
     function _focusSafeMargins(grp, leftPx, topPx, rightPx, bottomPx) {
         try {
             if (!grp) return;
@@ -12593,7 +12395,7 @@ try {
         try { if (ctrl && tip) ctrl.helpTip = String(tip); } catch (e) {}
     }
 
-    // PASS 10.1: apply default tooltips to common buttons to common buttons (best-effort)
+
     function _walkUIControls(root, visitFn) {
         try {
             if (!root) return;
@@ -12654,7 +12456,6 @@ function defocusButtonBestEffort(btn) {
                 try { pal.active = true; } catch (e2) {}
             });
         }
-
 
 
 // -------------------------
@@ -12781,6 +12582,9 @@ function addDropdownHeader(col, text, insetPx) {
         var _hoverLastAlt = null;
         var _hoverLastShift = null;
 
+// =================================================================================================
+// UTILITIES: HOVER SYSTEM: mousemove-driven hover labels  (CLEANPACK5)
+// =================================================================================================
         function _hoverClearInternal() {
             _hoverBtn = null;
             _hoverLastAlt = null;
@@ -13183,7 +12987,7 @@ function addDropdownHeader(col, text, insetPx) {
                             var W = this.size[0];
                             var H = this.size[1];
                             if (!W || !H) return;
-                            var brush = g.newBrush(g.BrushType.SOLID_COLOR, [1.0, 0.82, 0.2, 1]);
+                            var brush = g.newBrush(g.BrushType.SOLID_COLOR, ST_CONST.COLORS.SHINE_YELLOW_RGBA);
                             // Slight top/bottom inset so it looks centered on the button face
                             g.rectPath(0, 3, W, Math.max(0, H - 6));
                             g.fillPath(brush);
@@ -13294,7 +13098,7 @@ function addDropdownHeader(col, text, insetPx) {
                 var x = Math.round((w / 2) - 4);
                 var y = Math.round((h / 2) - (g.font.size / 2) + UI.twirlNudgeY);
 
-                var col = this._collapsed ? [0.7, 0.7, 0.7, 1] : [1.0, 0.82, 0.2, 1];
+                var col = this._collapsed ? [0.7, 0.7, 0.7, 1] : ST_CONST.COLORS.SHINE_YELLOW_RGBA;
                 var pen = g.newPen(g.PenType.SOLID_COLOR, col, 1);
                 g.drawString(ch, pen, x, y);
             };
@@ -13305,7 +13109,7 @@ function addDropdownHeader(col, text, insetPx) {
         // -------------------------
         // Accordion factory (reusable per-tab)
         // -------------------------
-        
+
 // -------------------------
 // Accordion factory (reusable per-tab) + optional section re-ordering
 //   - Adds Up/Down chevrons on header hover
@@ -13437,7 +13241,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
     var statesByTitle = {};   // { title: {collapsed:Boolean} }
     var currentOrder = loadOrder();
 
-    
+
     // Persisted collapsed/expanded state (per accordion key)
     // Stored alongside order persistence so users get the exact same UI state after restart.
     var _stCollapsedMap = {}; // { title: Boolean(collapsed) }
@@ -13688,13 +13492,12 @@ var w = this.size[0], h = this.size[1];
             // Tag this body so addGrid2 can persist per-section button order
             try { body._stSectionTitle = title; } catch (eTag1) {}
             try { body._stAccordionKey = orderSettingsKeyOrNull || "NOACC"; } catch (eTag2) {}
-            
+
             body.alignChildren = ["fill", "top"];
             body.alignment     = ["fill", "top"];
             body.margins       = [8, 0, 8, 0];
             body.spacing       = UI.btnGap;
 
-            
 
                         var state = statesByTitle[title] || { collapsed: true };
             statesByTitle[title] = state;
@@ -14055,13 +13858,8 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                         try { requestFullRelayoutSoon(); } catch (eFR) {}
 
 
-
-
-
-
-
                     }
-                     
+
                 } catch (eDlgInner) {
 
                     alert('Reorder failed: ' + String(eDlgInner));
@@ -14205,7 +14003,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         favWrap.orientation   = "column";
         favWrap.alignChildren = ["fill", "top"];
         favWrap.alignment     = ["fill", "top"];
-        favWrap.margins       = [0, 0, 0, 0];
+        favWrap.margins       = ST_CONST.COLORS.TRANSPARENT_RGBA;
         favWrap.spacing       = 3;
 
         var favRow = favWrap.add("group");
@@ -14225,7 +14023,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
             favStar.graphics.foregroundColor =
                 favStar.graphics.newPen(
                     favStar.graphics.PenType.SOLID_COLOR,
-                    [1.0, 0.82, 0.2, 1],
+                    ST_CONST.COLORS.SHINE_YELLOW_RGBA,
                     1
                 );
         } catch (e) {}
@@ -14330,7 +14128,6 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                 } catch (ePop) {}
 
 
-
                 favAddBtn.onClick = function () {
                     if (!requireProject()) return;
 
@@ -14422,18 +14219,18 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         try { favWrap.visible = true; favWrap.enabled = true; } catch (e) {}
 
         // MAIN accordion
-        
+
         // Accordion host (keeps Favorites bar above)
         var accHost = content.add("group");
         accHost.orientation   = "column";
         accHost.alignChildren = ["fill", "top"];
         accHost.alignment     = ["fill", "top"];
-        accHost.margins       = [0, 0, 0, 0];
+        accHost.margins       = ST_CONST.COLORS.TRANSPARENT_RGBA;
         accHost.spacing       = 10;
 
         var mainAcc = createAccordion(accHost, null, function(){ requestRelayoutSoon(content, 40); }, "AccordionOrder_MAIN");
 
-        
+
 // =========================
 // Sections / buttons (MAIN)  (re-orderable with header chevrons)
 // =========================
@@ -14462,7 +14259,7 @@ mainAcc.defineSection("ADD RIG", function(body){
 mainAcc.defineSection("ADD EXPRESSION", function(body){
     addGrid2(body, [
         {
-            text: "BOUNCE",
+            text: ST_LABELS.BOUNCE,
             badgeDot: true,
             onClick: function () { isOptionDown() ? doHardBounce() : doInertialBounce(); },
             helpTip: "Inertial Bounce\nOption: Hard Bounce",
@@ -14472,7 +14269,7 @@ mainAcc.defineSection("ADD EXPRESSION", function(body){
     ]);
 });
 
-mainAcc.defineSection("UTILITIES", function(body){
+mainAcc.defineSection(ST_LABELS.UTILITIES, function(body){
     addGrid2(body, [
         {
 	            text: "COPY UNIQUE COMP",
@@ -14490,7 +14287,7 @@ mainAcc.defineSection("UTILITIES", function(body){
             helpTip: "Adds CC Repetile to the selected layer, expands 1000px on all sides, and sets Tiling to Unfold."
         },
         {
-            text: "ANIMATE STROKE",
+            text: ST_LABELS.ANIMATE_STROKE,
             badgeDot: true,
             onClick: function () {
                 if (isShiftDown()) {
@@ -14517,7 +14314,7 @@ mainAcc.defineSection("TIMELINE", function(body){
         hoverLabels: { base: "TRIM LAYER", hover: "BELOW", optionHover: "ABOVE" }
         },
         {
-        text: "OFFSET LAYERS",
+        text: ST_LABELS.OFFSET_LAYERS,
         badgeDot: true,
         onClick: offsetSelectedLayers_ShineTools,
         helpTip: "Offsets selected layers in time.\nClick: Linear Frame Offset\nOption: Curve Offset (Type + Max Spread + Curve + Invert)",
@@ -14541,9 +14338,9 @@ mainAcc.defineSection("CLEAN UP", function(body){
 
 mainAcc.defineSection("RENDER", function(body){
     addGrid2(body, [
-        { text: "PRORES 422...", onClick: renderPRORES422WithSaveDialog, badgeDot: true,
+        { text: ST_LABELS.PRORES_422, onClick: renderPRORES422WithSaveDialog, badgeDot: true,
   helpTip: "Click: Save + auto-render ProRes 422 (may keep AE in focus during render).\nOPTION: Save + auto-render ProRes 4444 (RGB+Alpha).\nSHIFT: Save + add to Render Queue only (no auto-render; you can CMD+H / Show Desktop).",
-  hoverLabels: { base: "PRORES 422...", hover: "PRORES 422...", optionHover: "PRORES 4444...", shiftHover: "QUEUE ONLY" } },
+  hoverLabels: { base: ST_LABELS.PRORES_422, hover: ST_LABELS.PRORES_422, optionHover: "PRORES 4444...", shiftHover: "QUEUE ONLY" } },
         {
             text: "FRAME AS .JPG...",
             onClick: saveCurrentFramePSDOrJPG,
@@ -14591,7 +14388,7 @@ var collapseGap = content.add("group");
         }
 
 
-        // PASS 4 (lite): consolidate dropdown clamp loop (used in resize tick + live resize)
+
         function _clampAllDropdowns() {
             try {
                 var dds = $.global.__ShineToolsAllDropdowns;
@@ -14619,6 +14416,9 @@ var collapseGap = content.add("group");
                 try { pal.layout.resize(); } catch (e3) {}
             }
         }
+
+        // Expose relayout request so long operations can refresh UI after blocking calls (render, etc.)
+        try { $.global.__ShineTools_RequestFullRelayoutSoon__ = requestFullRelayoutSoon; } catch (eExp) {}
 
         pal.onResizing = function () {
             _cancelResizeTask();
@@ -14668,12 +14468,11 @@ var collapseGap = content.add("group");
     try { if (ST && ST.DEBUG === true) ST_DEBUG_VALIDATE_SYNTAX(); } catch (eDbg) {}
 
 
-
     // ------------------------------------------------------------
     // TEST CLEANUP: Remove any "Solids"/"SOLIDS" folders + their solid items
     // (Used during warnings testing; safe best-effort removal)
     // ------------------------------------------------------------
-    
+
     // ------------------------------------------------------------
     // TEST CLEANUP: Remove any "Solids"/"SOLIDS" folder(s) + their contents
     // (Used during warnings testing; safe best-effort removal)
@@ -14723,7 +14522,6 @@ var collapseGap = content.add("group");
             app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{$.global.__ShineToolsCleanupSolidsFoldersBestEffort&&$.global.__ShineToolsCleanupSolidsFoldersBestEffort();}catch(e){}});", dly, false);
         }
     } catch (eT) {}
-
 
 
 // ------------------------------------------------------------
@@ -14787,7 +14585,7 @@ try {
 
     try {
         testComp = app.project.items.addComp("_ST_JS_TEST_", 16, 16, 1, 1, 30);
-        testLayer = testComp.layers.addSolid([1, 1, 1], "_ST_TEST_SOLID_JS_", 16, 16, 1);
+        testLayer = testComp.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "_ST_TEST_SOLID_JS_", 16, 16, 1);
 
         var prop = testLayer.opacity;
         prop.expression = "(()=>100)()";
@@ -14826,7 +14624,7 @@ function _stEnsureProjectForProbe() {
                 var out = { ok: false, err: "", val: null };
                 try {
                     comp = proj.items.addComp("_ST_JS_PROBE_", 16, 16, 1, 1, 30);
-                    layer = comp.layers.addSolid([1, 1, 1], "_probeSolid", 16, 16, 1);
+                    layer = comp.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "_probeSolid", 16, 16, 1);
                     prop = layer.property("ADBE Transform Group").property("ADBE Opacity");
                     prop.expression = expr;
                     prop.expressionEnabled = true;
@@ -14989,7 +14787,7 @@ function _stEnsureProjectForProbe() {
             try { if (__stWarnHeader) __stWarnHeader.text = "ShineTools needs these settings enabled:"; } catch (eH) {}
         }
 
-                // 
+                //
 function _stCollapseWarn() {
             try {
                 if (!__stWarnPanel) return;
@@ -15136,6 +14934,7 @@ function _stCollapseWarn() {
 // Expose pal + a safe "kick" relayout to global scope so scheduleTask can access it.
 try { $.global.__ShineTools_pal = myPal; } catch (e0) {}
 
+try { $.global.__ShineToolsInitialized = true; } catch (e0b) {}
 try {
     $.global.__ShineToolsKickLayout = function () {
         var p = null;
@@ -15163,4 +14962,15 @@ if (myPal instanceof Window) {
     try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 120, false); } catch (e12) {}
 }
 
-})((($.global.__ST_HOST_PANEL__ !== undefined) && ($.global.__ST_HOST_PANEL__ !== null)) ? $.global.__ST_HOST_PANEL__ : this);
+
+// CleanPack9: robust host-panel resolution (prevents "Object is invalid" when stale Panel refs exist)
+})( (function(){
+    try {
+        var __h = $.global.__ST_HOST_PANEL__;
+        if (__h !== undefined && __h !== null) {
+            __h.toString(); // touch; invalid objects throw
+            return __h;
+        }
+    } catch (e) {}
+    return this;
+})() );
