@@ -367,11 +367,49 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
     // ============================================================
     try {
         if (!$.global.__ST_withModalSafety__) {
-            $.global.__ST_withModalSafety__ = function(fn) {
+
+            // Global "is it safe to touch ScriptUI right now?" helper.
+            // Used to prevent post-render / modal edge-case panel freezes.
+            $.global.__ST_isSafeToTouchUI__ = function () {
                 try {
-                    // Best-effort "not now" guards. AE has modal moments that aren't visible.
-                    try { if (app && app.isSaving) return; } catch (eS) {}
-                    try { if (!app || !app.project) { /* allow */ } } catch (eP) {}
+                    // UI cooldown window (ms) after long ops like render.
+                    try {
+                        if ($.global.__ST_UI_COOLDOWN_UNTIL__) {
+                            var nowMs = (new Date()).getTime();
+                            if (nowMs < $.global.__ST_UI_COOLDOWN_UNTIL__) return false;
+                        }
+                    } catch (eC) {}
+
+                    // Explicit long-op flag (we set this around renders).
+                    try { if ($.global.__ST_LONGOP__ === true) return false; } catch (eL) {}
+
+                    // Saving can trigger modal-ish UI moments.
+                    try { if (app && app.isSaving) return false; } catch (eS) {}
+
+                    // Rendering state (Render Queue)
+                    try {
+                        if (app && app.project && app.project.renderQueue) {
+                            if (app.project.renderQueue.rendering) return false;
+                        }
+                    } catch (eR) {}
+
+                    return true;
+                } catch (e) {}
+                return true; // best-effort fallback
+            };
+
+            // Simple helper to set a UI cooldown (ms) after long ops.
+            $.global.__ST_SetUICooldown__ = function (ms) {
+                try {
+                    var dur = (ms === undefined || ms === null) ? 500 : ms;
+                    dur = Math.max(0, dur);
+                    $.global.__ST_UI_COOLDOWN_UNTIL__ = (new Date()).getTime() + dur;
+                } catch (e) {}
+            };
+
+            $.global.__ST_withModalSafety__ = function (fn) {
+                try {
+                    if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return;
                     if (fn && typeof fn === "function") fn();
                 } catch (e) {}
             };
@@ -922,6 +960,15 @@ function _settingsGet(section, key, defaultValue) {
     if (!$.global._shineToolsResetDropdown) {
         $.global._shineToolsResetDropdown = function (key) {
             try {
+                // Global UI safety gate (includes render + cooldown)
+                try { if ($.global && $.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) {}
+                // --- UI safety guard: avoid touching ScriptUI during render/save/long ops
+                try {
+                    try { if ($.global && $.global.__ST_LONGOP__ === true) return; } catch (eL) {}
+                    try { if (app && app.isSaving) return; } catch (eS) {}
+                    try { if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) return; } catch (eR) {}
+                } catch (eG) {}
+
                 var store = $.global.__ShineToolsDDStore;
                 var dd = store ? store[key] : null;
                 if (!dd) return;
@@ -939,6 +986,15 @@ function _settingsGet(section, key, defaultValue) {
     if (!$.global._shineToolsRestoreDropdownBlank) {
         $.global._shineToolsRestoreDropdownBlank = function (key) {
             try {
+                // Global UI safety gate (includes render + cooldown)
+                try { if ($.global && $.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) {}
+                // --- UI safety guard: avoid touching ScriptUI during render/save/long ops
+                try {
+                    try { if ($.global && $.global.__ST_LONGOP__ === true) return; } catch (eL) {}
+                    try { if (app && app.isSaving) return; } catch (eS) {}
+                    try { if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) return; } catch (eR) {}
+                } catch (eG) {}
+
                 var store = $.global.__ShineToolsDDStore;
                 var dd = store ? store[key] : null;
                 if (!dd) return;
@@ -5840,8 +5896,18 @@ var rsTemplate = "Best Settings"; // Always Best Settings
 
                             try { $.global.__ST_LONGOP__ = true; } catch (eL0) {}
                             try {
-                                app.project.renderQueue.render();
+                                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD0) {}
+                try { $.global.__ST_LONGOP__ = true; } catch (eL0b) {}
+                try {
+                    app.project.renderQueue.render();
+                } finally {
+                    // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
+                    try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD1) {}
+                    try { $.global.__ST_LONGOP__ = false; } catch (eL1b) {}
+                }
                             } finally {
+                                // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
+                                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD) {}
                                 try { $.global.__ST_LONGOP__ = false; } catch (eL1) {}
                                 // After a blocking render, force a deferred relayout so custom-drawn glyphs restore
                                 try { if ($.global && $.global.__ShineTools_RequestFullRelayoutSoon__) $.global.__ShineTools_RequestFullRelayoutSoon__(); } catch (eRL) {}
@@ -5859,7 +5925,15 @@ var rsTemplate = "Best Settings"; // Always Best Settings
                 app.scheduleTask('$.global.__ST_RQRenderAndReveal__();', 50, false);
             } catch (eSched) {
                 // Fallback: render immediately if scheduling fails
-                app.project.renderQueue.render();
+                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD0) {}
+                try { $.global.__ST_LONGOP__ = true; } catch (eL0b) {}
+                try {
+                    app.project.renderQueue.render();
+                } finally {
+                    // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
+                    try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD1) {}
+                    try { $.global.__ST_LONGOP__ = false; } catch (eL1b) {}
+                }
                 _revealIfRequested(outFile);
             }
 } catch (err) {
@@ -7879,6 +7953,9 @@ function __ST_withModalSafety__(fn){
         // During long blocking operations (e.g. Render Queue render), skip UI scheduleTask callbacks
         // to avoid ScriptUI re-entrancy / glyph loss on focus changes.
         try { if ($.global && $.global.__ST_LONGOP__ === true) return null; } catch (eSkip) {}
+        // Also skip scheduleTask UI callbacks during saves or when renderQueue reports rendering.
+        try { if (app && app.isSaving) return null; } catch (eSkipS) {}
+        try { if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) return null; } catch (eSkipR) {}
         __ST_pauseBackgroundTasks__();
         try {
             return fn();
@@ -8055,6 +8132,9 @@ function buildUI(thisObj) {
 
         // Install mousemove-driven hover label updates (no polling)
         try { _stHoverInstallMouseHook(pal); } catch(eHook) {}
+
+        // Also try key hooks for instant modifier flips (best-effort; tick still ensures this works).
+        try { _stHoverInstallKeyHook(pal); } catch(eKey) {}
 // Failsafe: if the panel loses focus/deactivates, stop any hover tick so it can't stick running.
         try {
             pal.onDeactivate = function(){
@@ -12311,6 +12391,45 @@ function relayout() {
 var __ST_RelayoutTaskId = 0;
 var __ST_RELAYOUT_TICK_FN = "__ShineTools_BatchedRelayoutTick__";
 
+
+$.global.__ST_RelayoutAfterSettleTick__ = function () {
+    __ST_RelayoutAfterSettleTaskId = 0;
+    try {
+        // trigger a batched relayout soon (uses existing queue)
+        requestRelayoutSoon(pal, 40);
+    } catch (e) {}
+};
+
+// ---- Render-safe helpers (avoid ScriptUI layout during Render Queue) ----
+function _stIsRendering() {
+    try { return !!(app && app.project && app.project.renderQueue && app.project.renderQueue.rendering); } catch (e) { return false; }
+}
+
+// One-shot monitor used ONLY while rendering to defer relayout until render completes.
+var __ST_AfterRenderTaskId = 0;
+var __ST_AfterRenderRetries = 0;
+function _stScheduleRelayoutAfterRender() {
+    try {
+        if (__ST_AfterRenderTaskId) return;
+        __ST_AfterRenderRetries = 0;
+        $.global.__ShineTools_AfterRenderTick__ = function () {
+            __ST_AfterRenderTaskId = 0;
+            // If still rendering, reschedule a few times (lightweight, only during render)
+            if (_stIsRendering()) {
+                __ST_AfterRenderRetries++;
+                if (__ST_AfterRenderRetries <= 60) { // ~60 * 250ms = 15s max
+                    __ST_AfterRenderTaskId = app.scheduleTask("$.global.__ShineTools_AfterRenderTick__ && $.global.__ShineTools_AfterRenderTick__()", 250, false);
+                }
+                return;
+            }
+            // Render finished: run any queued relayout tick ASAP
+            try { _stCancelRelayoutTick(); } catch (e0) {}
+            try { __ST_RelayoutTaskId = app.scheduleTask("$.global['" + __ST_RELAYOUT_TICK_FN + "'] && $.global['" + __ST_RELAYOUT_TICK_FN + "']()", 50, false); } catch (e1) {}
+        };
+        __ST_AfterRenderTaskId = app.scheduleTask("$.global.__ShineTools_AfterRenderTick__ && $.global.__ShineTools_AfterRenderTick__()", 250, false);
+    } catch (e) { __ST_AfterRenderTaskId = 0; }
+}
+
 function _stQueueRelayout(scopeGroup) {
     try {
         if (!$.global.__ShineToolsRelayoutQueue) $.global.__ShineToolsRelayoutQueue = [];
@@ -12328,6 +12447,16 @@ function _stCancelRelayoutTick() {
 
 // Request a relayout soon (debounced). If scopeGroup is null, falls back to pal.
 function requestRelayoutSoon(scopeGroup, delayMs) {
+// During Render Queue rendering, any ScriptUI relayout/draw is a high-risk deadlock point.
+    // Queue the relayout and defer execution until rendering completes.
+    try {
+        if (_stIsRendering()) {
+            try { _stQueueRelayout(scopeGroup || pal); } catch(eQ) {}
+            try { _stScheduleRelayoutAfterRender(); } catch(eAR) {}
+            return;
+        }
+    } catch (eR) {}
+
 
     try {
         if (ST && ST.SAFE_MODE === true) {
@@ -12362,7 +12491,7 @@ try {
         };
 
         var ms = Math.max(0, (delayMs == null ? 40 : delayMs));
-        __ST_RelayoutTaskId = app.scheduleTask(__ST_RELAYOUT_TICK_FN + "()", ms, false);
+        __ST_RelayoutTaskId = app.scheduleTask("$.global['" + __ST_RELAYOUT_TICK_FN + "'] && $.global['" + __ST_RELAYOUT_TICK_FN + "']()", ms, false);
     } catch (e) {
         // Fallback: immediate scoped relayout
         try { relayoutScoped(scopeGroup || pal); } catch (e2) {}
@@ -12594,6 +12723,8 @@ function addDropdownHeader(col, text, insetPx) {
         // Expose a global canceller so we can pause hover state when a modal dialog is shown
         $.global.__ShineTools_CancelHoverPoll__ = function () {
             try { _hoverClearInternal(); } catch (e) {}
+            try { _stHoverSetRunning(false); } catch (e2) {}
+            try { _stHoverCancelTask(); } catch (e3) {}
         };
 
         function _hoverSafeSetText(btn, t) { try { btn.text = t; } catch (e) {} }
@@ -12624,14 +12755,13 @@ function addDropdownHeader(col, text, insetPx) {
             _hoverLastShift = null;
 
             _hoverUpdateIfChanged(); // initial set (uses current modifiers)
-            // NOTE: We no longer run a scheduleTask tick here.
-            // Labels will refresh on mouse movement while hovered.
+            _stHoverEnsureTick(); // instant modifier flips while hovered (stops automatically on mouseout)
 }
 
         function _hoverStop(btn, baseText) {
             if (_hoverBtn === btn) _hoverClearInternal();
             _hoverSafeSetText(btn, baseText);
-            // No tick to stop (mousemove-driven hover updates).
+            _stHoverStopTickIfIdle();
 }
         // ------------------------------------------------------------
         // Modifier-hover label update via MOUSE MOVE (no scheduleTask polling)
@@ -12641,36 +12771,103 @@ function addDropdownHeader(col, text, insetPx) {
         // To avoid ANY background tasks (and reduce panel lockups), we now refresh hover labels
         // ONLY when the mouse moves while a button is hovered (or on mouseover/mouseout).
 
-        // Backwards-compat no-ops (some older code paths may still call these)
-        function _stHoverIsRunning(){ return false; }
-        function _stHoverSetRunning(v){}
-        function _stHoverCancelTask(){}
-        function _stHoverEnsureTick(){}          // replaced by mousemove hook
-        function _stHoverStopTickIfIdle(){}      // replaced by mousemove hook
+        // Backwards-compat: re-introduce a VERY small hover tick, but ONLY while a button is hovered.
+// This brings back instant modifier-hover label flips (no mouse movement required) without keeping any always-on background work.
+var _stHoverRunning = false;
+var _stHoverTaskId  = null;
 
-        // Install a single mousemove listener on the palette/panel to refresh hovered button label.
-        function _stHoverInstallMouseHook(root){
+// Expose a callable for scheduleTask (string-based) to invoke our closure safely.
+$.global.__ST_HoverTick__ = function () {
+    try { _stHoverTickInternal(); } catch (e) {}
+};
+
+function _stHoverIsRunning(){ return _stHoverRunning; }
+function _stHoverSetRunning(v){ _stHoverRunning = v ? true : false; }
+
+function _stHoverCancelTask(){
+    try {
+        if (_stHoverTaskId !== null) {
+            app.cancelTask(_stHoverTaskId);
+        }
+    } catch (e) {}
+    _stHoverTaskId = null;
+}
+
+function _stHoverEnsureTick(){
+    if (_stHoverRunning) return;
+    _stHoverRunning = true;
+    _stHoverTickInternal();
+}
+
+function _stHoverStopTickIfIdle(){
+    // Stop if no hover target (or the palette loses focus).
+    if (_hoverBtn) return;
+    _stHoverRunning = false;
+    _stHoverCancelTask();
+}
+
+function _stHoverTickInternal(){
+    if (!_stHoverRunning) return;
+
+    try { if (_hoverBtn) _hoverUpdateIfChanged(); } catch(e0) {}
+
+    // If nothing is hovered, stop quickly (no repeating background work).
+    if (!_hoverBtn) {
+        _stHoverStopTickIfIdle();
+        return;
+    }
+
+    // Re-schedule a single short tick.
+    try {
+        _stHoverCancelTask();
+        _stHoverTaskId = app.scheduleTask("try{$.global.__ST_HoverTick__();}catch(e){}", 80, false);
+    } catch (e1) {
+        // If scheduleTask fails, just stop (mousemove hook will still work).
+        _stHoverRunning = false;
+        _stHoverCancelTask();
+    }
+}
+
+// Install a single mousemove listener on the palette/panel to refresh hovered button label.
+function _stHoverInstallMouseHook(root){
+    try {
+        if (!root) return;
+        if (root.__ST_hoverMouseHooked) return;
+        root.__ST_hoverMouseHooked = true;
+
+        root.addEventListener("mousemove", function(){
             try {
-                if (!root) return;
-                if (root.__ST_hoverMouseHooked) return;
-                root.__ST_hoverMouseHooked = true;
+                if (_hoverBtn) _hoverUpdateIfChanged();
+            } catch(e0) {}
+        });
 
-                root.addEventListener("mousemove", function(){
-                    try {
-                        if (_hoverBtn) _hoverUpdateIfChanged();
-                    } catch(e0) {}
-                });
+        // Also refresh once on mouseover anywhere in the panel (helps first enter)
+        root.addEventListener("mouseover", function(){
+            try {
+                if (_hoverBtn) _hoverUpdateIfChanged();
+            } catch(e1) {}
+        });
+    } catch(e) {}
+}
 
-                // Also refresh once on mouseover anywhere in the panel (helps first enter)
-                root.addEventListener("mouseover", function(){
-                    try {
-                        if (_hoverBtn) _hoverUpdateIfChanged();
-                    } catch(e1) {}
-                });
-            } catch(e) {}
+// Best-effort: key hooks (not reliable in all AE ScriptUI builds), but when they fire they give instant updates.
+function _stHoverInstallKeyHook(root){
+    try {
+        if (!root) return;
+        if (root.__ST_hoverKeyHooked) return;
+        root.__ST_hoverKeyHooked = true;
+
+        function _k(){
+            try { if (_hoverBtn) _hoverUpdateIfChanged(); } catch(e0) {}
         }
 
-        function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
+        try { root.addEventListener("keydown", _k); } catch(e1) {}
+        try { root.addEventListener("keyup",   _k); } catch(e2) {}
+    } catch(e3) {}
+}
+
+
+function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
             btn.addEventListener("mouseover", function () { _hoverStart(btn, baseText, hoverText, optionHoverText, ""); });
             btn.addEventListener("mouseout",  function () { _hoverStop(btn, baseText); });
         }
