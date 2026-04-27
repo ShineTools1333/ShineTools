@@ -64,8 +64,6 @@ ST.CONST = ST.CONST || {
 var ST_LABELS = ST.TEXT;
 var ST_CONST  = ST.CONST;
 
-
-
 /*  ShineTools_v1.0.jsx  (Tabbed UI)
 // BUILD: YellowLine merge + Dot removed | FIX PACK b (Animate Stroke hover + Option START Trim Paths) | ORGANIZE BIN primary 01_ folder detection (01_MAIN/01_SEQ) | 2026-02-19T15:36:13.668976ZTabs:
       - MAIN  (your current full tool)
@@ -86,10 +84,158 @@ var ST_CONST  = ST.CONST;
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.0";
+var SHINE_VERSION      = "1.1";
+var __ST_PATCH_MARKER__ = "FULL_REFACTOR_PASS_V1 | WORKSPACE_NAMESPACE_CLEANUP | ORGANIZE_DIALOG_CONFIG_UNIFY | DROPDOWN_NAMESPACE_UNIFY | IMPORT_WORKSPACE_SAVE_FIX";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
+
+function _resolveActiveWorkspaceStatusName() {
+    var name = "";
+    try { name = String(pal.__stCurrentWorkspaceName || ""); } catch (e0) { name = ""; }
+
+    try {
+        if (!name && pal.__stWorkspaceDropdown && pal.__stWorkspaceDropdown.selection) {
+            name = String(pal.__stWorkspaceDropdown.selection.text || "");
+        }
+    } catch (e1) {}
+
+    try {
+        if (!name && pal.__stPendingWorkspaceName) {
+            name = String(pal.__stPendingWorkspaceName || "");
+        }
+    } catch (e2) {}
+
+    return String(name || "");
+}
+
+function _updateWorkspaceStatusLabel(options) {
+    try {
+        var name = "";
+        var __stHasAnyWorkspaces = false;
+        try {
+            var __stNames = _stListWorkspaceNames();
+            __stHasAnyWorkspaces = !!(__stNames && __stNames.length);
+        } catch (eNames) { __stHasAnyWorkspaces = false; }
+
+        if (!__stHasAnyWorkspaces) {
+            // Do not clear the persisted last-used workspace here.
+            // During startup / refresh there can be transient moments where the list is empty.
+            // We only want the UI to fall back visually, not wipe the saved active workspace.
+            try { pal.__stWorkspaceStatusName = ""; } catch (eClrA) {}
+            name = "";
+        } else {
+            try { name = String(pal.__stWorkspaceStatusName || ""); } catch (e0) { name = ""; }
+            try { if (!name) name = String(pal.__stCurrentWorkspaceName || ""); } catch (e1) {}
+            try { if (!name) name = String(pal.__stStartupAppliedWorkspaceName || ""); } catch (e3) {}
+            try { if (!name) name = String(pal.__stPendingWorkspaceName || ""); } catch (e4) {}
+            try { if (!name) name = String(_stReadLastUsedWorkspaceName() || ""); } catch (e2) {}
+            try { if (!name && pal.__stWorkspaceDropdown && pal.__stWorkspaceDropdown.selection) name = String(pal.__stWorkspaceDropdown.selection.text || ""); } catch (e1a) {}
+        }
+
+        name = String(name || "").replace(/^\s+|\s+$/g, "");
+        var __statusDisplayText = name ? ("Workspace: " + name) : "Workspace:";
+        try { pal.__stWorkspaceStatusName = name; } catch (e5) {}
+
+        try {
+            if (pal.__stWorkspaceStatusNameLabel_MAIN) {
+                pal.__stWorkspaceStatusNameLabel_MAIN.text = ((name && String(name).replace(/^\s+|\s+$/g, "")) ? ("Workspace: " + name) : "Workspace:");
+                try { pal.__stWorkspaceStatusNameLabel_MAIN.characters = Math.max(12, Math.min(64, String(name ? ("Workspace: " + name) : "Workspace:").length + 1)); } catch (e6a0) {}
+                try { pal.__stWorkspaceStatusNameLabel_MAIN.justify = "right"; } catch (e6a1) {}
+                try { pal.__stWorkspaceStatusNameLabel_MAIN.alignment = ["right", "center"]; } catch (e6a2) {}
+                try { pal.__stWorkspaceStatusNameLabel_MAIN.minimumSize = [0, 20]; pal.__stWorkspaceStatusNameLabel_MAIN.maximumSize = [10000, 20]; } catch (e6a3) {}
+            }
+        } catch (e6a) {}
+        try {
+            if (pal.__stWorkspaceStatusNameLabel_TEXT) {
+                pal.__stWorkspaceStatusNameLabel_TEXT.text = ((name && String(name).replace(/^\s+|\s+$/g, "")) ? ("Workspace: " + name) : "Workspace:");
+                try { pal.__stWorkspaceStatusNameLabel_TEXT.characters = Math.max(12, Math.min(64, String(name ? ("Workspace: " + name) : "Workspace:").length + 1)); } catch (e6b0) {}
+                try { pal.__stWorkspaceStatusNameLabel_TEXT.justify = "right"; } catch (e6b1) {}
+                try { pal.__stWorkspaceStatusNameLabel_TEXT.alignment = ["right", "center"]; } catch (e6b2) {}
+                try { pal.__stWorkspaceStatusNameLabel_TEXT.minimumSize = [0, 20]; pal.__stWorkspaceStatusNameLabel_TEXT.maximumSize = [10000, 20]; } catch (e6b3) {}
+            }
+        } catch (e6b) {}
+        try {
+            if (pal.__stWorkspaceStatusNameLabel) {
+                pal.__stWorkspaceStatusNameLabel.text = ((name && String(name).replace(/^\s+|\s+$/g, "")) ? ("Workspace: " + name) : "Workspace:");
+                try { pal.__stWorkspaceStatusNameLabel.characters = Math.max(12, Math.min(64, String(name ? ("Workspace: " + name) : "Workspace:").length + 1)); } catch (e6c0) {}
+                try { pal.__stWorkspaceStatusNameLabel.justify = "right"; } catch (e6c1) {}
+                try { pal.__stWorkspaceStatusNameLabel.alignment = ["right", "center"]; } catch (e6c2) {}
+                try { pal.__stWorkspaceStatusNameLabel.minimumSize = [0, 20]; pal.__stWorkspaceStatusNameLabel.maximumSize = [260, 20]; pal.__stWorkspaceStatusNameLabel.preferredSize = [Math.max(18, Math.min(260, (String(__statusDisplayText || "Workspace:").length * 9) + 10)), 20]; } catch (e6c3) {}
+            }
+        } catch (e6c) {}
+
+        try {
+            if (pal.__stWorkspaceStatusNameLabels && pal.__stWorkspaceStatusNameLabels.length) {
+                for (var i = 0; i < pal.__stWorkspaceStatusNameLabels.length; i++) {
+                    try {
+                        var lbl = pal.__stWorkspaceStatusNameLabels[i];
+                        if (!lbl) continue;
+                        lbl.text = __statusDisplayText;
+                        try { lbl.characters = Math.max(1, Math.min(32, String(__statusDisplayText || "Workspace:").length + 1)); } catch (e7a) {}
+                        try { lbl.justify = "right"; } catch (e7b) {}
+                        try { lbl.alignment = ["right", "center"]; } catch (e7c) {}
+                        try { lbl.minimumSize = [0, 20]; lbl.maximumSize = [260, 20]; lbl.preferredSize = [Math.max(18, Math.min(260, (String(__statusDisplayText || "Workspace:").length * 9) + 10)), 20]; } catch (e7d) {}
+                    } catch (e7) {}
+                }
+            }
+        } catch (e8) {}
+
+        var __stDoRelayout = true;
+        try { if (options && options.suppressLayout) __stDoRelayout = false; } catch (eOpt0) {}
+        if (__stDoRelayout) {
+            try { if (pal.layout) pal.layout.layout(true); } catch (e9) {}
+            try { if (pal.layout) pal.layout.resize(); } catch (e10) {}
+            try { if (pal.update) pal.update(); } catch (e11) {}
+        }
+    } catch (e12) {}
+}
+
+function _stReadLastUsedWorkspaceName() {
+    try {
+        if (app && app.settings && app.settings.haveSetting("ShineTools", "CurrentWorkspaceName")) {
+            return String(app.settings.getSetting("ShineTools", "CurrentWorkspaceName") || "");
+        }
+    } catch (e0) {}
+    return "";
+}
+
+function _stWriteLastUsedWorkspaceName(name) {
+    try {
+        var clean = String(name || "").replace(/^\s+|\s+$/g, "");
+        if (!app || !app.settings) return false;
+        app.settings.saveSetting("ShineTools", "CurrentWorkspaceName", clean);
+        return true;
+    } catch (e1) {}
+    return false;
+}
+
+function _syncWorkspaceDropdownToActiveName() {
+    try {
+        if (!pal || !pal.__stWorkspaceDropdown) return false;
+        var dd = pal.__stWorkspaceDropdown;
+        var wanted = "";
+        try { wanted = String(pal.__stCurrentWorkspaceName || pal.__stStartupAppliedWorkspaceName || pal.__stPendingWorkspaceName || ""); } catch (e0) { wanted = ""; }
+        if (!wanted) return false;
+
+        try {
+            pal.__stWorkspaceDropdownSyncing = true;
+            for (var i = 0; i < dd.items.length; i++) {
+                try {
+                    if (String(dd.items[i].text || "") === wanted) {
+                        dd.selection = i;
+                        try { pal.__stWorkspaceStatusName = wanted; } catch (e1a) {}
+                        return true;
+                    }
+                } catch (e1) {}
+            }
+        } catch (e2) {}
+        finally {
+            try { pal.__stWorkspaceDropdownSyncing = false; } catch (e3) {}
+        }
+    } catch (e4) {}
+    return false;
+}
 
 /* ============================================================
    BUILD NOTES / PASS HISTORY (CONSOLIDATED)
@@ -99,13 +245,12 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
 
    ---- PASS BLOCK 1 ----
    // ============================================================
-   // PASS 1-2: ORGANIZE + CONSOLIDATE PERSISTENCE (NO BEHAVIOR CHANGES)
    // ------------------------------------------------------------
    // TABLE OF CONTENTS (high-level)
    //   0) Globals / Debug
-   //   1) Settings + JSON helpers (app.settings + file fallback)
+   //   1) JSON helpers
    //   2) UI + Tabs
-   //   3) Accordion Factory (order persistence)
+   //   3) Accordion Factory
    //   4) Tools (MAIN)
    //   5) Tools (TEXT)
    // ============================================================
@@ -141,7 +286,6 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
     //     - _addHelpLine  (line ~11358)
     //     - _addTrimLineAndAnimate_30f  (line ~4468)
     //     - _appendCacheBuster  (line ~10227)
-    //     - _appGetSetting  (line ~713)
     //     - _appHaveSetting  (line ~710)
     //     - _applyDefaultHelpTips  (line ~12239)
     //     - _applyDropdownLabelClamp  (line ~12000)
@@ -338,7 +482,6 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
            // PASS 4 (lite): consolidate dropdown clamp loop (used in resize tick + live resize)
 */
 
-
 (function ShineTool(thisObj) {
 
     // ============================================================
@@ -372,6 +515,8 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
             // Used to prevent post-render / modal edge-case panel freezes.
             $.global.__ST_isSafeToTouchUI__ = function () {
                 try {
+                    try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (ePCG) {}
+                    try { if ($.global.__ShineToolsIsPanelSafe__ && !$.global.__ShineToolsIsPanelSafe__()) return false; } catch (ePCS) {}
                     // UI cooldown window (ms) after long ops like render.
                     try {
                         if ($.global.__ST_UI_COOLDOWN_UNTIL__) {
@@ -413,10 +558,21 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
                     if (fn && typeof fn === "function") fn();
                 } catch (e) {}
             };
+
+            // Global panel-closing guard: all deferred UI ticks must bail once the panel is hiding/closing.
+            try { if ($.global.__ShineToolsClosing__ === undefined) $.global.__ShineToolsClosing__ = false; } catch (ePC0) {}
+            $.global.__ShineToolsIsPanelSafe__ = function () {
+                try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (ePC1) {}
+                try {
+                    var p = $.global.__ShineTools_pal;
+                    if (!p) return false;
+                    try { p.toString(); } catch (ePC2) { return false; }
+                    return true;
+                } catch (ePC3) {}
+                return false;
+            };
         }
     } catch (eG) {}
-
-
 
     try {
         if ($.global.__ST_HOST_PANEL && ($.global.__ST_HOST_PANEL instanceof Panel)) {
@@ -424,8 +580,6 @@ var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
         }
     } catch (eHost) {}
     try { $.global.__ST_HOST_PANEL = null; } catch (eClr) {}
-
-
 
 // =================================================================================================
 // UTILITIES: BOOTSTRAP: Shared-root / self-loader  (CLEANPACK5)
@@ -543,7 +697,6 @@ function _stLooksLikeShineToolsMain(raw) {
     // If a shared main exists, this file acts as a loader and exits.
     if (_stMaybeLoadSharedMainAndExit()) { return; }
 
-
     // ============================================================
     // 0a) Dropdown helpers (temporary display then revert to blank)
     // ============================================================
@@ -554,7 +707,6 @@ function _stLooksLikeShineToolsMain(raw) {
         if (!$.global.__ShineToolsDDStore) $.global.__ShineToolsDDStore = {};
         return $.global.__ShineToolsDDStore;
     }
-
 
     // ============================================================
     // DEBUG FLAGS (set to true temporarily while troubleshooting)
@@ -567,7 +719,6 @@ function _stLooksLikeShineToolsMain(raw) {
         try { if (ST_DEBUG_LISTS) $.writeln("[ShineTools][LIST] " + msg); } catch (e) {}
     }
 
-
     // ============================================================
     // 0b) Lightweight helpers (safe, mac-only)
     // ============================================================
@@ -577,7 +728,6 @@ function _stLooksLikeShineToolsMain(raw) {
     // Set false if you want the original deferred UI polish back.
     ST.SAFE_MODE = (ST.SAFE_MODE === false) ? false : true;
     var SHINETOOLS_BUILD_STAMP = "2026-01-18 02:08 UTC";
-
 
     ST.RELEASE_MODE = (ST.RELEASE_MODE !== false); // default true unless explicitly set to false
     ST.BuildInfo = ST.BuildInfo || {};
@@ -591,8 +741,6 @@ function _stLooksLikeShineToolsMain(raw) {
     ST.Env.getPanelsFolder = ST.Env.getPanelsFolder || function() {
         try { return findScriptUIPanelsFolderByScript(); } catch (e) { return null; }
     };
-
-
 
     ST.DEBUG = (ST.DEBUG === true); // normalize
     try { if (ST && ST.RELEASE_MODE !== false) { /* release mode */ ST.DEBUG = false; } } catch(eRM) {}
@@ -635,32 +783,20 @@ function _stLooksLikeShineToolsMain(raw) {
         } catch (e) {}
     };
 
-
     // UI namespace (Pass 4.7): isolate core UI builders without behavior changes
     ST.UI = ST.UI || {};
 
+    ST.Settings    = ST.Settings    || {};
 
     ST.Settings    = ST.Settings    || {};
-    ST.Persistence = ST.Persistence || {};
     ST.Core        = ST.Core        || {};
 
     // Settings (best-effort app.settings + file fallback)
-    ST.Settings.get = ST.Settings.get || function(section, key, defaultValue) { return _settingsGet(section, key, defaultValue); };
-    ST.Settings.set = ST.Settings.set || function(section, key, value) { return _settingsSet(section, key, value); };
-
-    // Persistence helpers (ExtendScript-safe JSON + file settings)
-    ST.Persistence.jsonParse      = ST.Persistence.jsonParse      || function(raw) { return _stJsonParse(raw); };
-    ST.Persistence.jsonStringify  = ST.Persistence.jsonStringify  || function(val) { return _stJsonStringify(val); };
-    ST.Persistence.settingsPath   = ST.Persistence.settingsPath   || function() { return _stSettingsFilePath(); };
-    ST.Persistence.loadFileSettings = ST.Persistence.loadFileSettings || function() { return _stLoadFileSettings(); };
-    ST.Persistence.saveFileSettings = ST.Persistence.saveFileSettings || function(obj) { return _stSaveFileSettings(obj); };
 
     // Core input helpers (macOS modifiers)
     ST.Core.isCmdDown  = ST.Core.isCmdDown  || function() { return _isCmdDown(); };
     ST.Core.isOptDown  = ST.Core.isOptDown  || function() { return _isOptDown(); };
     ST.Core.isShiftDown = ST.Core.isShiftDown || function() { return isShiftDown(); };
-
-
 
     try {
         ST.UI = ST.UI || {};
@@ -682,8 +818,6 @@ function _stLooksLikeShineToolsMain(raw) {
             return _showReorderButtonsDialog(title, aKey, reg);
         };
     } catch (e) {}
-
-
 
     try {
         ST.Tools      = ST.Tools      || {};
@@ -723,6 +857,46 @@ function _ddEnsureKey(dd) {
         return null;
     }
 
+    function _stNowMs() {
+        try { return (new Date()).getTime(); } catch (e) {}
+        return 0;
+    }
+
+    function _stMarkDropdownInteraction(dd, holdMs) {
+        try {
+            if (!dd) return;
+            _ddEnsureKey(dd);
+            var ms = (holdMs == null) ? 5000 : Math.max(0, holdMs);
+            dd.__stDropdownInteracting = true;
+            dd.__stDropdownInteractionUntil = _stNowMs() + ms;
+        } catch (e) {}
+    }
+
+    function _stClearDropdownInteraction(dd, keepAliveMs) {
+        try {
+            if (!dd) return;
+            if (keepAliveMs != null && keepAliveMs > 0) {
+                dd.__stDropdownInteractionUntil = _stNowMs() + Math.max(0, keepAliveMs);
+            }
+            dd.__stDropdownInteracting = false;
+        } catch (e) {}
+    }
+
+    function _stIsDropdownInteractionActive(dd) {
+        try {
+            if (!dd) return false;
+            var now = _stNowMs();
+            var until = 0;
+            try { until = dd.__stDropdownInteractionUntil || 0; } catch (e0) {}
+            if (until && now <= until) return true;
+            try {
+                var ks = ScriptUI.environment.keyboardState;
+                if (dd.active && ks && (ks.leftButtonPressed || ks.rightButtonPressed)) return true;
+            } catch (e1) {}
+        } catch (e) {}
+        return false;
+    }
+
 // =================================================================================================
 // UTILITIES: TASKING: scheduleTask safe cancel  (CLEANPACK5)
 // =================================================================================================
@@ -731,49 +905,7 @@ function _ddEnsureKey(dd) {
     }
 
     // ------------------------------------------------------------
-    // Settings persistence
-    //  - Primary: app.settings (AE prefs)
-    //  - Fallback: JSON file in userData (survives prefs oddities / permissions)
-    // ------------------------------------------------------------
-// =================================================================================================
-// UTILITIES: SETTINGS + JSON: settings store + stringify/parse  (CLEANPACK5)
-// =================================================================================================
-    function _stSettingsFilePath() {
-        // Prefer a user-writable sidecar location (same idea as your section-order fix).
-        // Primary: ~/Documents/ShineTools/ShineTools_settings.json
-        // Fallback: Folder.userData/ShineTools/ShineTools_settings.json
-        try {
-            var f = null;
-            // 1) Documents/ShineTools
-            try {
-                var docs = Folder.myDocuments;
-                if (docs) {
-                    var dir1 = Folder(docs.fsName + "/ShineTools");
-                    if (!dir1.exists) { try { dir1.create(); } catch (eC1) {} }
-                    f = File(dir1.fsName + "/ShineTools_settings.json");
-                    // Quick write test (create if missing)
-                    if (f) {
-                        try {
-                            if (!f.exists) { f.encoding = "UTF-8"; f.open("w"); f.write("{}"); f.close(); }
-                            return f;
-                        } catch (eT1) {
-                            try { if (f && f.opened) f.close(); } catch (eTC1) {}
-                        }
-                    }
-                }
-            } catch (e1) {}
-
-            // 2) userData fallback
-            try {
-                var base = Folder.userData;
-                if (!base) return null;
-                var dir2 = Folder(base.fsName + "/ShineTools");
-                if (!dir2.exists) { try { dir2.create(); } catch (eC2) {} }
-                return File(dir2.fsName + "/ShineTools_settings.json");
-            } catch (e2) {}
-        } catch (e) {}
-        return null;
-    }
+    // Settings/state persistence removed.
 
     // Minimal JSON helpers for ExtendScript environments where JSON may be missing.
     function _stJsonEscape(s) {
@@ -828,360 +960,6 @@ function _ddEnsureKey(dd) {
         return {};
     }
 
-    function _stLoadFileSettings() {
-        try {
-            if ($.global.__ShineToolsFileSettings) return $.global.__ShineToolsFileSettings;
-            var f = _stSettingsFilePath();
-            var obj = {};
-            if (f && f.exists) {
-                try {
-                    f.encoding = "UTF-8";
-                    f.open("r");
-                    var raw = f.read();
-                    f.close();
-                    if (raw) obj = _stJsonParse(raw);
-                } catch (eR) {
-                    try { if (f && f.opened) f.close(); } catch (eC) {}
-                    try { if (ST && ST.Log) ST.Log.e("settings", "Failed to read settings file", eR); } catch(eLg) {}
-                    obj = {};
-                }
-            }
-            $.global.__ShineToolsFileSettings = obj;
-            return obj;
-        } catch (e2) {}
-        $.global.__ShineToolsFileSettings = {};
-        return $.global.__ShineToolsFileSettings;
-    }
-
-    function _stSaveFileSettings(obj) {
-        var f = null;
-        try {
-            if (!obj) obj = {};
-            f = _stSettingsFilePath();
-            if (!f) return false;
-            f.encoding = "UTF-8";
-            if (!f.open("w")) return false;
-            var payload = _stJsonStringify(obj);
-            if (payload === undefined || payload === null) payload = "{}";
-            f.write(String(payload));
-            f.close();
-            // Keep the in-memory cache in sync.
-            try { $.global.__ShineToolsFileSettings = obj; } catch (eC0) {}
-            return true;
-        } catch (e) {
-            try { if (f && f.opened) f.close(); } catch (e2) {}
-            try { if (ST && ST.Log) ST.Log.e("settings", "Failed to write settings file", e); } catch(eLg2) {}
-            return false;
-        }
-    }
-
-    function _settingsGetRawApp(section, key) {
-        try {
-            var vApp = _appGetSetting(section, key, null);
-            if (vApp !== null && vApp !== undefined) { return vApp; }
-        } catch (e) {}
-        return null;
-    }
-
-    function _settingsGetRawFile(section, key) {
-        try {
-            var fs = _stLoadFileSettings();
-            if (fs && fs[section] && fs[section].hasOwnProperty(key)) {
-                return fs[section][key];
-            }
-        } catch (e2) {}
-        return null;
-    }
-
-    // Best-effort getter that prefers the "better" value when app.settings truncates.
-    // If both exist and are strings, prefer the longer one; otherwise prefer app.settings first.
-    function _settingsGetBest(section, key, defaultValue) {
-        var vApp = _settingsGetRawApp(section, key);
-        var vFile = _settingsGetRawFile(section, key);
-
-        if (vApp !== null && vApp !== undefined && vApp !== "") {
-            // If file exists too and seems more complete, prefer it.
-            if (vFile !== null && vFile !== undefined && vFile !== "") {
-                try {
-                    if (typeof vApp === "string" && typeof vFile === "string") {
-                        if (vFile.length > vApp.length) return vFile;
-                    }
-                } catch (eL) {}
-            }
-            return vApp;
-        }
-
-        if (vFile !== null && vFile !== undefined && vFile !== "") return vFile;
-        return (defaultValue !== undefined) ? defaultValue : "";
-    }
-
-
-// --- app.settings wrappers (centralized try/catch) ---
-function _appHaveSetting(section, key) {
-    try { return app.settings.haveSetting(section, key); } catch (e) { return false; }
-}
-function _appGetSetting(section, key, defaultValue) {
-    try {
-        if (app.settings.haveSetting(section, key)) return app.settings.getSetting(section, key);
-    } catch (e) {}
-    return defaultValue;
-}
-function _appSaveSetting(section, key, value) {
-    try { app.settings.saveSetting(section, key, String(value)); return true; } catch (e) { return false; }
-}
-
-function _settingsGet(section, key, defaultValue) {
-        return _settingsGetBest(section, key, defaultValue);
-    }
-
-    function _settingsSet(section, key, value) {
-        var ok = false;
-
-        // 1) app.settings
-        try {
-            _appSaveSetting(section, key, value);
-            ok = true;
-        } catch (e) {}
-
-        // 2) file fallback
-        try {
-            var fs = _stLoadFileSettings();
-            if (!fs[section]) fs[section] = {};
-            fs[section][key] = String(value);
-            _stSaveFileSettings(fs);
-            ok = true;
-        } catch (e2) {}
-
-        return ok;
-    }
-
-
-    // Expose a global reset function so app.scheduleTask can call it.
-    if (!$.global._shineToolsResetDropdown) {
-        $.global._shineToolsResetDropdown = function (key) {
-            try {
-                // Global UI safety gate (includes render + cooldown)
-                try { if ($.global && $.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) {}
-                // --- UI safety guard: avoid touching ScriptUI during render/save/long ops
-                try {
-                    try { if ($.global && $.global.__ST_LONGOP__ === true) return; } catch (eL) {}
-                    try { if (app && app.isSaving) return; } catch (eS) {}
-                    try { if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) return; } catch (eR) {}
-                } catch (eG) {}
-
-                var store = $.global.__ShineToolsDDStore;
-                var dd = store ? store[key] : null;
-                if (!dd) return;
-                if (!dd.items || dd.items.length < 1) return;
-                dd.__shineProgrammatic = true;
-                dd.selection = 0; // blank item
-                try {
-                    app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{var s=$.global.__ShineToolsDDStore;var d=s? s[\'" + key + "\']:null; if(d) d.__shineProgrammatic=false;}catch(e){}});", 0, false);
-                } catch (e2) {}
-            } catch (e) {}
-        };
-    }
-
-    // Expose a global restore function so app.scheduleTask can revert a temporary dropdown message.
-    if (!$.global._shineToolsRestoreDropdownBlank) {
-        $.global._shineToolsRestoreDropdownBlank = function (key) {
-            try {
-                // Global UI safety gate (includes render + cooldown)
-                try { if ($.global && $.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) {}
-                // --- UI safety guard: avoid touching ScriptUI during render/save/long ops
-                try {
-                    try { if ($.global && $.global.__ST_LONGOP__ === true) return; } catch (eL) {}
-                    try { if (app && app.isSaving) return; } catch (eS) {}
-                    try { if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) return; } catch (eR) {}
-                } catch (eG) {}
-
-                var store = $.global.__ShineToolsDDStore;
-                var dd = store ? store[key] : null;
-                if (!dd) return;
-                if (!dd.items || dd.items.length < 1) return;
-                dd.__shineProgrammatic = true;
-                try {
-                    // item 0 is the reserved blank row
-                    dd.items[0].text = ' ';
-                    dd.selection = 0;
-                    if (dd.window && dd.window.update) dd.window.update();
-                } catch (eInner) {}
-                try {
-                    app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{var s=$.global.__ShineToolsDDStore;var d=s? s[\'" + key + "\']:null; if(d) d.__shineProgrammatic=false;}catch(e){}});", 0, false);
-                } catch (e2) {}
-            } catch (e) {}
-        };
-    }
-
-    // Show a short message inside a dropdown's display area without triggering its onChange behavior.
-    // Implementation: temporarily changes item[0] (reserved blank row) text, selects it, then restores.
-    function _ddShowTempMessage(dd, message, seconds) {
-        // Show a short message inside a dropdown without firing its onChange.
-        // Uses item[0] as a reserved "blank/message" row, then restores to a space.
-        try {
-            if (!dd) return;
-
-            // Ensure stable key + store ref for scheduleTask callbacks.
-            _ddEnsureKey(dd);
-
-            var ms = Math.round((Math.max(0.1, seconds || 1) * 1000));
-
-            // Cancel any pending restore for this dropdown
-            _cancelTaskSafe(dd.__shineMsgTaskId);
-
-            dd.__shineProgrammatic = true;
-            try {
-                if (dd.items && dd.items.length > 0) {
-                    dd.items[0].text = String(message || "Added");
-                    dd.selection = 0;
-                    if (dd.window && dd.window.update) dd.window.update();
-                }
-            } catch (eSet) {}
-
-            if (ST && ST.SAFE_MODE === true) {
-                // In SAFE_MODE we still allow the "Added" flash, but we keep it modal-safe via scheduleTask.
-                // (No immediate blanking.)
-            }
-
-            dd.__shineMsgTaskId = app.scheduleTask(
-                "$.global.__ST_withModalSafety__(function(){ $.global._shineToolsRestoreDropdownBlank(\'" + dd.__shineDDKey + "\'); });",
-                ms,
-                false
-            );
-        } catch (e) {}
-    }
-
-
-    // Flash "Added" inside a dropdown for N frames (defaults to 20).
-    // Uses active comp frameRate when available; falls back to 30fps.
-    function _ddFlashAddedFrames(dd, frames) {
-        try {
-            var fr = 30;
-            try {
-                var comp = (app && app.project) ? app.project.activeItem : null;
-                if (comp && (comp instanceof CompItem) && comp.frameRate) fr = comp.frameRate;
-            } catch (eFR) {}
-            var f = (frames && frames > 0) ? frames : 20;
-            var secs = f / Math.max(1, fr);
-            _ddShowTempMessage(dd, "Added", secs);
-        } catch (e) {}
-    }
-
-
-    // Apply an .ffx preset to a text layer (create/select a text layer if needed).
-    // Exposed globally so app.scheduleTask can trigger it (lets UI update before applyPreset).
-    if (!$.global._shineToolsApplyFFXPreset) {
-        $.global._shineToolsApplyFFXPreset = function (presetPath) {
-            try {
-                var presetFile = new File(presetPath);
-                if (!presetFile.exists) {
-                    alert("Animation preset not found:\n" + presetPath);
-                    return;
-                }
-
-                if (!app.project) {
-                    alert("No project is open.");
-                    return;
-                }
-
-                var comp = app.project.activeItem;
-                if (!comp || !(comp instanceof CompItem)) {
-                    alert("Please make a comp active.");
-                    return;
-                }
-
-                _withUndoGroup("Apply Text Preset", function () {
-
-                    // Pick target: selected text layer if available, otherwise create a new text layer.
-                // Also capture the originally selected layer so a newly created layer can be inserted ABOVE it.
-                var __stRefLayer = null;
-                try { if (comp.selectedLayers && comp.selectedLayers.length) __stRefLayer = comp.selectedLayers[0]; } catch (eRef0) {}
-
-                var target = null;
-                if (comp.selectedLayers && comp.selectedLayers.length > 0) {
-                    var l = comp.selectedLayers[0];
-                    if (l && l instanceof TextLayer) target = l;
-                }
-                if (!target) {
-                    target = comp.layers.addText("Enter Text");
-
-                    // Make the layer bar START at the CTI
-                    try {
-                        var t0 = comp.time;
-                        var d = t0 - target.inPoint;
-                        target.startTime = target.startTime + d;
-                        target.inPoint   = t0;
-                        // keep it alive to comp end (best effort)
-                        if (target.outPoint < t0) target.outPoint = comp.duration;
-                    } catch (eCTI) {}
-
-                    // Insert ABOVE the originally selected layer (if any)
-                    try { if (__stRefLayer) { target.moveBefore(__stRefLayer); } } catch (eMv0) {}
-                }
-                // Ensure only target is selected (AE can be picky about applyPreset context)
-                try {
-                    for (var i = 1; i <= comp.numLayers; i++) comp.layer(i).selected = false;
-                } catch (eSel) {}
-                try { target.selected = true; } catch (eSel2) {}
-
-                // Apply preset
-                target.applyPreset(presetFile);
-
-});
-
-            } catch (e) {
-                alert("Could not apply preset.\n\n" + e.toString());
-            }
-        };
-    }
-
-
-    function _dropdownResetAfterFrames(dd, frames) {
-        try {
-            if (!dd) return;
-
-            var comp = null;
-            try { comp = (app.project && app.project.activeItem && (app.project.activeItem instanceof CompItem)) ? app.project.activeItem : null; } catch (eC) {}
-            var fps = 30;
-            try { if (comp && comp.frameRate) fps = comp.frameRate; } catch (eF) {}
-            if (!fps || fps <= 0) fps = 30;
-
-            var ms = Math.round((Math.max(1, frames) / fps) * 1000);
-
-            _ddEnsureKey(dd);
-
-            // Cancel any pending reset for this dropdown
-            _cancelTaskSafe(dd.__shineDDTaskId);
-
-            if (ST && ST.SAFE_MODE === true) {
-                // In SAFE_MODE, keep dropdown blank immediately (no delayed reset).
-                try { dd.__shineProgrammatic = true; dd.selection = 0; } catch(eSel0) {}
-                try { dd.__shineProgrammatic = false; } catch(eSel1) {}
-                return;
-            }
-
-            dd.__shineDDTaskId = app.scheduleTask(
-                "$.global.__ST_withModalSafety__(function(){ $.global._shineToolsResetDropdown(\'" + dd.__shineDDKey + "\'); });",
-                ms,
-                false
-            );
-        } catch (e) {}
-    }
-
-
-// =================================================================================================
-// UTILITIES: INPUT: Modifier keys  (CLEANPACK5)
-// =================================================================================================
-    function _isCmdDown() {
-        // macOS-only: Command key.
-        try {
-            var ks = ScriptUI.environment.keyboardState;
-            return (ks && ks.metaKey) ? true : false;
-        } catch (e) {}
-        return false;
-    }
-
-
     function _isOptDown() {
         // macOS Option key is reported as Alt in ScriptUI.
         try {
@@ -1191,6 +969,14 @@ function _settingsGet(section, key, defaultValue) {
         return false;
     }
 
+    function _isCmdDown() {
+        // macOS Command key is reported as Meta in ScriptUI.
+        try {
+            var ks = ScriptUI.environment.keyboardState;
+            return (ks && ks.metaKey) ? true : false;
+        } catch (e) {}
+        return false;
+    }
 
     // Safe runner with centralized error logging (no alerts unless requested)
 
@@ -1203,7 +989,6 @@ function _settingsGet(section, key, defaultValue) {
         try { lines.push("Date: " + (new Date()).toString()); } catch (e) {}
 try { lines.push("AE: " + app.version + " (" + app.buildNumber + ")"); } catch (e) {}
         try { lines.push("OS: " + $.os); } catch (e) {}
-        try { lines.push("Settings file: " + _stSettingsFilePath()); } catch (e) {}
         try {
             if (ST && ST.LastError) {
                 lines.push("LastError: [" + ST.LastError.tag + "] " + ST.LastError.message);
@@ -1239,7 +1024,6 @@ function _withUndoGroup(name, fn) {
         try { fn(); } catch (eRun) { throw eRun; } finally { try { app.endUndoGroup(); } catch (eEnd) {} }
     }
 
-
     // ============================================================
     // 0) Locate ScriptUI Panels folder + logo
     // ============================================================
@@ -1257,29 +1041,158 @@ function _withUndoGroup(name, fn) {
         } catch (e) {}
     }
 
+    // Simple, robust dropdown reset used by MAIN Favorites and TEXT Animators.
+    // It avoids the older shared message/defer framework that can leave the dropdown
+    // stuck in a programmatic state after workspace-manager rebuilds.
+    function _stResetDropdownToBlankSoon(dd, delayMs) {
+        try {
+            if (!dd) return;
+            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) {}
+
+            dd.__shineProgrammatic = true;
+            try { dd.selection = 0; } catch (eSel) {}
+            try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd) {}
+            dd.__shineProgrammatic = false;
+            dd.__stBlankResetTaskId = 0;
+        } catch (e) {}
+    }
+
+    // Apply an .ffx preset to a text layer (create/select a text layer if needed).
+    // Exposed globally so dropdown handlers / deferred tasks can trigger it safely.
+    if (!$.global._shineToolsApplyFFXPreset) {
+        $.global._shineToolsApplyFFXPreset = function (presetPath) {
+            try {
+                var presetFile = new File(presetPath);
+                if (!presetFile.exists) {
+                    alert("Animation preset not found:\n" + presetPath);
+                    return;
+                }
+
+                if (!app.project) {
+                    alert("No project is open.");
+                    return;
+                }
+
+                var comp = app.project.activeItem;
+                if (!comp || !(comp instanceof CompItem)) {
+                    alert("Please make a comp active.");
+                    return;
+                }
+
+                _withUndoGroup("Apply Text Preset", function () {
+                    var __stRefLayer = null;
+                    try {
+                        if (comp.selectedLayers && comp.selectedLayers.length) __stRefLayer = comp.selectedLayers[0];
+                    } catch (eRef0) {}
+
+                    var target = null;
+                    if (comp.selectedLayers && comp.selectedLayers.length > 0) {
+                        var l = comp.selectedLayers[0];
+                        if (l && l instanceof TextLayer) target = l;
+                    }
+
+                    if (!target) {
+                        target = comp.layers.addText("Enter Text");
+                        try {
+                            var t0 = comp.time;
+                            var d = t0 - target.inPoint;
+                            target.startTime = target.startTime + d;
+                            target.inPoint = t0;
+                            if (target.outPoint < t0) target.outPoint = comp.duration;
+                        } catch (eCTI) {}
+                        try { if (__stRefLayer) target.moveBefore(__stRefLayer); } catch (eMv0) {}
+                    }
+
+                    try {
+                        for (var i = 1; i <= comp.numLayers; i++) comp.layer(i).selected = false;
+                    } catch (eSel) {}
+                    try { target.selected = true; } catch (eSel2) {}
+
+                    target.applyPreset(presetFile);
+                });
+            } catch (e) {
+                alert("Could not apply preset.\n\n" + e.toString());
+            }
+        };
+    }
+
     // Defer applying an .ffx preset so ScriptUI can repaint the dropdown selection first.
     // Also guards against rapid double-fires by canceling any pending apply task per dropdown.
     function _ddDeferApplyFFX(dd, presetPath, delayMs) {
         try {
             if (!dd) return;
-            var ms = (delayMs == null) ? 50 : Math.max(0, delayMs);
+            if (!_stIsDropdownInteractionActive(dd)) return;
+            _stMarkDropdownInteraction(dd, 5000);
+            dd.__shineApplyTaskId = 0;
 
-            // Cancel any pending apply for this dropdown
-            try { if (dd.__shineApplyTaskId) app.cancelTask(dd.__shineApplyTaskId); } catch (eCancel) {}
-
-
-            // Escape single quotes for scheduleTask string
-            var safe = String(presetPath || "").replace(/'/g, "\\'");
-            var taskStr = "$.global.__ST_withModalSafety__(function(){ $.global._shineToolsApplyFFXPreset(\'" + safe + "\'); });";
-            if (ST && ST.SAFE_MODE === true) {
-                try { $.global._shineToolsApplyFFXPreset(safe); } catch(eNow) {}
-            } else {
-                dd.__shineApplyTaskId = app.scheduleTask(taskStr, ms, false);
-            }
-
+            var safe = String(presetPath || "");
+            try { $.global._shineToolsApplyFFXPreset(safe); } catch(eNow) {}
         } catch (e) {}
     }
 
+    // ============================================================
+    // Shared UI namespaces used by Workspace + Organize systems
+    // ============================================================
+    ST.UI = ST.UI || {};
+    ST.UI.Dropdown = ST.UI.Dropdown || {};
+    ST.UI.Dropdown.flash = ST.UI.Dropdown.flash || function(dd, frames) {
+        return _ddFlashThenReset(dd, frames);
+    };
+    ST.UI.Dropdown.reset = ST.UI.Dropdown.reset || function(dd, delayMs) {
+        return _stResetDropdownToBlankSoon(dd, delayMs);
+    };
+    ST.UI.Dropdown.deferPresetApply = ST.UI.Dropdown.deferPresetApply || function(dd, presetPath, delayMs) {
+        return _ddDeferApplyFFX(dd, presetPath, delayMs);
+    };
+    ST.UI.Dropdown.markInteraction = ST.UI.Dropdown.markInteraction || function(dd, holdMs) {
+        return _stMarkDropdownInteraction(dd, holdMs);
+    };
+    ST.UI.Dropdown.isInteractionActive = ST.UI.Dropdown.isInteractionActive || function(dd) {
+        return _stIsDropdownInteractionActive(dd);
+    };
+
+    ST.UI.Organize = ST.UI.Organize || {};
+    ST.UI.Organize.getSharedSizing = ST.UI.Organize.getSharedSizing || function() {
+        var dialogW = 860;
+        var dialogH = 580;
+        return {
+            dialogW: dialogW,
+            dialogH: dialogH,
+            listW: dialogW - 36,
+            listH: 400
+        };
+    };
+    ST.UI.Organize.buildConfig = ST.UI.Organize.buildConfig || function(kind, overrides) {
+        var cfg = {};
+        var sizing = ST.UI.Organize.getSharedSizing();
+        cfg.dialogW = sizing.dialogW;
+        cfg.dialogH = sizing.dialogH;
+        cfg.listW = sizing.listW;
+        cfg.listH = sizing.listH;
+        cfg.multiselect = true;
+        cfg.allowDelete = true;
+        cfg.allowRename = true;
+        cfg.allowNewDivider = true;
+        cfg.allowDividerSelection = true;
+        cfg.allowDividerDeletion = true;
+        cfg.returnObjects = true;
+        cfg.indentNonDividerRows = true;
+
+        if (kind === "text_animators") {
+            cfg.infoText = 'Shift / Cmd - Select multiple items to reorder, use "Move To..." to place them under BUNDLED or USER ADDED, Rename selected items, or press Delete / Backspace to remove selected items.';
+            cfg.addFilesHelpTip = "Add .ffx files to Text Animators";
+        } else if (kind === "library_elements") {
+            cfg.infoText = 'Shift / Cmd - Select multiple items to reorder, use "Move To..." to place them under section dividers, Rename selected items, or press Delete / Backspace to remove selected items.';
+            cfg.addFilesHelpTip = "Add files to Library Elements";
+        }
+
+        if (overrides) {
+            for (var k in overrides) {
+                if (overrides.hasOwnProperty(k)) cfg[k] = overrides[k];
+            }
+        }
+        return cfg;
+    };
 
     // Cache (AE 2025 safe-pass): avoid repeated disk/path checks during UI build
     var __ST_CACHE = {
@@ -1356,7 +1269,6 @@ function _withUndoGroup(name, fn) {
             var sharedLogo = tryIconsFolder(_stGetSharedRootFolder().fsName + "/logo");
             if (sharedLogo) { __ST_CACHE.logoFile = sharedLogo; return __ST_CACHE.logoFile; }
         } catch (eSharedLogo) {}
-
 
         // 1) Relative to the running script (most reliable)
         try {
@@ -1483,7 +1395,6 @@ function _withUndoGroup(name, fn) {
         return c;
     }
 
-
 // ------------------------------------------------------------
 // Place a newly-created layer at the current time indicator (CTI)
 // - Ensures the layer appears where you clicked, not at comp start.
@@ -1516,7 +1427,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         } catch (eOUT) {}
     } catch (e) {}
 }
-
 
     function isSolidFootageItem(it) {
         try {
@@ -1657,7 +1567,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
             app.endUndoGroup();
         }
     }
-
 
     // ============================================================
     // COPY UNIQUE COMP (Deep duplicate selected precomp layer + nested precomps)
@@ -1806,7 +1715,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         }
     }
 
-
     function ensureCompViewer(c) { try { if (c) c.openInViewer(); } catch (e) {} }
 
     function findMenuCommandIdAny(names) {
@@ -1831,7 +1739,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         return null;
     }
 
-
     function removeEffectByName(layer, effectName) {
         try {
             if (!layer) return false;
@@ -1847,7 +1754,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         } catch (e) {}
         return false;
     }
-
 
     function getOrAddSlider(layer, sliderName, defaultValue) {
         var existing = findEffectByName(layer, sliderName);
@@ -1955,7 +1861,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         } catch (e) { return false; }
     }
 
-
     // ============================================================
     // 2.5) TEXT BOX module (integrated from ShineTools_TEXT_BOX_v2.36_panel_fix.jsx)
     // ============================================================
@@ -1966,7 +1871,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
             obj.name = String(nm);
         } catch (e) {}
     }
-
 
     function initTextBoxModule() {
 // ---------- Safe root namespace ----------
@@ -2115,7 +2019,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         } catch (e) {}
     }
 
-
     function centerTextBoxInPrecomp(precompComp) {
         // Centers the TEXT (and therefore the parented BOX) in the given precomp.
         try {
@@ -2258,7 +2161,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         return sanitizeName(firstNWords(raw, 3));
     }
 
-
     function desiredNameFromText(str) {
         var nm = sanitizeName(firstNWords(str, 3));
         if (!nm) nm = DEFAULT_TEXT_STRING;
@@ -2282,9 +2184,7 @@ function _stPlaceLayerAtCTI(layer, comp) {
     }
 
 /* =========================
-   PERSISTENT DROPDOWN LISTS (LEGACY)
    NOTE: Legacy list helpers removed; ShineTools now uses the unified
-   settings + list persistence helpers near the top of the file.
    ========================= */
 
 function syncNamesForPrecompLayer(precompLayer) {
@@ -2516,7 +2416,6 @@ try {
             // Route the newly-created precomp comp into 07_PRECOMPS
             try { var _pf = _stGetOrCreatePrecompsFolderRoot(); if (_pf && pc) pc.parentFolder = _pf; } catch (ePF) {}
 
-
             // Tag the precomp comp so ORGANIZE BIN can route it later if needed
             try { if (pc) pc.comment = TAG_PRECOMP_COMP; } catch (eTag) {}
 var precompLayer = parentComp.layer(insertAt);
@@ -2609,16 +2508,11 @@ var precompLayer = parentComp.layer(insertAt);
                         + "}"
                         + "}catch(e){}";
 
-                    // Run a few passes to outlast AE focus switching — but ONLY targeting the precomp.
-                    app.scheduleTask(_cmdOpenPrecompAndSelect, 80, false);
-                    app.scheduleTask(_cmdOpenPrecompAndSelect, 180, false);
-                    app.scheduleTask(_cmdOpenPrecompAndSelect, 420, false);
-                    app.scheduleTask(_cmdOpenPrecompAndSelect, 700, false);
-
-                    // Re-assert selection INSIDE the TEXT BOX precomp
-                    app.scheduleTask(_cmdSelectInside, 520, false);
-                    app.scheduleTask(_cmdSelectInside, 920, false);
-                    app.scheduleTask(_cmdSelectInside, 1300, false);
+                    // Run directly (scheduleTask removed by request).
+                    try { eval(_cmdOpenPrecompAndSelect); } catch (eSelPass1) {}
+                    try { eval(_cmdOpenPrecompAndSelect); } catch (eSelPass2) {}
+                    try { eval(_cmdSelectInside); } catch (eSelInside1) {}
+                    try { eval(_cmdSelectInside); } catch (eSelInside2) {}
  } catch (eDockSel) {}
 
             }
@@ -2627,283 +2521,6 @@ var precompLayer = parentComp.layer(insertAt);
             try { $.writeln("TEXT BOX precomp error: " + e.toString()); } catch (_e) {}
         }
     };
-
-    // ----- Watcher (single scheduleTask loop) -----
-    function selectionSignature(comp) {
-        try {
-            if (!isComp(comp)) return "";
-            var arr = comp.selectedLayers;
-            if (!arr || arr.length === 0) return "none";
-            var ids = [];
-            for (var i=0; i<arr.length; i++) {
-                try { ids.push(String(arr[i].id)); } catch (e) {}
-            }
-            return ids.join(",");
-        } catch (e2) { return ""; }
-    }
-
-    function shouldPauseWatcherForEditing(comp) {
-        try {
-            if (!isComp(comp)) return false;
-            if (!comp.selectedLayers || comp.selectedLayers.length !== 1) return false;
-            var l = comp.selectedLayers[0];
-            if (!l || !isTextLayer(l)) return false;
-            // Only pause/rename behavior for Shine-managed TEXT BOX text layers
-            try { return (l.comment === TAG_TEXT_LAYER); } catch (eTag) { return false; }
-        } catch (e) { return false; }
-    }
-
-    // watcher state (kept inside module to avoid clutter)
-    mod.__watcher = {
-        running: false,
-        lastCompId: 0,
-        lastSelSig: "",
-        editPauseUntil: 0,
-        pendingRecenter: false,
-        lastEditingTextId: 0,
-        lastEditingCompId: 0
-    };
-
-    // Track last-known text per text layer id so we can recenter after edits
-    mod.__textState = {}; // { "compId_layerId": "lastText" }
-
-
-    // Track last-known LAYER NAMES for tagged text layers so we can sync the owning precomp name
-    // when the user manually renames the text layer (Project panel / Timeline rename).
-    // Key: "compId_layerId" -> lastName
-    mod.__nameState = {};
-    function maybeRecenterOnTextChange(comp) {
-        // If a tagged text layer's text changed and it's NOT currently selected, recenter anchor once.
-        try {
-            if (!isComp(comp)) return;
-
-            var selectedTextId = 0;
-            try {
-                if (comp.selectedLayers && comp.selectedLayers.length === 1 && isTextLayer(comp.selectedLayers[0])) {
-                    selectedTextId = comp.selectedLayers[0].id;
-                }
-            } catch (eSel) {}
-
-            for (var i=1; i<=comp.numLayers; i++) {
-                var lyr = comp.layer(i);
-                if (!lyr || !isTextLayer(lyr)) continue;
-
-                // Only watch Shine-managed text layers
-                var isTagged = false;
-                try { isTagged = (lyr.comment === TAG_TEXT_LAYER); } catch (eTag) { isTagged = false; }
-                if (!isTagged) continue;
-
-                var key = String(comp.id) + "_" + String(lyr.id);
-                var cur = getTextStringSafe(lyr);
-                var prev = (mod.__textState[key] === undefined) ? null : mod.__textState[key];
-
-                if (prev === null) {
-                    mod.__textState[key] = cur;
-                    continue;
-                }
-
-                // Changed AND not selected => safe to recenter
-                if (cur !== prev && lyr.id !== selectedTextId) {
-                    clearAnchorExpression(lyr);
-                    centerLayerAnchorOnceKeepWorld(lyr);
-                    updateNamesFromTextLayer(lyr, comp);
-                    mod.__textState[key] = cur;
-                } else if (cur !== prev) {
-                    // Changed but still selected (actively editing) => just update later
-                    // Don't update stored value yet so we still recenter after deselect.
-                } else {
-                    // unchanged
-                }
-            }
-        } catch (e) {}
-    }
-
-    function _sanitizeCompNameFromLayerName(nm) {
-        // Comp names allow most characters, but a few cause filesystem / UI issues.
-        // Keep this conservative and consistent with the existing sanitizeName() helper.
-        try {
-            nm = String(nm || "");
-            nm = nm.replace(/[\/\\\:\*\?\"\<\>\|]/g, "");
-            nm = nm.replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
-            // Avoid empty comp names
-            if (!nm) nm = DEFAULT_TEXT_STRING;
-            // Keep it reasonable
-            if (nm.length > 80) nm = nm.substring(0, 80);
-            return nm;
-        } catch (e) {
-            return DEFAULT_TEXT_STRING;
-        }
-    }
-
-    function maybeSyncCompNameOnTextLayerRename(comp) {
-        // If the user renames the tagged TEXT layer, mirror that name onto the *owning* precomp only.
-        // We intentionally do NOT rename any parent comps that contain the precomp layer.
-        try {
-            if (!isComp(comp)) return;
-
-            for (var i=1; i<=comp.numLayers; i++) {
-                var lyr = comp.layer(i);
-                if (!lyr || !isTextLayer(lyr)) continue;
-
-                var isTagged = false;
-                try { isTagged = (lyr.comment === TAG_TEXT_LAYER); } catch (eTag) { isTagged = false; }
-                if (!isTagged) continue;
-
-                var key = String(comp.id) + "_" + String(lyr.id);
-                var curName = "";
-                try { curName = String(lyr.name || ""); } catch (eNm) { curName = ""; }
-
-                var prevName = (mod.__nameState[key] === undefined) ? null : mod.__nameState[key];
-                if (prevName === null) {
-                    mod.__nameState[key] = curName;
-                    continue;
-                }
-
-                if (curName !== prevName) {
-                    mod.__nameState[key] = curName;
-
-                    var desiredCompName = _sanitizeCompNameFromLayerName(curName);
-                    try {
-                        if (String(comp.name) !== String(desiredCompName)) comp.name = desiredCompName;
-                    } catch (eSet) {}
-                }
-            }
-        } catch (e) {}
-    }
-
-
-    // Cursor-stability: run the TextBox watcher ONLY while the user is actively interacting
-    // with a TextBox (selected tagged layers). This prevents a perpetual scheduleTask loop
-    // from impacting AE's cursor/tool icon when the panel is simply open.
-    function _watcherNeedsToRun(comp){
-        try {
-            if (!isComp(comp)) return false;
-
-            var sel = comp.selectedLayers;
-            if (sel && sel.length > 0) {
-                for (var i=0; i<sel.length; i++){
-                    var l = sel[i];
-                    if (!l) continue;
-                    var cmt = "";
-                    try { cmt = String(l.comment || ""); } catch (eC) { cmt = ""; }
-                    if (cmt === TAG_TEXT_LAYER || cmt === TAG_BOX_LAYER || cmt === TAG_PRECOMP_LAYER) return true;
-                }
-            }
-
-            // If nothing is selected, don't keep ticking.
-            return false;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    mod.__watchTick = function() {
-        try {
-            var comp = app.project && app.project.activeItem;
-            if (!isComp(comp)) return;
-
-            var now = (new Date()).getTime();
-
-            // Pause during text edit to avoid interfering with AE typing focus
-            if (shouldPauseWatcherForEditing(comp)) {
-                mod.__watcher.editPauseUntil = now + EDIT_PAUSE_MS;
-                try {
-                    var tlEdit = comp.selectedLayers[0];
-                    mod.__watcher.lastEditingTextId = tlEdit ? tlEdit.id : 0;
-                    mod.__watcher.lastEditingCompId = comp.id;
-                    mod.__watcher.pendingRecenter = true;
-                } catch (eEdit) {}
-                return;
-            }
-
-            // Recenter ONCE when the user clicks away from the edited text layer
-            if (mod.__watcher.pendingRecenter) {
-                try {
-                    var tid = mod.__watcher.lastEditingTextId;
-                    var isStillSelected = false;
-
-                    if (comp.selectedLayers && comp.selectedLayers.length === 1) {
-                        try { if (comp.selectedLayers[0] && comp.selectedLayers[0].id === tid) isStillSelected = true; } catch (eSel) {}
-                    }
-
-                    if (!isStillSelected) {
-                        if (mod.__watcher.lastEditingCompId === comp.id && tid) {
-                            var tl = null;
-                            for (var li=1; li<=comp.numLayers; li++) {
-                                try { if (comp.layer(li).id === tid) { tl = comp.layer(li); break; } } catch (eFind) {}
-                            }
-                            if (tl && isTextLayer(tl)) {
-                                clearAnchorExpression(tl);
-                                centerLayerAnchorOnceKeepWorld(tl);
-                                updateNamesFromTextLayer(tl, comp);
-                            }
-                        }
-                        mod.__watcher.pendingRecenter = false;
-                        mod.__watcher.lastEditingTextId = 0;
-                        mod.__watcher.lastEditingCompId = 0;
-                    }
-                } catch (ePR) {}
-            }
-
-            // Backup recenter: detect text changes and recenter when safe (not selected)
-            maybeRecenterOnTextChange(comp);
-
-
-            // Sync comp name when the user renames the tagged text layer
-            maybeSyncCompNameOnTextLayerRename(comp);
-// Only run automation behaviors after edit pause window
-            if (now >= mod.__watcher.editPauseUntil) {
-                var boxes = findBoxLayersInComp(comp);
-                for (var b=0; b<boxes.length; b++)
-                // Bounds-based precomp anchor recenter (runs every tick, lightweight via cached sig)
-
-                var compId = comp.id;
-                var sig = selectionSignature(comp);
-
-                if (compId !== mod.__watcher.lastCompId || sig !== mod.__watcher.lastSelSig) {
-                    var layers = findTaggedPrecompLayersInComp(comp);
-                    for (var i=0; i<layers.length; i++) syncNamesForPrecompLayer(layers[i]);
-                }
-
-                // Keep precomp layer anchor centered if its bounds change (text/box edits inside)
-
-                mod.__watcher.lastCompId = compId;
-                mod.__watcher.lastSelSig = sig;
-            }
-
-        } catch (e) {
-        } finally {
-            if (mod.__watcher.running) {
-                // Keep ticking only while a tagged TextBox layer/precomp is selected.
-                // If the user clicks away, stop the watcher to restore AE cursor stability.
-                try {
-                    var c = app.project && app.project.activeItem;
-                    if (_watcherNeedsToRun(c)) {
-                        /* watcher disabled */} else {
-                        mod.__watcher.running = false;
-                    }
-                } catch (eRun) {
-                    mod.__watcher.running = false;
-                }
-            }
-        }
-    };
-
-    mod.ensureWatcherRunning = function(){
-        // Disabled: no continuous polling needed for TextBox UX anymore.
-        try { mod.__watcher.running = false; } catch (e) {}
-        return;
-    };
-
-    // Run the watcher only for a short burst (for setup / expression application),
-    // then stop it to avoid AE cursor/tool icon flicker while the panel is open.
-    mod.ensureWatcherBurst = function(durationMs){
-        // Disabled: no scheduleTask watcher bursts. We now explicitly select the box layer
-        // via the existing open/select scheduleTasks when creating/precomposing the TextBox.
-        try { mod.__watcher.running = false; } catch (e) {}
-        return;
-    };
-
 
     // ----- Main: create text box + precomp -----
     mod.makeTextBox = function(){
@@ -2952,9 +2569,7 @@ var precompLayer = parentComp.layer(insertAt);
         clearAnchorExpression(textLayer);
         centerLayerAnchorOnceKeepWorld(textLayer);
         // Seed text state so later edits trigger recenter-on-change
-        try { $.global.ShineTools.TextBox.__textState[String(comp.id) + "_" + String(textLayer.id)] = getTextStringSafe(textLayer); } catch (eSeed) {}
 
-        try { $.global.ShineTools.TextBox.__nameState[String(comp.id) + "_" + String(textLayer.id)] = String(textLayer.name || ""); } catch (eSeedN) {}
 // Ensure initial naming is synced to first 3 words
         try { updateNamesFromTextLayer(textLayer, comp); } catch (eName0) {}
 
@@ -3019,13 +2634,12 @@ var precompLayer = parentComp.layer(insertAt);
 
         app.endUndoGroup();
 
-        // Apply expressions + precompose (tight timing for responsiveness)
-        app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.applyExpressions(' + compId + ',' + bi + '); });', 50, false);
+        // Apply expressions + precompose directly (scheduleTask removed by request)
+        try { $.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.applyExpressions(compId, bi); }); } catch (eApplyNow) {}
 
-        app.scheduleTask('$.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.precomposeTextBox(' + compId + ',' + ti + ',' + bi + ',"' + initialName.replace(/"/g,'\\"') + '"); });', 120, false);
+        try { $.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.precomposeTextBox(compId, ti, bi, initialName); }); } catch (ePreNow) {}
             // TextBox watcher removed (no continuous polling needed)
 };
-
 
     // ----- Re-animate preset -----
     // Clears any keyframes on the "Animate %" slider and sets 0 -> 100 over N frames at the current time.
@@ -3205,7 +2819,6 @@ try {
     }
 };
 
-
     // ---------- Publish module (integrated) ----------
     ST.TextBox = mod;
     /* watcher no longer auto-starts on panel load; it starts on first TEXT BOX use */
@@ -3237,17 +2850,162 @@ try {
     }
 
     var FAV_SETTINGS_SECTION = "ShineTools";
-    var FAV_SETTINGS_KEY     = "favorites_files_v1";
+    var FAV_SETTINGS_KEY     = "";
     var FAV_MAX              = 50;
     var FAV_DEFAULT_START_FOLDER = "/Volumes/EDIT DRIVE 8TB/_LIBRARY ELEMENTS";
 
 var FAV_DEFAULT_START_FOLDER_NAME = "LIBRARY ELEMENTS_1"; // preferred start folder (mounted volume)
 
+    var FAV_DIVIDER_PREFIX = "__FAV_DIVIDER__:";
+    var FAV_DEFAULT_DIVIDERS = ["TEXTURES", "LENS FLARES", "LIGHT LEAKS", "TRANSITIONS"];
+
+    function _favDividerToken(label) {
+        return FAV_DIVIDER_PREFIX + String(label || "").toUpperCase();
+    }
+    function _favIsDividerToken(v) {
+        return String(v || "").indexOf(FAV_DIVIDER_PREFIX) === 0;
+    }
+    function _favDividerLabelFromToken(v) {
+        return String(v || "").replace(FAV_DIVIDER_PREFIX, "");
+    }
+    function _favDividerDisplay(label) {
+        label = String(label || "").toUpperCase();
+        return "──" + label + "──";
+    }
+    function _favEntryPath(v) {
+        try {
+            if (v && typeof v === "object") {
+                if (v.path != null) return String(v.path || "");
+            }
+        } catch (e0) {}
+        return String(v || "");
+    }
+    function _favEntryLabel(v) {
+        try {
+            if (v && typeof v === "object") return String(v.label || "");
+        } catch (e0) {}
+        return "";
+    }
+    function _favMakeEntry(pathStr, label) {
+        var p = String(pathStr || "");
+        if (!p) return "";
+        if (_favIsDividerToken(p)) return p;
+        return { path: p, label: String(label || "") };
+    }
+    function _favNormalizeEntries(arr) {
+        var out = [];
+        arr = arr || [];
+        for (var iNE = 0; iNE < arr.length; iNE++) {
+            var entry = arr[iNE];
+            var p = _favEntryPath(entry);
+            if (!p) continue;
+            if (_favIsDividerToken(p)) out.push(p);
+            else out.push(_favMakeEntry(p, _favEntryLabel(entry)));
+        }
+        return out;
+    }
+    function _favEnsureDefaultDividers(arr) {
+        var out = [];
+        var seen = {};
+        var i, entry, v;
+        var hasAnyDivider = false;
+        arr = _favNormalizeEntries(arr || []);
+
+        for (i = 0; i < arr.length; i++) {
+            v = _favEntryPath(arr[i]);
+            if (!v) continue;
+            if (_favIsDividerToken(v)) { hasAnyDivider = true; break; }
+        }
+
+        if (!hasAnyDivider) {
+            for (i = 0; i < FAV_DEFAULT_DIVIDERS.length; i++) {
+                v = _favDividerToken(FAV_DEFAULT_DIVIDERS[i]);
+                out.push(v);
+                seen[v] = true;
+            }
+        }
+
+        for (i = 0; i < arr.length; i++) {
+            entry = arr[i];
+            v = _favEntryPath(entry);
+            if (!v) continue;
+            if (_favIsDividerToken(v)) {
+                if (_favIsDividerToken(v) && seen[v]) continue;
+                out.push(v);
+                seen[v] = true;
+            } else {
+                if (seen[v]) continue;
+                out.push(_favMakeEntry(v, _favEntryLabel(entry)));
+                seen[v] = true;
+            }
+        }
+
+        for (i = 0; i < FAV_DEFAULT_DIVIDERS.length; i++) {
+            v = _favDividerToken(FAV_DEFAULT_DIVIDERS[i]);
+            if (!seen[v]) out.push(v);
+        }
+
+        return out;
+    }
+
+    var ANIM_DIVIDER_PREFIX = "__ANIM_DIVIDER__:";
+    var ANIM_DEFAULT_DIVIDERS = ["USER ADDED"];
+
+    function _animDividerToken(label) {
+        return ANIM_DIVIDER_PREFIX + String(label || "").toUpperCase();
+    }
+    function _animIsDividerToken(v) {
+        return String(v || "").indexOf(ANIM_DIVIDER_PREFIX) === 0;
+    }
+    function _animDividerLabelFromToken(v) {
+        return String(v || "").replace(ANIM_DIVIDER_PREFIX, "");
+    }
+    function _animDividerDisplay(label) {
+        label = String(label || "").toUpperCase();
+        return "──────── " + label + " ────────";
+    }
+    function _animEnsureDefaultDividers(arr) {
+        var out = [];
+        var seen = {};
+        var i, v;
+        var hasAnyDivider = false;
+        arr = arr || [];
+
+        for (i = 0; i < arr.length; i++) {
+            v = String(arr[i] || "");
+            if (!v) continue;
+            if (_animIsDividerToken(v)) { hasAnyDivider = true; break; }
+        }
+
+        if (!hasAnyDivider) {
+            for (i = 0; i < ANIM_DEFAULT_DIVIDERS.length; i++) {
+                v = _animDividerToken(ANIM_DEFAULT_DIVIDERS[i]);
+                out.push(v);
+                seen[v] = true;
+            }
+        }
+
+        for (i = 0; i < arr.length; i++) {
+            v = String(arr[i] || "");
+            if (!v) continue;
+            if (_animIsDividerToken(v) && seen[v]) continue;
+            out.push(v);
+            seen[v] = true;
+        }
+
+        for (i = 0; i < ANIM_DEFAULT_DIVIDERS.length; i++) {
+            v = _animDividerToken(ANIM_DEFAULT_DIVIDERS[i]);
+            if (!seen[v]) out.push(v);
+        }
+
+        return out;
+    }
+
     // TEXT TAB: ANIMATIONS BAR (preset list)
     var ANIM_SETTINGS_SECTION = "ShineTools";
     var ANIM_SETTINGS_KEY     = "text_animations_ffx_v1";
+    var ANIM_BUNDLED_ORDER_KEY = "text_animations_bundled_order_v1";
     var ANIM_MAX              = 50;
-
 
     // Bundled Text Animator presets (shipped with ShineTools)
     // These are shown at the top of the TEXT ANIMATORS dropdown, above a divider.
@@ -3441,7 +3199,6 @@ try {
     return out;
 }
 
-
     function _favParse(str) {
         if (!str) return [];
         try {
@@ -3472,8 +3229,7 @@ try {
         return false;
     }
 
-
-// List persistence helpers (dedupe/limit + backwards-compatible parse)
+// Session-only list helpers
     // ------------------------------------------------------------
     function _listParseCompat(raw) {
         if (!raw) return [];
@@ -3481,7 +3237,7 @@ try {
         var arr = _favParse(raw);
         if (arr && arr.length) return arr;
 
-        // Back-compat: older builds may have stored a JS array literal string
+        // Legacy parse fallback retained only so old in-memory strings do not error
         // e.g. "['/path/a.ffx','/path/b.ffx']"
         try {
             // eslint-disable-next-line no-eval
@@ -3490,7 +3246,6 @@ try {
         } catch (e) {}
         return [];
     }
-
 
     function _normalizePath(p) {
         try {
@@ -3563,195 +3318,114 @@ function _listClean(arr, maxLen) {
         return [];
     }
 
-
     function _listLoadNoPrune(section, key, maxLen) {
-    // Legacy single-key loader (JSON string + file-backed fallback via _settingsGetBest).
-    // Also performs a one-time migration to chunked storage under the SAME base key.
-    try {
-        var raw = "";
-        try { raw = _settingsGetBest(section, key, ""); } catch (eG) { raw = ""; }
-
-        var arr = _listParseCompat(raw);
-
-        // Migrate forward: write chunked keys (and normalized legacy JSON) so future loads are robust.
-        try {
-            if (arr && arr.length) { _dbgList(section + ":" + key + " loaded via legacy JSON/file (len=" + arr.length + ") -> migrated"); _listSaveChunked(section, key, arr, maxLen); }
-        } catch (eM) {}
-
-        return _listClean(arr || [], maxLen);
-    } catch (e) {}
+    // Session-only loader.
     return [];
 }
 
-
-// --- Chunked settings storage for long lists (avoids app.settings truncation) ---
+// --- Session-only list storage (UI list persistence removed) ---
 function _listLoadChunked(section, keyBase, maxLen) {
-    try {
-        var countKey = keyBase + "_count";
-        var n = 0;
-        try {
-            if (_appHaveSetting(section, countKey)) {
-                n = parseInt(_appGetSetting(section, countKey, ""), 10) || 0;
-            }
-        } catch (eC) {}
-
-                // If count key exists and is 0, treat as authoritative empty list (prevents legacy resurrection)
-        try {
-            if (_appHaveSetting(section, countKey) && n === 0) {
-                _dbgList(section + ":" + keyBase + " authoritative empty (count=0)");
-                return [];
-            }
-        } catch (eZ) {}
-
-var arr = [];
-        if (n > 0) {
-            for (var i = 0; i < n; i++) {
-                try {
-                    var k = keyBase + "_" + i;
-                    if (_appHaveSetting(section, k)) {
-                        var v = _appGetSetting(section, k, "");
-                        if (v) arr.push(_normalizePath(v));
-                    }
-                } catch (eI) {}
-                if (maxLen && arr.length >= maxLen) break;
-            }
-            // Clean + return
-            _dbgList(section + ":" + keyBase + " loaded from chunks n=" + n);
-            return _listClean(arr, maxLen);
-        }
-
-
-        // Legacy chunk import (older builds used keyBase + "__chunk_*").
-        // This is a one-time self-heal: if we find old chunks, we migrate them into the new canonical chunk keys.
-        try {
-            var oldCountKey = keyBase + "__chunk_count";
-            var oldN = 0;
-            if (_appHaveSetting(section, oldCountKey)) {
-                oldN = parseInt(_appGetSetting(section, oldCountKey, ""), 10) || 0;
-            }
-
-            if (oldN > 0) {
-                var oldArr = [];
-                for (var oi = 0; oi < oldN; oi++) {
-                    try {
-                        var ok = keyBase + "__chunk_" + oi;
-                        if (_appHaveSetting(section, ok)) {
-                            var ov = _appGetSetting(section, ok, "");
-                            if (ov) oldArr.push(_normalizePath(ov));
-                        }
-                    } catch (eO) {}
-                    if (maxLen && oldArr.length >= maxLen) break;
-                }
-
-                var healed = _listClean(oldArr, maxLen);
-                if (healed && healed.length) {
-                    // Migrate forward (writes new chunk keys + legacy JSON/file fallback).
-                    _dbgList(section + ":" + keyBase + " imported legacy __chunk_* oldN=" + oldN + " -> migrated");
-                    _listSaveChunked(section, keyBase, healed, maxLen);
-                    return healed;
-                }
-            }
-        } catch (eLegacy) {}
-
-        // Fallback to legacy loaders (JSON string + file settings)
-        _dbgList(section + ":" + keyBase + " fallback legacy JSON/file");
-        return _listLoadNoPrune(section, keyBase, maxLen);
-    } catch (e) {}
+    // Do not read favorites or text animator lists from saved settings.
     return [];
 }
 
 function _listSaveChunked(section, keyBase, arr, maxLen) {
-    try {
-        var clean = _listClean(arr || [], maxLen);
-
-        // 1) Chunked app.settings (robust against truncation)
-        try {
-            var countKey = keyBase + "_count";
-
-            // Clear previous NEW chunk keys (bounded by previous count, with a small "ghost key" sweep)
-            var oldN = 0;
-            try {
-                if (_appHaveSetting(section, countKey)) {
-                    oldN = parseInt(_appGetSetting(section, countKey, ""), 10) || 0;
-                }
-            } catch (eON) {}
-
-            // If count is missing/zero but keys exist, do a light sweep to avoid resurrected ghosts.
-            if (oldN <= 0) {
-                try {
-                    for (var s0 = 0; s0 < 25; s0++) {
-                        if (_appHaveSetting(section, keyBase + "_" + s0)) { oldN = 25; break; }
-                    }
-                } catch (eSweep0) {}
-            }
-
-            for (var j = 0; j < oldN; j++) {
-                try { _appSaveSetting(section, keyBase + "_" + j, ""); } catch (eCL) {}
-            }
-
-            // Clear previous LEGACY chunk keys (keyBase + "__chunk_*") so migration cannot resurrect old items
-            try {
-                var oldCountKeyLegacy = keyBase + "__chunk_count";
-                var oldNLegacy = 0;
-
-                try {
-                    if (_appHaveSetting(section, oldCountKeyLegacy)) {
-                        oldNLegacy = parseInt(_appGetSetting(section, oldCountKeyLegacy, ""), 10) || 0;
-                    }
-                } catch (eOLN) {}
-
-                // If legacy count is missing/zero but keys exist, sweep a little.
-                if (oldNLegacy <= 0) {
-                    try {
-                        for (var s1 = 0; s1 < 25; s1++) {
-                            if (_appHaveSetting(section, keyBase + "__chunk_" + s1)) { oldNLegacy = 25; break; }
-                        }
-                    } catch (eSweep1) {}
-                }
-
-                for (var lj = 0; lj < oldNLegacy; lj++) {
-                    try { _appSaveSetting(section, keyBase + "__chunk_" + lj, ""); } catch (eLJ) {}
-                }
-
-                // Reset legacy count
-                try { _appSaveSetting(section, oldCountKeyLegacy, "0"); } catch (eLC) {}
-            } catch (eLegacyClear) {}
-
-            // Write new chunks
-            _appSaveSetting(section, countKey, String(clean.length));
-            for (var i = 0; i < clean.length; i++) {
-                try { _appSaveSetting(section, keyBase + "_" + i, String(clean[i])); } catch (eS) {}
-            }
-        } catch (eA) {}
-
-        // 2) Legacy single-key + file fallback (keeps older builds happy)
-        _settingsSet(section, keyBase, JSON.stringify(clean));
-    } catch (e) {}
+    // Keep runtime list behavior only; do not save any UI state.
+    try { return _listClean(arr || [], maxLen); } catch (e) {}
+    return [];
 }
 
 function _listSave(section, key, arr, maxLen) {
-    // Canonical list saver: chunked app.settings (primary) + legacy JSON/file fallback (for older builds).
-    // Uses the SAME base key for both chunked and legacy so all list types behave consistently.
+    // Session-only list pass-through.
     try { return _listSaveChunked(section, key, arr, maxLen); } catch (e) {}
     return [];
 }
 
+    var __ST_SESSION_MAIN_FAVORITES__ = [];
+var __ST_SESSION_TEXT_FAVORITES__ = [];
+var __ST_SESSION_TEXT_BUNDLED_ORDER__ = [];
+var __ST_SESSION_TEXT_UNIFIED_ORDER__ = [];
+var __ST_SESSION_TEXT_LABELS__ = {};
 
-    function favLoad() {
-        // Canonical list loader (chunked + legacy fallback handled internally)
-        return _listLoad(FAV_SETTINGS_SECTION, FAV_SETTINGS_KEY, FAV_MAX);
+function _animNormalizeEntryId(id) {
+    var s = String(id || "");
+    if (!s) return "";
+    if (_animIsDividerToken(s)) return s;
+    if (s.indexOf("B::") === 0 || s.indexOf("U::") === 0) return s;
+    return "U::" + s;
+}
+function _animLabelMapClone(src) {
+    var out = {};
+    try {
+        if (src) {
+            for (var k in src) {
+                if (!src.hasOwnProperty(k)) continue;
+                out[String(k)] = String(src[k] || "");
+            }
+        }
+    } catch (e) {}
+    return out;
+}
+function _animLabelGet(id) {
+    var key = _animNormalizeEntryId(id);
+    if (!key) return "";
+    try { if (__ST_SESSION_TEXT_LABELS__ && __ST_SESSION_TEXT_LABELS__.hasOwnProperty(key)) return String(__ST_SESSION_TEXT_LABELS__[key] || ""); } catch (e0) {}
+    return "";
+}
+function _animLabelSet(id, label) {
+    var key = _animNormalizeEntryId(id);
+    if (!key || _animIsDividerToken(key)) return;
+    try {
+        if (!__ST_SESSION_TEXT_LABELS__) __ST_SESSION_TEXT_LABELS__ = {};
+        var clean = String(label || "").replace(/^\s+|\s+$/g, "");
+        if (clean) __ST_SESSION_TEXT_LABELS__[key] = clean;
+        else delete __ST_SESSION_TEXT_LABELS__[key];
+    } catch (e) {}
+}
+function _animLabelDelete(id) {
+    var key = _animNormalizeEntryId(id);
+    if (!key) return;
+    try { if (__ST_SESSION_TEXT_LABELS__ && __ST_SESSION_TEXT_LABELS__.hasOwnProperty(key)) delete __ST_SESSION_TEXT_LABELS__[key]; } catch (e) {}
+}
+function _animLabelMapReplace(mapObj) {
+    try { __ST_SESSION_TEXT_LABELS__ = _animLabelMapClone(mapObj || {}); } catch (e) { __ST_SESSION_TEXT_LABELS__ = {}; }
+}
+function _animLabelMapLoad() {
+    try { return _animLabelMapClone(__ST_SESSION_TEXT_LABELS__ || {}); } catch (e) {}
+    return {};
+}
+
+function favLoad() {
+        var arr = [];
+        try { arr = (__ST_SESSION_MAIN_FAVORITES__ && __ST_SESSION_MAIN_FAVORITES__.slice) ? __ST_SESSION_MAIN_FAVORITES__.slice(0) : []; } catch (eFavMem) { arr = []; }
+        if (!arr || !(arr instanceof Array)) arr = [];
+        try { arr = _favEnsureDefaultDividers(arr || []); } catch (eFavDiv) {}
+        return arr || [];
     }
 
     function favSave(arr) {
-        // Canonical list saver (chunked + legacy fallback handled internally)
-        _listSave(FAV_SETTINGS_SECTION, FAV_SETTINGS_KEY, arr, FAV_MAX);
+        try { arr = _favEnsureDefaultDividers(arr || []); } catch (eFavDiv2) {}
+        try { __ST_SESSION_MAIN_FAVORITES__ = (arr && arr.slice) ? arr.slice(0) : (arr || []); } catch (eFavSet) {}
     }
 
     function favAddPath(pathStr) {
         try { pathStr = _normalizePath(pathStr); } catch(eN) {}
         var favs = favLoad();
-        var out = [pathStr];
-        for (var i = 0; i < favs.length; i++) if (favs[i] !== pathStr) out.push(favs[i]);
+        var out = [];
+        var i;
+        var alreadyExists = false;
+
+        for (i = 0; i < favs.length; i++) {
+            if (_favEntryPath(favs[i]) === String(pathStr)) {
+                alreadyExists = true;
+                break;
+            }
+        }
+
+        for (i = 0; i < favs.length; i++) out.push(favs[i]);
+
+        if (!alreadyExists) out.push(_favMakeEntry(pathStr, ""));
+
         favSave(out);
     }
 
@@ -3759,24 +3433,27 @@ function _listSave(section, key, arr, maxLen) {
         var favs = favLoad();
         var out = [];
         for (var i = 0; i < favs.length; i++) {
-            if (String(favs[i]) !== String(pathStr)) out.push(favs[i]);
+            if (_favEntryPath(favs[i]) !== String(pathStr)) out.push(favs[i]);
         }
         favSave(out);
     }
 
-
     function favClear() { favSave([]); }
 
-
     function animLoad() {
-        return _listLoad(ANIM_SETTINGS_SECTION, ANIM_SETTINGS_KEY, ANIM_MAX);
+        var arr = [];
+        try { arr = (__ST_SESSION_TEXT_FAVORITES__ && __ST_SESSION_TEXT_FAVORITES__.slice) ? __ST_SESSION_TEXT_FAVORITES__.slice(0) : []; } catch (eAnimMem) { arr = []; }
+        if (!arr || !(arr instanceof Array)) arr = [];
+        try { arr = _animEnsureDefaultDividers(arr || []); } catch (eAnimDiv) {}
+        return arr || [];
     }
 
     function animSave(arr) {
-        _listSave(ANIM_SETTINGS_SECTION, ANIM_SETTINGS_KEY, arr, ANIM_MAX);
+        try { arr = _animEnsureDefaultDividers(arr || []); } catch (eAnimDiv2) {}
+        try { __ST_SESSION_TEXT_FAVORITES__ = (arr && arr.slice) ? arr.slice(0) : (arr || []); } catch (eAnimSet) {}
     }
 
-    function animClear() { animSave([]); }
+    function animClear() { animSave([]); try { animUnifiedOrderSave([]); } catch (eAnimClrU) {} }
 
     function animRemovePath(pathStr) {
         var arr = animLoad();
@@ -3785,6 +3462,1046 @@ function _listSave(section, key, arr, maxLen) {
             if (String(arr[i]) !== String(pathStr)) out.push(arr[i]);
         }
         animSave(out);
+    }
+
+    function animBundledOrderLoad() {
+        var arr = [];
+        try { arr = (__ST_SESSION_TEXT_BUNDLED_ORDER__ && __ST_SESSION_TEXT_BUNDLED_ORDER__.slice) ? __ST_SESSION_TEXT_BUNDLED_ORDER__.slice(0) : []; } catch (eBundMem) { arr = []; }
+        if (!arr || !(arr instanceof Array)) arr = [];
+        return arr || [];
+    }
+
+    function animBundledOrderSave(arr) {
+        try { __ST_SESSION_TEXT_BUNDLED_ORDER__ = (arr && arr.slice) ? arr.slice(0) : (arr || []); } catch (eBundSet) {}
+    }
+
+    function animUnifiedOrderLoad() {
+        var arr = [];
+        try { arr = (__ST_SESSION_TEXT_UNIFIED_ORDER__ && __ST_SESSION_TEXT_UNIFIED_ORDER__.slice) ? __ST_SESSION_TEXT_UNIFIED_ORDER__.slice(0) : []; } catch (eUniMem) { arr = []; }
+        if (!arr || !(arr instanceof Array)) arr = [];
+        return arr || [];
+    }
+
+    function animUnifiedOrderSave(arr) {
+        try { __ST_SESSION_TEXT_UNIFIED_ORDER__ = (arr && arr.slice) ? arr.slice(0) : (arr || []); } catch (eUniSet) {}
+    }
+
+    function _applyPathOrder(paths, savedOrder) {
+        var out = [];
+        var used = {};
+        var i, j, sid, pth;
+        paths = paths || [];
+        savedOrder = savedOrder || [];
+        for (i = 0; i < savedOrder.length; i++) {
+            sid = String(savedOrder[i] || "");
+            if (!sid || used[sid]) continue;
+            for (j = 0; j < paths.length; j++) {
+                pth = String(paths[j] || "");
+                if (pth === sid) { out.push(pth); used[sid] = true; break; }
+            }
+        }
+        for (j = 0; j < paths.length; j++) {
+            pth = String(paths[j] || "");
+            if (!pth || used[pth]) continue;
+            out.push(pth);
+            used[pth] = true;
+        }
+        return out;
+    }
+
+    function _shineShowReorderListDialog(title, items, opts) {
+        try {
+            items = items || [];
+            opts = opts || {};
+            var dlgW = Math.max(300, opts.dialogW || 340);
+            var listW = Math.max(260, opts.listW || (dlgW - 36));
+            var listH = Math.max(180, opts.listH || 240);
+
+            var dlg = new Window("dialog", String(title || "Reorder"), undefined, { closeButton: true });
+            dlg.orientation = "column";
+            dlg.alignChildren = ["fill", "top"];
+            dlg.spacing = 10;
+            dlg.margins = [18, 10, 18, 10];
+
+            if (opts.infoText) {
+                var infoWrap = dlg.add("group");
+                infoWrap.orientation = "row";
+                infoWrap.alignChildren = ["left", "top"];
+                infoWrap.alignment = ["fill", "top"];
+                infoWrap.spacing = 0;
+                infoWrap.margins = [0, 0, 0, 0];
+
+                var infoPad = infoWrap.add("statictext", undefined, "");
+                try { infoPad.minimumSize = [5, 1]; } catch (eInfoPad) {}
+                try { infoPad.maximumSize = [8, 1]; } catch (eInfoPad2) {}
+
+                var info = infoWrap.add("statictext", undefined, String(opts.infoText));
+                info.alignment = ["fill", "top"];
+            }
+
+            var lb = dlg.add("listbox", undefined, [], { multiselect: !!opts.multiselect });
+            lb.preferredSize = [listW, listH];
+            lb.minimumSize = [listW, listH];
+            lb.maximumSize = [listW, 10000];
+
+            var __stShowOriginalNames = false;
+            var __ST_UNIFIED_INDENT = "    ";
+
+            function _stStripLeadingIndent(label) {
+                try { return String(label == null ? "" : label).replace(/^[\s\u00A0]+/, ""); } catch (eStripLbl) {}
+                return String(label == null ? "" : label);
+            }
+
+            function _stGetDisplayLabelForDialogItem(id, currentLabel, isDivider, indentThisRow) {
+                try {
+                    var outLabel = _stStripLeadingIndent(currentLabel || "");
+                    if (!isDivider) {
+                        if (__stShowOriginalNames && typeof opts.displayLabelForId === "function") {
+                            outLabel = String(opts.displayLabelForId(id, currentLabel, { _isDivider: !!isDivider }, __stShowOriginalNames) || currentLabel || "");
+                        }
+                        var __stShouldIndent = !!indentThisRow;
+                        try {
+                            if (opts && opts.indentNonDividerRows === true) __stShouldIndent = true;
+                        } catch (eIndentOpt) {}
+                        if (__stShouldIndent) outLabel = __ST_UNIFIED_INDENT + outLabel;
+                        return outLabel;
+                    }
+                    return outLabel;
+                } catch (eDisp0) {}
+                return String(currentLabel || "");
+            }
+
+            function _stRefreshDialogLabels() {
+                try {
+                    var __stSeenDivider = false;
+                    for (var rdi = 0; rdi < lb.items.length; rdi++) {
+                        var dit = lb.items[rdi];
+                        if (!dit) continue;
+                        var srcLabel = "";
+                        try { srcLabel = _stStripLeadingIndent(dit._label || dit.text || ""); } catch (eSrcLbl) { srcLabel = ""; }
+                        var __stIndentThisRow = (!dit._isDivider && __stSeenDivider);
+                        try {
+                            if (opts && opts.indentNonDividerRows === true) __stIndentThisRow = !dit._isDivider;
+                        } catch (eIndentFlag) {}
+                        var newText = _stGetDisplayLabelForDialogItem(String(dit._id || ""), srcLabel, !!dit._isDivider, __stIndentThisRow);
+                        try { dit.text = newText; } catch (eSetTxt) {}
+                        try { dit.helpTip = newText; } catch (eSetTip) {}
+                        if (dit._isDivider) __stSeenDivider = true;
+                    }
+                    try { lb.notify('onDraw'); } catch (eDraw0) {}
+                    try { dlg.update(); } catch (eUpd0) {}
+                } catch (eRefresh) {}
+            }
+
+            function _addIt(obj) {
+                var initialLabel = _stStripLeadingIndent(obj.label || "");
+                var __stInitialIndent = false;
+                try { if (opts && opts.indentNonDividerRows === true && !obj._isDivider) __stInitialIndent = true; } catch (eInitialIndent) {}
+                var shownLabel = _stGetDisplayLabelForDialogItem(String(obj.id || ""), initialLabel, !!obj._isDivider, __stInitialIndent);
+                var it = lb.add("item", shownLabel);
+                it._id = String(obj.id || "");
+                it._label = initialLabel;
+                it._isDivider = !!obj._isDivider;
+                try { it.helpTip = shownLabel; } catch (eTip) {}
+                try {
+                    if (it._isDivider && !opts.allowDividerSelection) it.enabled = false;
+                    else it.enabled = true;
+                } catch (eDis) {}
+                return it;
+            }
+
+            for (var ii = 0; ii < items.length; ii++) _addIt(items[ii]);
+            try { _stRefreshDialogLabels(); } catch (eInitRefresh) {}
+            if (lb.items.length) {
+                try { lb.notify('onDraw'); } catch(ePreDraw) {}
+                var _firstSelectable = -1;
+                for (var sii = 0; sii < lb.items.length; sii++) {
+                    try {
+                        if ((opts.allowDividerSelection || !lb.items[sii]._isDivider) && lb.items[sii].enabled !== false) { _firstSelectable = sii; break; }
+                    } catch (eFS) {}
+                }
+                try { lb.selection = (_firstSelectable >= 0) ? _firstSelectable : 0; } catch (eInitSel) {}
+            }
+
+            var controls = dlg.add("group");
+            controls.orientation = "row";
+            controls.alignChildren = ["left", "center"];
+            controls.spacing = 8;
+            controls.margins = 0;
+
+            function _styleDlgTriangle(btn, glyph, tip) {
+                btn.minimumSize = [32, 28];
+                btn.maximumSize = [32, 28];
+                btn.alignment   = ['left','center'];
+                btn.margins     = 0;
+                try { btn.helpTip = tip; } catch (eTip2) {}
+
+                btn._glyph = glyph;
+                btn.text = "";
+                btn._isHover = false;
+                btn._isDown  = false;
+
+                function _inv(){
+                    try { btn.notify('onDraw'); } catch(e0) {}
+                    try { btn.parent.update(); } catch(e1) {}
+                    try { if (btn.window) btn.window.update(); } catch(e2) {}
+                }
+
+                btn.addEventListener('mouseover', function(){ btn._isHover = true; _inv(); });
+                btn.addEventListener('mouseout',  function(){ btn._isHover = false; btn._isDown = false; _inv(); });
+                btn.addEventListener('mousedown', function(){ btn._isDown = true; _inv(); });
+                btn.addEventListener('mouseup',   function(){ btn._isDown = false; _inv(); });
+                btn.onMouseEnter = function(){ btn._isHover = true; _inv(); };
+                btn.onMouseExit  = function(){ btn._isHover = false; btn._isDown = false; _inv(); };
+
+                btn.onDraw = function(){
+                    var g = this.graphics;
+                    var idleCol  = [0.62,0.62,0.62,1];
+                    var hoverCol = [1.00, 0.82, 0.00, 1];
+                    var col = (this._isHover || this._isDown) ? hoverCol : idleCol;
+                    try {
+                        if (!this._glyphFont) {
+                            this._glyphFont = ScriptUI.newFont(g.font.name, 'Regular', Math.max(13, g.font.size + 5));
+                        }
+                        g.font = this._glyphFont;
+                    } catch(eF) {}
+                    var w = this.size[0], h = this.size[1];
+                    var x = Math.round(w/2 - 4);
+                    var y = Math.round(h/2 - (g.font.size/2) - 4);
+                    try {
+                        var pen = g.newPen(g.PenType.SOLID_COLOR, col, 1);
+                        g.drawString(this._glyph || glyph, pen, x, y);
+                    } catch(eD) {}
+                };
+
+                try { defocusButtonBestEffort(btn); } catch (eDF) {}
+            }
+
+            var arrowGrp = controls.add('group');
+            arrowGrp.orientation = 'row';
+            arrowGrp.alignChildren = ['left','center'];
+            arrowGrp.spacing = 0;
+            arrowGrp.margins = [0,0,0,0];
+
+            var btnUp = arrowGrp.add("button", undefined, "▲");
+            var btnDn = arrowGrp.add("button", undefined, "▼");
+            _styleDlgTriangle(btnUp, '▲', 'Move up');
+            _styleDlgTriangle(btnDn, '▼', 'Move down');
+
+            function __makeDlgCellBtn__(parent, label, minW){
+                var cell = parent.add('group');
+                cell.orientation   = 'stack';
+                cell.alignChildren = ['fill','fill'];
+                cell.alignment     = ['left','center'];
+                cell.margins       = 0;
+
+                var b = cell.add('button', undefined, label);
+                var __dlgBtnH2 = (typeof clippedBtnH === "function") ? clippedBtnH() : 24;
+                var __dlgMinW2 = 90;
+                b.alignment     = ['fill','center'];
+                b.preferredSize = [0, __dlgBtnH2];
+                b.minimumSize   = [minW || __dlgMinW2, __dlgBtnH2];
+                b.maximumSize   = [10000, __dlgBtnH2];
+                try { defocusButtonBestEffort(b); } catch (eDF2) {}
+                return { cell: cell, btn: b };
+            }
+
+            controls.add('statictext', undefined, '   ');
+
+            var btnAddFiles = null;
+            if (typeof opts.onAddFiles === "function") {
+                var __addFilesPack = __makeDlgCellBtn__(controls, 'Add File...', 110);
+                btnAddFiles = __addFilesPack.btn;
+                try { btnAddFiles.helpTip = String(opts.addFilesHelpTip || "Add files to this list"); } catch (eAddFilesTip) {}
+            }
+
+            var btnNewDivider = null;
+            if (opts.allowNewDivider) {
+                var __newDivPack = __makeDlgCellBtn__(controls, 'New Divider', 120);
+                btnNewDivider = __newDivPack.btn;
+                try { btnNewDivider.helpTip = "Create a new divider"; } catch (eNewDivTip) {}
+            }
+
+            var __newDividerToMoveGap = null;
+            var __newDividerToMoveLineWrap = null;
+            var __newDividerToMoveLine = null;
+            if (opts.allowNewDivider && opts.sectionChoices && opts.sectionChoices.length) {
+                __newDividerToMoveGap = controls.add('group');
+                __newDividerToMoveGap.orientation = 'row';
+                __newDividerToMoveGap.alignChildren = ['left', 'center'];
+                __newDividerToMoveGap.spacing = 0;
+                __newDividerToMoveGap.margins = 0;
+                try { __newDividerToMoveGap.minimumSize = [5, 1]; } catch (eSepGapND0) {}
+                try { __newDividerToMoveGap.maximumSize = [5, 10000]; } catch (eSepGapND1) {}
+
+                __newDividerToMoveLineWrap = controls.add('group');
+                __newDividerToMoveLineWrap.orientation = 'column';
+                __newDividerToMoveLineWrap.alignChildren = ['fill', 'center'];
+                __newDividerToMoveLineWrap.spacing = 0;
+                __newDividerToMoveLineWrap.margins = [0, 0, 0, 0];
+                try { __newDividerToMoveLineWrap.minimumSize = [1, 24]; } catch (eSepWrapND0) {}
+                try { __newDividerToMoveLineWrap.maximumSize = [1, 24]; } catch (eSepWrapND1) {}
+
+                __newDividerToMoveLine = __newDividerToMoveLineWrap.add('panel');
+                try {
+                    __newDividerToMoveLine.alignment = ['fill', 'center'];
+                    __newDividerToMoveLine.minimumSize = [1, 20];
+                    __newDividerToMoveLine.maximumSize = [1, 20];
+                    __newDividerToMoveLine.margins = [0, 0, 0, 0];
+                } catch (eSepLineND0) {}
+
+                var __newDividerToMoveGap2 = controls.add('group');
+                __newDividerToMoveGap2.orientation = 'row';
+                __newDividerToMoveGap2.alignChildren = ['left', 'center'];
+                __newDividerToMoveGap2.spacing = 0;
+                __newDividerToMoveGap2.margins = 0;
+                try { __newDividerToMoveGap2.minimumSize = [4, 1]; } catch (eSepGapND2a) {}
+                try { __newDividerToMoveGap2.maximumSize = [4, 10000]; } catch (eSepGapND2b) {}
+            }
+
+            var btnMoveTo = null;
+            if (opts.sectionChoices && opts.sectionChoices.length) {
+                var __movePack = __makeDlgCellBtn__(controls, 'Move To...', 110);
+                btnMoveTo = __movePack.btn;
+            }
+
+            var btnRename = null;
+            if (opts.allowRename) {
+                var __renamePack = __makeDlgCellBtn__(controls, 'Rename', 92);
+                btnRename = __renamePack.btn;
+                try { btnRename.helpTip = "Rename selected item"; } catch (eRenameTip) {}
+            }
+
+            var btnDelete = null;
+            if (opts.allowDelete) {
+                var __deletePack = __makeDlgCellBtn__(controls, 'Delete', 90);
+                btnDelete = __deletePack.btn;
+                try { btnDelete.helpTip = "Delete selected items"; } catch (eDelTip) {}
+            }
+
+            var __actionsToConfirmGap = controls.add('group');
+            __actionsToConfirmGap.orientation = 'row';
+            __actionsToConfirmGap.alignChildren = ['left', 'center'];
+            __actionsToConfirmGap.spacing = 0;
+            __actionsToConfirmGap.margins = 0;
+            try { __actionsToConfirmGap.minimumSize = [5, 1]; } catch (eSepGap0) {}
+            try { __actionsToConfirmGap.maximumSize = [5, 10000]; } catch (eSepGap1) {}
+
+            var __actionsToConfirmLineWrap = controls.add('group');
+            __actionsToConfirmLineWrap.orientation = 'column';
+            __actionsToConfirmLineWrap.alignChildren = ['fill', 'center'];
+            __actionsToConfirmLineWrap.spacing = 0;
+            __actionsToConfirmLineWrap.margins = [0, 0, 0, 0];
+            try { __actionsToConfirmLineWrap.minimumSize = [1, 24]; } catch (eSepWrap0) {}
+            try { __actionsToConfirmLineWrap.maximumSize = [1, 24]; } catch (eSepWrap1) {}
+
+            var __actionsToConfirmLine = __actionsToConfirmLineWrap.add('panel');
+            try {
+                __actionsToConfirmLine.alignment = ['fill', 'center'];
+                __actionsToConfirmLine.minimumSize = [1, 20];
+                __actionsToConfirmLine.maximumSize = [1, 20];
+                __actionsToConfirmLine.margins = [0, 0, 0, 0];
+            } catch (eSepLine0) {}
+
+            var __actionsToConfirmGap2 = controls.add('group');
+            __actionsToConfirmGap2.orientation = 'row';
+            __actionsToConfirmGap2.alignChildren = ['left', 'center'];
+            __actionsToConfirmGap2.spacing = 0;
+            __actionsToConfirmGap2.margins = 0;
+            try { __actionsToConfirmGap2.minimumSize = [4, 1]; } catch (eSepGap2a) {}
+            try { __actionsToConfirmGap2.maximumSize = [4, 10000]; } catch (eSepGap2b) {}
+
+            var __okPack     = __makeDlgCellBtn__(controls, 'OK', 70);
+            var btnOk        = __okPack.btn;
+            var __cancelPack = __makeDlgCellBtn__(controls, 'Cancel', 90);
+            var btnCancel    = __cancelPack.btn;
+
+            var __bottomToggleRow = dlg.add('group');
+                        __bottomToggleRow.orientation = 'row';
+            __bottomToggleRow.alignChildren = ['left', 'center'];
+            __bottomToggleRow.alignment = ['fill', 'top'];
+            __bottomToggleRow.spacing = 8;
+            __bottomToggleRow.margins = [0, 0, 0, 0];
+
+            // Custom toggle button (matches ShineTools style)
+            var __toggleTextMax = '✓ Show Original Filename';
+            var __toggleCharW = 7;
+            var __toggleBtnW = (__toggleTextMax.length * __toggleCharW) + 24;
+
+            var __toggleBtnPack = __makeDlgCellBtn__(__bottomToggleRow, 'Show Original Filename', __toggleBtnW);
+            var __showOriginalToggle = __toggleBtnPack.btn;
+            var __toggleState = false;
+
+            function __updateToggleVisual() {
+                try {
+                    if (__toggleState) {
+                        __showOriginalToggle.text = '✓ Show Original Filename';
+                    } else {
+                        __showOriginalToggle.text = 'Show Original Filename';
+                    }
+
+                    var __t = String(__showOriginalToggle.text || __toggleTextMax);
+                    var __btnW2 = Math.max(__toggleBtnW, (__t.length * __toggleCharW) + 24);
+                    try { __showOriginalToggle.minimumSize.width = __btnW2; } catch(eW0){}
+                    try { __showOriginalToggle.maximumSize.width = __btnW2; } catch(eW1){}
+                    try { __showOriginalToggle.preferredSize.width = __btnW2; } catch(eW2){}
+                } catch(eTxt){}
+            }
+
+            __showOriginalToggle.onClick = function() {
+                __toggleState = !__toggleState;
+                try { __stShowOriginalNames = __toggleState; } catch(eSet){}
+                __updateToggleVisual();
+                _stRefreshDialogLabels();
+            };
+
+            __updateToggleVisual();
+
+            try { lb.active = true; } catch(eAF){}
+
+            function moveSel(dir){
+                if (!lb || !lb.items || !lb.items.length) return;
+
+                var sels = [];
+                var i = 0;
+
+                for (i = 0; i < lb.items.length; i++) {
+                    try { if (lb.items[i].selected) sels.push(lb.items[i]); } catch (eSelScan) {}
+                }
+                if (!sels.length) {
+                    try {
+                        if (lb.selection instanceof Array) sels = lb.selection;
+                        else if (lb.selection) sels = [lb.selection];
+                    } catch (eSelArr) {
+                        try { if (lb.selection) sels = [lb.selection]; } catch (eSelOne) {}
+                    }
+                }
+                if (!sels || !sels.length) return;
+
+                var entries = [];
+                var selectedIds = {};
+                for (i = 0; i < lb.items.length; i++) {
+                    entries.push({
+                        text: lb.items[i].text,
+                        label: lb.items[i]._label,
+                        id: lb.items[i]._id,
+                        tip: lb.items[i].helpTip,
+                        isDivider: !!lb.items[i]._isDivider
+                    });
+                }
+                for (i = 0; i < sels.length; i++) {
+                    try {
+                        if (sels[i] && sels[i]._isDivider && !opts.allowDividerSelection) return;
+                        selectedIds[String(sels[i]._id || "")] = true;
+                    } catch (eSelID) {}
+                }
+
+                var selectedEntries = [];
+                var firstIndex = -1;
+                var lastIndex = -1;
+                for (i = 0; i < entries.length; i++) {
+                    if (selectedIds[String(entries[i].id || "")]) {
+                        if (firstIndex < 0) firstIndex = i;
+                        lastIndex = i;
+                        selectedEntries.push(entries[i]);
+                    }
+                }
+                if (!selectedEntries.length) return;
+
+                var remaining = [];
+                for (i = 0; i < entries.length; i++) {
+                    if (!selectedIds[String(entries[i].id || "")]) remaining.push(entries[i]);
+                }
+
+                var insertAt = -1;
+                var count = 0;
+
+                if (dir < 0) {
+                    if (firstIndex <= 0) return;
+                    // insert before the item directly above the selected block,
+                    // even if that means crossing a fixed divider.
+                    for (i = 0; i < firstIndex - 1; i++) {
+                        if (!selectedIds[String(entries[i].id || "")]) count++;
+                    }
+                    insertAt = count;
+                } else {
+                    if (lastIndex >= entries.length - 1) return;
+                    // insert after the item directly below the selected block,
+                    // even if that means crossing a fixed divider.
+                    count = 0;
+                    for (i = 0; i <= lastIndex + 1; i++) {
+                        if (!selectedIds[String(entries[i].id || "")]) count++;
+                    }
+                    insertAt = count;
+                }
+
+                if (insertAt < 0) return;
+                if (insertAt > remaining.length) insertAt = remaining.length;
+
+                var newEntries = [];
+                for (i = 0; i < insertAt; i++) newEntries.push(remaining[i]);
+                for (i = 0; i < selectedEntries.length; i++) newEntries.push(selectedEntries[i]);
+                for (i = insertAt; i < remaining.length; i++) newEntries.push(remaining[i]);
+
+                try { lb.removeAll(); } catch (eClrLB2) {}
+                for (i = 0; i < newEntries.length; i++) {
+                    var __storedLbl2 = String((newEntries[i].label != null) ? newEntries[i].label : (newEntries[i].text || ""));
+                    var it2 = lb.add("item", _stGetDisplayLabelForDialogItem(String(newEntries[i].id || ""), __storedLbl2, !!newEntries[i].isDivider));
+                    it2._id = String(newEntries[i].id || "");
+                    it2._label = __storedLbl2;
+                    it2._isDivider = !!newEntries[i].isDivider;
+                    try { it2.helpTip = String(it2.text || ""); } catch (eTip2) {}
+                    try { if (it2._isDivider && !opts.allowDividerSelection) it2.enabled = false; else it2.enabled = true; } catch (eDis2) {}
+                    try {
+                        if (selectedIds[String(it2._id || "")]) it2.selected = true;
+                    } catch (eSelSet) {}
+                }
+
+                try {
+                    for (i = 0; i < lb.items.length; i++) {
+                        if (selectedIds[String(lb.items[i]._id || "")]) { lb.selection = lb.items[i]; break; }
+                    }
+                } catch (eSelFinal) {}
+            }
+
+            function moveSelectedToSection() {
+                try {
+                    if (!btnMoveTo) return;
+                    if (!lb.selection) return;
+
+                    var sels = [];
+                    var i = 0;
+
+                    for (i = 0; i < lb.items.length; i++) {
+                        try { if (lb.items[i].selected) sels.push(lb.items[i]); } catch (eSelScan2) {}
+                    }
+                    if (!sels.length) {
+                        try {
+                            if (lb.selection instanceof Array) sels = lb.selection;
+                            else if (lb.selection) sels = [lb.selection];
+                        } catch (eSelArr2) {
+                            try { if (lb.selection) sels = [lb.selection]; } catch (eSelOne2) {}
+                        }
+                    }
+                    if (!sels || !sels.length) return;
+
+                    var __sectionChoices = [];
+                    var __sectionChoiceIds = [];
+                    var __seenSectionIds = {};
+                    try {
+                        for (i = 0; i < lb.items.length; i++) {
+                            var __secItem = lb.items[i];
+                            if (!__secItem || !__secItem._isDivider) continue;
+                            var __secId = String(__secItem._id || "");
+                            if (!__secId || __seenSectionIds[__secId]) continue;
+                            __seenSectionIds[__secId] = true;
+                            var __secLabel = String(__secItem._label || __secItem.text || __secId);
+                            __secLabel = _stStripLeadingIndent(__secLabel).replace(/^[\s \-—–_]+/, "").replace(/[\s \-—–_]+$/, "");
+                            if (!__secLabel) continue;
+                            __sectionChoices.push(__secLabel);
+                            __sectionChoiceIds.push(__secId);
+                        }
+                    } catch (eSecScan) {}
+
+                    if (!__sectionChoices.length && opts.sectionChoices && opts.sectionChoices.length) {
+                        for (i = 0; i < opts.sectionChoices.length; i++) {
+                            var __fallbackChoice = String(opts.sectionChoices[i] || "");
+                            if (!__fallbackChoice) continue;
+                            __sectionChoices.push(__fallbackChoice);
+                            __sectionChoiceIds.push((typeof opts.sectionTokenForChoice === "function")
+                                ? String(opts.sectionTokenForChoice(__fallbackChoice) || __fallbackChoice)
+                                : __fallbackChoice);
+                        }
+                    }
+                    if (!__sectionChoices.length) return;
+
+                    var secDlg = new Window("dialog", "Move To Section");
+                    secDlg.orientation = "column";
+                    secDlg.alignChildren = ["fill", "top"];
+                    secDlg.spacing = 10;
+                    secDlg.margins = [12, 12, 12, 12];
+
+                    var msg = secDlg.add("statictext", undefined, "Move selected items to:");
+                    msg.alignment = ["fill", "top"];
+
+                    var dd = secDlg.add("dropdownlist", undefined, __sectionChoices);
+                    dd.alignment = ["fill", "top"];
+                    try { dd.selection = 0; } catch (eDDSel) {}
+
+                    var row = secDlg.add("group");
+                    row.orientation = "row";
+                    row.alignChildren = ["right", "center"];
+                    row.alignment = ["right", "top"];
+                    row.spacing = 8;
+
+                    var ok = row.add("button", undefined, "Move", {name:"ok"});
+                    var cancel = row.add("button", undefined, "Cancel", {name:"cancel"});
+
+                    var chosenIndex = -1;
+                    ok.onClick = function () {
+                        if (!dd.selection) return;
+                        try { chosenIndex = dd.selection.index; } catch (eDDIndex) { chosenIndex = -1; }
+                        if (chosenIndex < 0) chosenIndex = 0;
+                        secDlg.close(1);
+                    };
+                    cancel.onClick = function () { secDlg.close(0); };
+
+                    if (secDlg.show() !== 1 || chosenIndex < 0) return;
+
+                    var dividerToken = String(__sectionChoiceIds[chosenIndex] || "");
+                    if (!dividerToken) return;
+
+                    var entries = [];
+                    var selectedIds = {};
+                    for (i = 0; i < lb.items.length; i++) {
+                        entries.push({
+                            text: lb.items[i].text,
+                            id: lb.items[i]._id,
+                            tip: lb.items[i].helpTip,
+                            isDivider: !!lb.items[i]._isDivider
+                        });
+                    }
+                    for (i = 0; i < sels.length; i++) {
+                        try {
+                            if (sels[i] && sels[i]._isDivider && !opts.allowDividerSelection) return;
+                            selectedIds[String(sels[i]._id || sels[i].text || "")] = true;
+                        } catch (eID) {}
+                    }
+
+                    var moved = [];
+                    var remaining = [];
+                    for (i = 0; i < entries.length; i++) {
+                        if (selectedIds[String(entries[i].id || "")]) moved.push(entries[i]);
+                        else remaining.push(entries[i]);
+                    }
+                    if (!moved.length) return;
+
+                    var insertAt = -1;
+                    for (i = 0; i < remaining.length; i++) {
+                        if (String(remaining[i].id || "") === dividerToken) {
+                            insertAt = i + 1;
+                        }
+                    }
+                    if (insertAt < 0) return;
+
+                    var newEntries = [];
+                    for (i = 0; i < insertAt; i++) newEntries.push(remaining[i]);
+                    for (i = 0; i < moved.length; i++) newEntries.push(moved[i]);
+                    for (i = insertAt; i < remaining.length; i++) newEntries.push(remaining[i]);
+
+                    try { lb.removeAll(); } catch (eClrLB) {}
+                    for (i = 0; i < newEntries.length; i++) {
+                        var it2 = lb.add("item", String(newEntries[i].text || ""));
+                        it2._id = String(newEntries[i].id || "");
+                        it2._isDivider = !!newEntries[i].isDivider;
+                        try { it2.helpTip = String(newEntries[i].tip || ""); } catch (eTip3) {}
+                        try { if (it2._isDivider && !opts.allowDividerSelection) it2.enabled = false; else it2.enabled = true; } catch (eDis3) {}
+                        try {
+                            var keepSel = false;
+                            var id2 = String(newEntries[i].id || "");
+                            if (selectedIds[id2]) keepSel = true;
+                            it2.selected = keepSel;
+                        } catch (eSelKeep) {}
+                    }
+                } catch (eMoveTo) {
+                    alert("Move To failed: " + String(eMoveTo));
+                }
+            }
+
+            function deleteSelectedItems() {
+                try {
+                    if (!opts.allowDelete || !lb || !lb.items || !lb.items.length) return false;
+
+                    var sels = [];
+                    var i = 0;
+
+                    for (i = 0; i < lb.items.length; i++) {
+                        try { if (lb.items[i].selected) sels.push(lb.items[i]); } catch (eSelScan3) {}
+                    }
+                    if (!sels.length) {
+                        try {
+                            if (lb.selection instanceof Array) sels = lb.selection;
+                            else if (lb.selection) sels = [lb.selection];
+                        } catch (eSelArr3) {
+                            try { if (lb.selection) sels = [lb.selection]; } catch (eSelOne3) {}
+                        }
+                    }
+                    if (!sels || !sels.length) return false;
+
+                    var selectedRows = {};
+                    var selectedCount = 0;
+                    for (i = 0; i < sels.length; i++) {
+                        try {
+                            if (!sels[i]) continue;
+                            if (sels[i]._isDivider && !opts.allowDividerDeletion && !opts.allowDividerSelection) continue;
+                            for (var j = 0; j < lb.items.length; j++) {
+                                try {
+                                    if (lb.items[j] === sels[i]) {
+                                        if (!selectedRows[j]) {
+                                            selectedRows[j] = true;
+                                            selectedCount++;
+                                        }
+                                        break;
+                                    }
+                                } catch (eSelCmp3) {}
+                            }
+                        } catch (eSelRow3) {}
+                    }
+                    if (!selectedCount) return false;
+
+                    var kept = [];
+                    for (i = 0; i < lb.items.length; i++) {
+                        try {
+                            var idKeep = String(lb.items[i]._id || "");
+                            if ((lb.items[i]._isDivider && !(opts.allowDividerDeletion || opts.allowDividerSelection)) || !selectedRows[i]) {
+                                kept.push({
+                                    text: lb.items[i].text,
+                                    id: idKeep,
+                                    tip: lb.items[i].helpTip,
+                                    isDivider: !!lb.items[i]._isDivider
+                                });
+                            }
+                        } catch (eKeep) {}
+                    }
+
+                    if ((lb.items.length - kept.length) !== selectedCount) return false;
+
+                    try { lb.removeAll(); } catch (eClrLB4) {}
+                    for (i = 0; i < kept.length; i++) {
+                        var it3 = lb.add("item", String(kept[i].text || ""));
+                        it3._id = String(kept[i].id || "");
+                        it3._isDivider = !!kept[i].isDivider;
+                        try { it3.helpTip = String(kept[i].tip || ""); } catch (eTip4) {}
+                        try { if (it3._isDivider && !opts.allowDividerSelection) it3.enabled = false; else it3.enabled = true; } catch (eDis4) {}
+                    }
+
+                    if (lb.items.length) {
+                        var _firstSelectableAfterDelete = -1;
+                        for (i = 0; i < lb.items.length; i++) {
+                            try {
+                                if ((opts.allowDividerSelection || !lb.items[i]._isDivider) && lb.items[i].enabled !== false) { _firstSelectableAfterDelete = i; break; }
+                            } catch (eFS2) {}
+                        }
+                        try { if (_firstSelectableAfterDelete >= 0) lb.selection = _firstSelectableAfterDelete; } catch (eSelAfterDel) {}
+                    } else {
+                        try { lb.selection = null; } catch (eSelAfterDel2) {}
+                    }
+
+                    try { _stRefreshDialogLabels(); } catch (eLiveDelIndent) {}
+                    try { lb.notify("onDraw"); } catch (eRDDel) {}
+                    try { dlg.update(); } catch (eUDDel) {}
+                    return true;
+                } catch (eDeleteSel) {
+                    alert("Delete failed: " + String(eDeleteSel));
+                }
+                return false;
+            }
+
+            function __stHandledDeleteKeyOnce(evt) {
+                try {
+                    var now = (new Date()).getTime();
+                    var code = "";
+                    try { code = String(evt && (evt.keyIdentifier || evt.keyName) || ""); } catch (e0) {}
+                    var lastCode = "";
+                    var lastTime = 0;
+                    try { lastCode = String(dlg.__stLastDeleteKeyCode || ""); } catch (e1) {}
+                    try { lastTime = Number(dlg.__stLastDeleteKeyTime || 0); } catch (e2) {}
+                    if (lastCode === code && (now - lastTime) < 250) return true;
+                    try { dlg.__stLastDeleteKeyCode = code; } catch (e3) {}
+                    try { dlg.__stLastDeleteKeyTime = now; } catch (e4) {}
+                } catch (e) {}
+                return false;
+            }
+
+            function addNewDivider() {
+                try {
+                    if (!opts.allowNewDivider) return false;
+                    var raw = prompt("New Divider", "");
+                    if (raw === null) return false;
+                    var label = String(raw || "").replace(/^\s+|\s+$/g, "");
+                    if (!label) return false;
+
+                    var token = (typeof opts.newDividerTokenForLabel === "function") ? String(opts.newDividerTokenForLabel(label) || "") : String(label || "");
+                    var display = (typeof opts.newDividerDisplayForLabel === "function") ? String(opts.newDividerDisplayForLabel(label) || label) : String(label || "");
+                    if (!token) return false;
+
+                    for (var ai = 0; ai < lb.items.length; ai++) {
+                        try { if (String(lb.items[ai]._id || "") === token) return false; } catch (eDup) {}
+                    }
+
+                    var entries = [];
+                    var insertAt = lb.items.length;
+                    for (var i = 0; i < lb.items.length; i++) {
+                        entries.push({ text: lb.items[i].text, id: lb.items[i]._id, tip: lb.items[i].helpTip, isDivider: !!lb.items[i]._isDivider });
+                    }
+                    try {
+                        if (lb.selection) {
+                            var selId = String(lb.selection._id || "");
+                            for (var si = 0; si < entries.length; si++) {
+                                if (String(entries[si].id || "") == selId) { insertAt = si + 1; break; }
+                            }
+                        }
+                    } catch (eSelIns) {}
+
+                    entries.splice(insertAt, 0, { text: display, id: token, tip: display, isDivider: true });
+
+                    try { lb.removeAll(); } catch (eClrLB5) {}
+                    for (var ri = 0; ri < entries.length; ri++) {
+                        var itn = lb.add("item", String(entries[ri].text || ""));
+                        itn._id = String(entries[ri].id || "");
+                        itn._isDivider = !!entries[ri].isDivider;
+                        try { itn.helpTip = String(entries[ri].tip || ""); } catch (eTipN) {}
+                        try {
+                            if (itn._isDivider && !opts.allowDividerSelection) itn.enabled = false;
+                            else itn.enabled = true;
+                        } catch (eDisN) {}
+                        try { itn.selected = (String(itn._id || "") === token); } catch (eSelN) {}
+                    }
+                    try { _stRefreshDialogLabels(); } catch (eLiveNewIndent) {}
+                    try { lb.notify("onDraw"); } catch (eRDNew) {}
+                    try { dlg.update(); } catch (eUDNew) {}
+                    return true;
+                } catch (eAddDiv) {
+                    alert("New Divider failed: " + String(eAddDiv));
+                }
+                return false;
+            }
+
+            function addFilesToDialogList() {
+                try {
+                    if (typeof opts.onAddFiles !== "function") return false;
+                    var added = opts.onAddFiles(lb, dlg, opts);
+                    try { _stRefreshDialogLabels(); } catch (eLiveAddFilesIndent) {}
+                    try { lb.notify("onDraw"); } catch (eRDAddFiles) {}
+                    try { dlg.update(); } catch (eUDAddFiles) {}
+                    return (added === undefined) ? true : !!added;
+                } catch (eAddFiles) {
+                    alert("Add File failed: " + String(eAddFiles));
+                }
+                return false;
+            }
+
+            function renameSelectedItem() {
+                try {
+                    if (!opts.allowRename) return false;
+                    if (!lb || !lb.selection) return false;
+
+                    var sel = lb.selection;
+                    if (sel instanceof Array) {
+                        if (!sel.length) return false;
+                        sel = sel[0];
+                    }
+                    if (!sel) return false;
+
+                    var id = String(sel._id || "");
+                    if (!id) return false;
+
+                    if (sel._isDivider) {
+                        var currentDividerName = "";
+                        try {
+                            if (typeof _animDividerLabelFromToken === "function" && _animIsDividerToken && _animIsDividerToken(id)) currentDividerName = String(_animDividerLabelFromToken(id) || "");
+                        } catch (eDivAnim0) {}
+                        try {
+                            if (!currentDividerName && typeof _favDividerLabelFromToken === "function" && _favIsDividerToken && _favIsDividerToken(id)) currentDividerName = String(_favDividerLabelFromToken(id) || "");
+                        } catch (eDivFav0) {}
+                        if (!currentDividerName) {
+                            currentDividerName = String(sel._label || sel.text || "");
+                            currentDividerName = currentDividerName.replace(/^[\s\u00A0\-—–_]+/, "").replace(/[\s\u00A0\-—–_]+$/, "");
+                        }
+
+                        var rawDivider = prompt("Rename Divider", currentDividerName || "");
+                        if (rawDivider === null) return false;
+
+                        var cleanDivider = String(rawDivider || "").replace(/^\s+|\s+$/g, "");
+                        if (!cleanDivider) return false;
+
+                        var newDividerId = id;
+                        try {
+                            if (typeof opts.newDividerTokenForLabel === "function") newDividerId = String(opts.newDividerTokenForLabel(cleanDivider) || id);
+                        } catch (eDivId0) {}
+                        var newDividerLabel = cleanDivider;
+                        try {
+                            if (typeof opts.newDividerDisplayForLabel === "function") newDividerLabel = String(opts.newDividerDisplayForLabel(cleanDivider) || cleanDivider);
+                        } catch (eDivLbl0) {}
+
+                        try { sel._id = newDividerId; } catch (eDivSet0) {}
+                        try { sel._label = newDividerLabel; } catch (eDivSet1) {}
+                        try { sel.text = _stGetDisplayLabelForDialogItem(newDividerId, newDividerLabel, true, false); } catch (eDivSet2) {}
+                        try { sel.helpTip = String(sel.text || newDividerLabel); } catch (eDivSet3) {}
+
+                        try { lb.notify('onDraw'); } catch (eDivDraw) {}
+                        try { dlg.update(); } catch (eDivUpd) {}
+                        return true;
+                    }
+
+                    var originalLeaf = "";
+                    try {
+                        if (typeof opts.originalFilenameForId === "function") originalLeaf = String(opts.originalFilenameForId(id) || "");
+                    } catch (eOrig0) {}
+                    if (!originalLeaf) originalLeaf = _stPrettyFileLabel(id);
+
+                    var dot = originalLeaf.lastIndexOf(".");
+                    var ext = (dot > 0) ? originalLeaf.substring(dot) : "";
+                    var originalBase = (dot > 0) ? originalLeaf.substring(0, dot) : originalLeaf;
+
+                    var currentLabel = String(sel._label || sel.text || originalLeaf);
+                    currentLabel = _stStripLeadingIndent(currentLabel);
+                    var currentBase = currentLabel;
+                    if (ext && currentBase.length > ext.length && currentBase.slice(-ext.length) === ext) {
+                        currentBase = currentBase.substring(0, currentBase.length - ext.length);
+                    }
+
+                    var raw = prompt("Rename Item (extension will be kept)", currentBase || originalBase);
+                    if (raw === null) return false;
+
+                    var cleanBase = String(raw || "").replace(/^\s+|\s+$/g, "");
+                    var finalLabel = cleanBase ? (cleanBase + ext) : originalLeaf;
+
+                    try { sel._label = finalLabel; } catch (eLbl0) {}
+                    try { sel.text = _stGetDisplayLabelForDialogItem(id, finalLabel, false); } catch (eTxt0) {}
+                    try { sel.helpTip = String(sel.text || finalLabel); } catch (eTip0) {}
+
+                    try { lb.notify('onDraw'); } catch (eRD0) {}
+                    try { dlg.update(); } catch (eUD0) {}
+                    return true;
+                } catch (eRename) {
+                    alert("Rename failed: " + String(eRename));
+                }
+                return false;
+            }
+
+            btnUp.onClick = function(){ moveSel(-1); try { lb.notify("onDraw"); } catch(eRD1) {} try { dlg.update(); } catch(eUD1) {} };
+            btnDn.onClick = function(){ moveSel(1); try { lb.notify("onDraw"); } catch(eRD2) {} try { dlg.update(); } catch(eUD2) {} };
+            if (btnAddFiles) btnAddFiles.onClick = function(){ addFilesToDialogList(); };
+            if (btnNewDivider) btnNewDivider.onClick = function(){ addNewDivider(); };
+            if (btnMoveTo) btnMoveTo.onClick = function(){ moveSelectedToSection(); try { lb.notify("onDraw"); } catch(eRD3) {} try { dlg.update(); } catch(eUD3) {} };
+            if (btnRename) btnRename.onClick = function(){ renameSelectedItem(); };
+            if (btnDelete) btnDelete.onClick = function(){ deleteSelectedItems(); };
+
+            try {
+                lb.onDoubleClick = function() {
+                    try {
+                        if (!lb.selection) return;
+                        var sel = lb.selection;
+                        if (sel instanceof Array) {
+                            if (!sel.length) return;
+                            sel = sel[0];
+                        }
+                        if (!sel) return;
+                        renameSelectedItem();
+                    } catch (eDbl0) {}
+                };
+            } catch (eDbl1) {}
+            if (btnRename) btnRename.onClick = function(){ renameSelectedItem(); };
+            btnCancel.onClick = function(){ dlg.close(0); };
+            btnOk.onClick = function(){ dlg.close(1); };
+
+            try {
+                lb.addEventListener("keydown", function(k){
+                    try {
+                        var keyName = String(k.keyName || "");
+                        var keyId = String(k.keyIdentifier || "");
+                        if (keyName === "Delete" || keyName === "Backspace" || keyId === "Delete" || keyId === "Backspace" || keyId === "U+007F" || keyId === "U+0008") {
+                            if (__stHandledDeleteKeyOnce(k)) {
+                                try { k.preventDefault(); } catch (eKP0a) {}
+                                try { k.stopPropagation(); } catch (eKS0a) {}
+                                return;
+                            }
+                            if (deleteSelectedItems()) {
+                                try { k.preventDefault(); } catch (eKP0) {}
+                                try { k.stopPropagation(); } catch (eKS0) {}
+                            }
+                        }
+                    } catch (eKD0) {}
+                });
+            } catch (eKD1) {}
+
+            try {
+                dlg.addEventListener("keydown", function(k){
+                    try {
+                        var keyName = String(k.keyName || "");
+                        var keyId = String(k.keyIdentifier || "");
+                        if (keyName === "Delete" || keyName === "Backspace" || keyId === "Delete" || keyId === "Backspace" || keyId === "U+007F" || keyId === "U+0008") {
+                            if (__stHandledDeleteKeyOnce(k)) {
+                                try { k.preventDefault(); } catch (eKP1a) {}
+                                try { k.stopPropagation(); } catch (eKS1a) {}
+                                return;
+                            }
+                            if (deleteSelectedItems()) {
+                                try { k.preventDefault(); } catch (eKP1) {}
+                                try { k.stopPropagation(); } catch (eKS1) {}
+                            }
+                        }
+                    } catch (eKD2) {}
+                });
+            } catch (eKD3) {}
+
+            try {
+                dlg.onShow = function() {
+                    try { dlg.layout.layout(true); } catch(eLS) {}
+                    try {
+                        var __stAbsLeft = function(ctrl) {
+                            var x = 0;
+                            var cur = ctrl;
+                            while (cur && cur !== dlg) {
+                                try { x += Number(cur.bounds.x || 0); } catch (eAbsL0) {}
+                                try { cur = cur.parent; } catch (eAbsL1) { break; }
+                            }
+                            return x;
+                        };
+                        var __stAbsRight = function(ctrl) {
+                            return __stAbsLeft(ctrl) + Number((ctrl && ctrl.bounds) ? ctrl.bounds.width : 0);
+                        };
+
+                        var __targetLeft = -1;
+                        var __targetRight = -1;
+
+                        try { if (__showOriginalToggle) __targetLeft = __stAbsLeft(__showOriginalToggle); } catch (eListTargetL) {}
+                        try { if (__cancelPack && __cancelPack.cell) __targetRight = __stAbsRight(__cancelPack.cell); } catch (eListTargetR) {}
+
+                        if (__targetLeft >= 0 && __targetRight > __targetLeft) {
+                            var __targetW = Math.max(260, __targetRight - __targetLeft);
+                            try { lb.alignment = ['left', 'top']; } catch (eLbAlign0) {}
+                            try { lb.minimumSize = [__targetW, listH]; } catch (eLbMin0) {}
+                            try { lb.maximumSize = [__targetW, 10000]; } catch (eLbMax0) {}
+                            try { lb.preferredSize = [__targetW, listH]; } catch (eLbPref0) {}
+                            try { lb.bounds = [__targetLeft, lb.bounds.y, __targetRight, lb.bounds.y + Math.max(listH, Number(lb.bounds.height || listH))]; } catch (eLbBounds0) {}
+                            try { dlg.layout.layout(true); } catch (eLS2) {}
+                        }
+                    } catch (eListFit) {}
+                    try { dlg.update(); } catch(eUS) {}
+                };
+            } catch (eOnShow) {}
+
+            if (dlg.show() !== 1) return null;
+
+            var out = [];
+            for (var li=0; li<lb.items.length; li++) {
+                if (opts.returnObjects) {
+                    var __outId = String(lb.items[li]._id || "");
+                    var __outIsDivider = !!lb.items[li]._isDivider;
+                    var __outLabel = String(lb.items[li]._label || lb.items[li].text || "");
+                    if (!__outIsDivider) {
+                        if (__stShowOriginalNames && typeof opts.displayLabelForId === "function") {
+                            try { __outLabel = _stStripLeadingIndent(String(opts.displayLabelForId(__outId, __outLabel, { _isDivider: false }, true) || __outLabel || "")); } catch (eOutOrig) {}
+                        } else {
+                            __outLabel = _stStripLeadingIndent(__outLabel);
+                        }
+                    }
+                    out.push({
+                        id: __outId,
+                        label: __outLabel,
+                        _isDivider: __outIsDivider
+                    });
+                } else {
+                    out.push(String(lb.items[li]._id || ""));
+                }
+            }
+            return out;
+        } catch (eDlg) {
+            alert("Reorder failed: " + String(eDlg));
+        }
+        return null;
     }
 
 function animOpenDialogFromDefaultFolder() {
@@ -3853,7 +4570,6 @@ function _getUserPresetsStartFolder() {
     } catch (e) {}
     return null;
 }
-
 
 // Open a file dialog starting from a specific folder (more reliable than Folder.current on macOS/docked panels)
 // IMPORTANT: If the dialog is shown and the user cancels, we must NOT open a second fallback dialog.
@@ -3944,7 +4660,6 @@ function favOpenDialogFromDefaultFolder() {
                 try { lyr.startTime = comp.time; } catch (eST) {}
                 try { lyr.inPoint   = comp.time; } catch (eIP) {}
 
-
                 // Insert ABOVE the originally selected layer (if any)
                 try { if (__stRefLayer) { lyr.moveBefore(__stRefLayer); } } catch (eMv) {}
                 // OPTION held: set blend mode to ADD instead of NORMAL
@@ -3975,14 +4690,12 @@ function favOpenDialogFromDefaultFolder() {
             var cam = c.layers.addCamera("Camera 1", [c.width / 2, c.height / 2]);
             cam.label = LABEL_ORANGE;
 
-
             // Place rig layers at CTI
             try { _stPlaceLayerAtCTI(cam, c); } catch (eCTICam) {}
             var nul = c.layers.addNull();
             nul.threeDLayer = true;
             nul.name = "CAM CONTROL";
             nul.label = LABEL_ORANGE;
-
 
             try { _stPlaceLayerAtCTI(nul, c); } catch (eCTINul) {}
             try { nul.autoOrient = AutoOrientType.NO_AUTO_ORIENT; } catch (e0) {}
@@ -4028,7 +4741,6 @@ function favOpenDialogFromDefaultFolder() {
             adjA.adjustmentLayer = true;
             adjA.label = LABEL_LAVENDER;
 
-
             try { _stPlaceLayerAtCTI(adjA, c); } catch (eCTIAdjA) {}
             addEffect(adjA, "ADBE Easy Levels2") || addEffect(adjA, "ADBE Levels");
             addEffect(adjA, "ADBE HUE SATURATION") || addEffect(adjA, "ADBE Hue Saturation");
@@ -4037,7 +4749,6 @@ function favOpenDialogFromDefaultFolder() {
             var adjB = c.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "VIGNETTE + NOISE", c.width, c.height, c.pixelAspect, c.duration);
             adjB.adjustmentLayer = true;
             adjB.label = LABEL_LAVENDER;
-
 
             try { _stPlaceLayerAtCTI(adjB, c); } catch (eCTIAdjB) {}
             var vig = addEffect(adjB, "CC Vignette");
@@ -4052,7 +4763,6 @@ function favOpenDialogFromDefaultFolder() {
             var adjC = c.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "CAMERA LENS BLUR", c.width, c.height, c.pixelAspect, c.duration);
             adjC.adjustmentLayer = true;
             adjC.label = LABEL_LAVENDER;
-
 
             try { _stPlaceLayerAtCTI(adjC, c); } catch (eCTIAdjC) {}
             var clb = addEffect(adjC, "ADBE Camera Lens Blur") || addEffect(adjC, "Camera Lens Blur");
@@ -4167,7 +4877,6 @@ function favOpenDialogFromDefaultFolder() {
         }catch(e){ return null; }
     }
 
-
     function _stPlaceLayerSourceInSolidsFolder(layer){
         try{
             if (!layer) return;
@@ -4203,7 +4912,6 @@ function favOpenDialogFromDefaultFolder() {
         try {
             if (!requireProject()) return;
             ensureCompViewer(c);
-
 
             var __stRefLayer = null;
             try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
@@ -4303,7 +5011,6 @@ var solidIdsBefore = {};
         }
     }
 
-
     function addWhiteSolidDefault() {
         var c = requireComp();
         if (!c) return;
@@ -4318,7 +5025,6 @@ var solidIdsBefore = {};
             var name = "WHITE SOLID";
             var lay = c.layers.addSolid(white, name, c.width, c.height, c.pixelAspect, c.duration);
             /* selection set after placement */
-
 
             _stPlaceLayerAtCTI(lay, c);
             try { if (__stRefLayer) lay.moveBefore(__stRefLayer); } catch (eMv) {}
@@ -4342,7 +5048,6 @@ var solidIdsBefore = {};
 
             var nul = c.layers.addNull();
             /* selection set after placement */
-
 
             _stPlaceLayerAtCTI(nul, c);
             try { if (__stRefLayer) nul.moveBefore(__stRefLayer); } catch (eMv) {}
@@ -4486,7 +5191,6 @@ _stPlaceLayerSourceInSolidsFolder(adj);
             app.endUndoGroup();
         }
     }
-
 
     // Option-click helper for ANIMATE STROKE: add Trim Paths to the SELECTED shape layer
     // and animate End 0→100 over 30 frames (starting at the CTI) with Easy Ease.
@@ -4740,7 +5444,6 @@ _stPlaceLayerSourceInSolidsFolder(adj);
 
             var animProp = (whichProp === "START") ? startProp : endProp;
 
-
             // Make the layer bar start at the CTI (do this BEFORE setting keyframes)
             try {
                 var __stDelta = t0 - lyr.inPoint;
@@ -4790,7 +5493,6 @@ _stPlaceLayerSourceInSolidsFolder(adj);
 
     function addTrimLineAnimateEnd_30f() { _addTrimLineAndAnimate_30f("END"); }
     function addTrimLineAnimateStart_30f() { _addTrimLineAndAnimate_30f("START"); }
-
 
     function hardBounceExpr() {
         return [
@@ -4893,16 +5595,7 @@ _stPlaceLayerSourceInSolidsFolder(adj);
         var props = getSelectedExprProps(c);
         if (!props || props.length === 0) {
             if (_deferred !== true) {
-                try {
-                    var token = (new Date()).getTime();
-                    $.global.__ST_hardBounceRetryToken = token;
-
-                    var t1 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_hardBounceRetryToken==" + token + ") $.global.__ST_doHardBounceDeferred(); }catch(e){}});";
-                    var t2 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_hardBounceRetryToken==" + token + ") $.global.__ST_doHardBounceDeferred(); }catch(e){}});";
-
-                    app.scheduleTask(t1, 120, false);
-                    app.scheduleTask(t2, 240, false);
-                } catch (eT) {}
+                try { $.global.__ST_doHardBounceDeferred(); } catch (eT) {}
                 return;
             }
             warn("Select one or more properties (Position/Scale/Rotation/etc.) in the timeline or Effect Controls, then click the button.");
@@ -4936,16 +5629,7 @@ _stPlaceLayerSourceInSolidsFolder(adj);
         var props = getSelectedExprProps(c);
         if (!props || props.length === 0) {
             if (_deferred !== true) {
-                try {
-                    var token = (new Date()).getTime();
-                    $.global.__ST_inertialBounceRetryToken = token;
-
-                    var t1 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_inertialBounceRetryToken==" + token + ") $.global.__ST_doInertialBounceDeferred(); }catch(e){}});";
-                    var t2 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_inertialBounceRetryToken==" + token + ") $.global.__ST_doInertialBounceDeferred(); }catch(e){}});";
-
-                    app.scheduleTask(t1, 120, false);
-                    app.scheduleTask(t2, 240, false);
-                } catch (eT) {}
+                try { $.global.__ST_doInertialBounceDeferred(); } catch (eT) {}
                 return;
             }
             warn("Select one or more properties (Position/Scale/Rotation/etc.) in the timeline or Effect Controls, then click the button.");
@@ -4979,18 +5663,7 @@ _stPlaceLayerSourceInSolidsFolder(adj);
         var props = getSelectedExprProps(c);
         if (!props || props.length === 0) {
             if (_deferred !== true) {
-                // Some UI paths (especially Effect Controls) lag a bit before the selected property shows up.
-                // Auto-retry twice so you don't have to click the button twice.
-                try {
-                    var token = (new Date()).getTime();
-                    $.global.__ST_wiggleRetryToken = token;
-
-                    var t1 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_wiggleRetryToken==" + token + ") $.global.__ST_doWiggleDeferred(); }catch(e){}});";
-                    var t2 = "$.global.__ST_withModalSafety__(function(){try{ if($.global.__ST_wiggleRetryToken==" + token + ") $.global.__ST_doWiggleDeferred(); }catch(e){}});";
-
-                    app.scheduleTask(t1, 120, false);
-                    app.scheduleTask(t2, 240, false);
-                } catch (eT) {}
+                try { $.global.__ST_doWiggleDeferred(); } catch (eT) {}
                 return;
             }
             warn("Select one or more properties (Position/Scale/Rotation/etc.) in the timeline, then click the button.");
@@ -5046,7 +5719,6 @@ _stPlaceLayerSourceInSolidsFolder(adj);
 }
         } finally { app.endUndoGroup(); }
     }
-
 
     function trimLayerToNeighbor() {
         var c = requireComp();
@@ -5212,7 +5884,6 @@ function isAVLayer(x){
 function isCompItem(x){
     try{ return (x && (x instanceof CompItem)); }catch(_e){ return false; }
   }
-
 
 function hardRefreshLayer(layer){
     try{
@@ -5462,7 +6133,6 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
   }
     }
 
-
     // --------------------------------------------------
     // UTILITIES: PHOTO BORDERS (FINAL IMPLEMENTATIONS)
     // --------------------------------------------------
@@ -5514,9 +6184,125 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
     }
 
     // ADD PHOTO BORDER (from ShineTools_BorderButton_Test_v4.jsx)
+    function _stGetLayerSourceSize(layer) {
+        var out = { width: 0, height: 0 };
+        try {
+            if (!layer) return out;
+
+            try {
+                if (layer.source) {
+                    var sw = Number(layer.source.width || 0);
+                    var sh = Number(layer.source.height || 0);
+                    if (sw > 0 && sh > 0) {
+                        out.width = sw;
+                        out.height = sh;
+                        return out;
+                    }
+                }
+            } catch (e0) {}
+
+            try {
+                var r = layer.sourceRectAtTime(0, false);
+                if (r) {
+                    out.width = Math.max(0, Number(r.width || 0));
+                    out.height = Math.max(0, Number(r.height || 0));
+                }
+            } catch (e1) {}
+        } catch (eAll) {}
+        return out;
+    }
+
+    function _stRefitPhotoBorderPrecomp(precomp) {
+        try {
+            if (!precomp || !(precomp instanceof CompItem)) return false;
+
+            var innerContent = null;
+            try { innerContent = precomp.layer("BORDER_CONTENT"); } catch (e0) { innerContent = null; }
+            if (!innerContent) {
+                try { innerContent = precomp.layer(1); } catch (e1) { innerContent = null; }
+            }
+            if (!innerContent) return false;
+
+            try { safeSetName(innerContent, "BORDER_CONTENT"); } catch (e2) {}
+
+            var sz = _stGetLayerSourceSize(innerContent);
+            var newW = Math.max(4, Math.round(Number(sz.width || 0)));
+            var newH = Math.max(4, Math.round(Number(sz.height || 0)));
+            if (!(newW > 0 && newH > 0)) return false;
+
+            try { precomp.width = newW; } catch (eW) {}
+            try { precomp.height = newH; } catch (eH) {}
+
+            try {
+                var tr = innerContent.property("Transform");
+                var ap = tr ? tr.property("Anchor Point") : null;
+                var pos = tr ? tr.property("Position") : null;
+                if (ap) ap.setValue([newW / 2, newH / 2]);
+                if (pos) pos.setValue([precomp.width / 2, precomp.height / 2]);
+            } catch (eTr) {}
+
+            try {
+                var shp = precomp.layer("BORDER_SHAPE");
+                if (shp) {
+                    var t = shp.property("Transform");
+                    if (t) {
+                        try { t.property("Position").setValue([0,0]); } catch (eSP) {}
+                        try { t.property("Anchor Point").setValue([0,0]); } catch (eSA) {}
+                    }
+                }
+            } catch (e3) {}
+
+            return true;
+        } catch (eAll2) {}
+        return false;
+    }
+
+    function _stRefreshSelectedPhotoBorders_Util() {
+        var comp = requireComp();
+        if (!comp) return false;
+
+        if (!comp.selectedLayers || comp.selectedLayers.length === 0) {
+            alert("Select one or more bordered precomp layers.");
+            return false;
+        }
+
+        var didAny = false;
+
+        try {
+            var layers = comp.selectedLayers.slice(0);
+            for (var i = 0; i < layers.length; i++) {
+                var lyr = layers[i];
+                if (!lyr || !(lyr instanceof AVLayer)) continue;
+
+                var srcComp = null;
+                try { srcComp = lyr.source; } catch (e0) { srcComp = null; }
+                if (!srcComp || !(srcComp instanceof CompItem)) continue;
+
+                if (_stRefitPhotoBorderPrecomp(srcComp)) {
+                    didAny = true;
+                }
+            }
+        } catch (e1) {}
+
+        if (!didAny) {
+            alert("Selected layer is not a supported bordered precomp.\n\nOpen the border precomp, replace BORDER_CONTENT, then Option-click ADD PHOTO BORDER to refit it.");
+        }
+        return didAny;
+    }
+
     function addPhotoBorder_Util() {
         var comp = requireComp();
         if (!comp) return;
+
+        if (isOptionDown()) {
+            app.beginUndoGroup("Refit Photo Border");
+            try {
+                _stRefreshSelectedPhotoBorders_Util();
+            } finally {
+                app.endUndoGroup();
+            }
+            return;
+        }
 
         if (!comp.selectedLayers || comp.selectedLayers.length === 0) {
             alert("Select at least one image/footage layer (jpg/png/psd/etc).");
@@ -5553,8 +6339,8 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
                 // Route the newly-created precomp comp into 07_PRECOMPS
                 try { var _pf2 = _stGetOrCreatePrecompsFolderRoot(); if (_pf2) precomp.parentFolder = _pf2; } catch (ePF2) {}
 
-                                try { if (precomp) precomp.comment = TAG_PRECOMP_COMP; } catch (eTag2) {}
-// The new precomp layer in parent comp should still be at the same index
+                try { if (precomp) precomp.comment = TAG_PRECOMP_COMP; } catch (eTag2) {}
+                // The new precomp layer in parent comp should still be at the same index
                 var precompLayer = null;
                 try { precompLayer = comp.layer(lyr.index); } catch (eL) { precompLayer = null; }
                 if (!precompLayer) continue;
@@ -5569,6 +6355,9 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
                 if (innerContent) {
                     safeSetName(innerContent, "BORDER_CONTENT");
                 }
+
+                // Fit the precomp to the current content immediately
+                try { _stRefitPhotoBorderPrecomp(precomp); } catch (eFit0) {}
 
                 // Add shape layer for border inside the precomp
                 var shp = null;
@@ -5602,12 +6391,16 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
                         rect.property("Size").expression =
                             "var L = thisComp.layer('BORDER_CONTENT');\n" +
                             "var r = L.sourceRectAtTime(time,false);\n" +
-                            "[r.width, r.height];";
+                            "var p1 = L.toComp([r.left, r.top]);\n" +
+                            "var p2 = L.toComp([r.left + r.width, r.top + r.height]);\n" +
+                            "[Math.abs(p2[0]-p1[0]), Math.abs(p2[1]-p1[1])];";
 
                         rect.property("Position").expression =
                             "var L = thisComp.layer('BORDER_CONTENT');\n" +
                             "var r = L.sourceRectAtTime(time,false);\n" +
-                            "[r.left + r.width/2, r.top + r.height/2];";
+                            "var p1 = L.toComp([r.left, r.top]);\n" +
+                            "var p2 = L.toComp([r.left + r.width, r.top + r.height]);\n" +
+                            "[(p1[0]+p2[0])/2, (p1[1]+p2[1])/2];";
 
                         rect.property("Roundness").setValue(0);
 
@@ -5641,6 +6434,8 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
 
                     } catch (eBuild) {}
                 }
+
+                try { _stRefitPhotoBorderPrecomp(precomp); } catch (eFit1) {}
             }
         } catch (err) {
             alert("ADD PHOTO BORDER failed:\n" + err.toString());
@@ -5690,7 +6485,6 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
                 try { __til.setValue(4); } catch (eT3) {}
             }
 
-
         } catch (err2) {
             alert("Error applying CC Repetile:\n" + err2.toString());
         }
@@ -5734,7 +6528,6 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
             }
         } catch (e) {}
     }
-
 
     // Reveal finder/explorer ONLY when CMD is held (prevents Finder stealing focus).
     // - Normal click: no reveal
@@ -5849,7 +6642,7 @@ var rsTemplate = "Best Settings"; // Always Best Settings
             // Save dialog (pause hover polling if present)
             try { if ($.global && $.global.__ShineTools_CancelHoverPoll__) $.global.__ShineTools_CancelHoverPoll__(); } catch (eH) {}
 
-            var suffix = use4444 ? "_PRORES4444_ALPHA.mov" : "_PRORES422.mov";
+            var suffix = use4444 ? "_PRORES4444_ALPHA.mov" : "_PRORES422mov";
             var promptTitle = use4444 ? "Save PRORES 4444 (RGB+ALPHA) render as…" : "Save PRORES 422 render as…";
             var outFile = __ST_saveDialogSafe__(promptTitle, "*.mov");
 
@@ -5922,7 +6715,7 @@ var rsTemplate = "Best Settings"; // Always Best Settings
                     };
                 }
 
-                app.scheduleTask('$.global.__ST_RQRenderAndReveal__();', 50, false);
+                try { $.global.__ST_RQRenderAndReveal__(); } catch (eRunNow) {}
             } catch (eSched) {
                 // Fallback: render immediately if scheduling fails
                 try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD0) {}
@@ -5944,7 +6737,6 @@ var rsTemplate = "Best Settings"; // Always Best Settings
         }
     }
 
-
     function saveCurrentFramePSDOrJPG() {
         // Click: JPG still. Option/Alt-click: PSD still.
         try {
@@ -5954,7 +6746,6 @@ var rsTemplate = "Best Settings"; // Always Best Settings
         } catch (e) {}
         return saveCurrentFrameJPGStill();
     }
-
 
     function saveCurrentFramePSDStill() {
     var c = requireComp();
@@ -6123,7 +6914,6 @@ var rsTemplate = "Best Settings"; // Always Best Settings
         _endSuppress();
     }
 }
-
 
 function saveCurrentFrameJPGStill() {
         var c = requireComp();
@@ -6316,7 +7106,6 @@ function saveCurrentFrameJPGStill() {
             }catch(e){ return false; }
         }
 
-
 function findOrCreateRootFolder(name) {
     // Prefer the first folder with this name under root
     for (var i = 1; i <= proj.numItems; i++) {
@@ -6361,7 +7150,6 @@ function _stGetPrimary01Folder() {
     return findOrCreateRootFolder(ST_CONST.FOLDER_01_MAIN);
 }
 
-
 function listRootFoldersByName(name) {
             var out = [];
             for (var i = 1; i <= proj.numItems; i++) {
@@ -6393,7 +7181,6 @@ function listRootFoldersByName(name) {
                 return true;
             } catch (e) { return false; }
         }
-
 
         function deleteEmptyFoldersUnderRoot() {
             // Iterate until no more deletions (because deletions can expose empties)
@@ -6479,7 +7266,6 @@ function listRootFoldersByName(name) {
         _migrateRootFolderName("05_GRAPHICS",fVectors);
         _migrateRootFolderName("06_ELEMENTS",fShineElements);
 
-
         // ------------------------------------------------------------
         // Ensure standard subfolder structure (do not move existing comps)
         // ------------------------------------------------------------
@@ -6547,7 +7333,6 @@ function listRootFoldersByName(name) {
                 return f;
             }catch(e){ return null; }
         }
-
 
         // 01_SEQ > Versions > :06 / :15 / :30 / :60 (reuses existing variants like ".:06")
         var fVersions = findOrCreateSubFolder(fSEQ, "Versions");
@@ -6657,7 +7442,6 @@ findOrCreateSubFolder(fPrecomps, "TEXT");
                             }
                         }
                     } catch (eSeqToPrecomp) {}
-
 
 // Existing behavior:
                     // We only route:
@@ -7258,7 +8042,6 @@ findOrCreateSubFolder(fPrecomps, "TEXT");
     // 11) UI — TABS + Accordion
     // ============================================================
 
-
 // ============================================================
 // Offset Layers Utility (ported from OffsetLayers_Standalone15.jsx)
 // NOTE: Must be in global scope so MAIN > UTILITIES button can call it.
@@ -7328,7 +8111,6 @@ function _stFrameOffset_wireDialogBtn(btn, sink, closeFn){
     try{ btn.onMouseUp   = function(){ try{ btn.active=false; }catch(e){} try{ if(sink) sink.active=true; }catch(e2){} }; }catch(e6){}
 }
 
-
 // ===================== LINEAR (NORMAL CLICK) =====================
 function _stFrameOffset_showFrameOffsetDialog(){
     var d=new Window("dialog","Frame Offset");
@@ -7365,7 +8147,6 @@ function _stFrameOffset_showFrameOffsetDialog(){
         if(v > 9999) v = 9999;
         return v;
     }
-
 
 var btns = d.add("group");
 btns.orientation = "row";
@@ -7438,7 +8219,6 @@ function _stFrameOffset_f_exponential(t, k){
     var den = ek - 1;
     return den !== 0 ? (num/den) : t;
 }
-
 
 function _stFrameOffset_invertOffsets(offsets){
     if(!offsets || offsets.length < 3) return offsets;
@@ -7560,7 +8340,6 @@ function _stFrameOffset_calcNoWrapCols(previewPanel, st){
 // Nudge smaller so we can fit more dots (loop below backs off if we overflow)
 dotW *= 0.90;
 
-
     // EVEN WIDER: assume minimal padding (we also reduce panel margins below)
     var usable = w - 0;
     var cols = ((Math.floor(usable/dotW) + 18) * 2) + 60; // more columns to reach the edge
@@ -7589,7 +8368,6 @@ function _stFrameOffset_showCurveDialog(comp){
     d.alignChildren = ["fill","top"];
     d.margins = 14;
     d.spacing = 10;
-
 
     // Focus sink (helps avoid clipped focus rings on controls)
     var __curveSink = null;
@@ -7905,37 +8683,27 @@ function _stFrameOffset_applyCurveOffset(comp, layers, totalFrames, typeIdx, cur
 // ============================================================
 function __ST_pauseBackgroundTasks__(){
     try{
-        // Pause TextBox watcher (it uses a scheduleTask loop)
-        if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.__watcher){
-            $.global.__ST_TextBoxWatcherWasRunning__ = !!$.global.ShineTools.TextBox.__watcher.running;
-            $.global.ShineTools.TextBox.__watcher.running = false;
-        } else {
-            $.global.__ST_TextBoxWatcherWasRunning__ = false;
-        }
-    }catch(e0){}
-
-    try{
         // Cancel hover label polling (it uses scheduleTask while hovering)
         if ($.global && $.global.__ShineTools_CancelHoverPoll__) $.global.__ShineTools_CancelHoverPoll__();
     }catch(e1){}
 }
 
 function __ST_resumeBackgroundTasks__(){
-    try{
-        if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.ensureWatcherRunning){
-            if ($.global.__ST_TextBoxWatcherWasRunning__) {
-                $.global.ShineTools.TextBox.ensureWatcherRunning();
-            }
-        }
-    }catch(e2){}
 }
-
 
 function __ST_runExclusive__(fn){
     try {
         if (!$.global) $.global = {};
-        if ($.global.__ST_BUSY__ === true) return null;
+        if ($.global.__ST_BUSY__ === true) {
+            var busyStarted = 0;
+            try { busyStarted = $.global.__ST_BUSY_STARTED_MS__ || 0; } catch (eBusy0) { busyStarted = 0; }
+            var busyNow = 0;
+            try { busyNow = (new Date()).getTime(); } catch (eBusy1) { busyNow = 0; }
+            if (!busyStarted || !busyNow || (busyNow - busyStarted) < 10000) return null;
+            try { $.global.__ST_BUSY__ = false; } catch (eBusy2) {}
+        }
         $.global.__ST_BUSY__ = true;
+        try { $.global.__ST_BUSY_STARTED_MS__ = (new Date()).getTime(); } catch (eBusy3) {}
     } catch (e0) {
         // if $.global isn't writable, just run without the lock
         try { return fn(); } catch (e1) { throw e1; }
@@ -7945,10 +8713,16 @@ function __ST_runExclusive__(fn){
         return fn();
     } finally {
         try { $.global.__ST_BUSY__ = false; } catch (e2) {}
+        try { $.global.__ST_BUSY_STARTED_MS__ = 0; } catch (e3) {}
     }
 }
 
 function __ST_withModalSafety__(fn){
+    try {
+        if ($.global && $.global.__ST_MODAL_DEPTH__ > 0) {
+            return fn();
+        }
+    } catch (eDepth0) {}
     return __ST_runExclusive__(function(){
         // During long blocking operations (e.g. Render Queue render), skip UI scheduleTask callbacks
         // to avoid ScriptUI re-entrancy / glyph loss on focus changes.
@@ -7956,11 +8730,15 @@ function __ST_withModalSafety__(fn){
         // Also skip scheduleTask UI callbacks during saves or when renderQueue reports rendering.
         try { if (app && app.isSaving) return null; } catch (eSkipS) {}
         try { if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) return null; } catch (eSkipR) {}
+        try { $.global.__ST_MODAL_DEPTH__ = 1; } catch (eDepth1) {}
         __ST_pauseBackgroundTasks__();
         try {
             return fn();
         } finally {
             __ST_resumeBackgroundTasks__();
+            try { $.global.__ST_MODAL_DEPTH__ = 0; } catch (eDepth2) {}
+            try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(250); } catch (eCool) {}
+            try { if (typeof _stRecoverAfterHostModal === "function") _stRecoverAfterHostModal(); } catch (eRecover) {}
         }
     });
 }
@@ -7989,46 +8767,29 @@ function __ST_selectDialogSafe__(title){
     });
 }
 
-
 function __ST_saveDialogSafe__(title, filter){
     return $.global.__ST_withModalSafety__(function(){
         return File.saveDialog(title, filter);
     });
 }
 
-// Patch global modal functions so any legacy alert/confirm/prompt calls
-// also pause background scheduleTask loops (prevents "modal dialog waiting" errors).
+// Do not monkey-patch AE's global alert/confirm/prompt.
+// Those globals live in the shared ExtendScript engine, and replacing them can leave
+// AE-owned native modal flows (like Save Animation Preset warnings) in a bad focus state.
+// If an older loaded copy patched them, restore the native functions now.
 try{
     if (!$.global) $.global = {};
     // Ensure the global alias points at the latest implementation
     $.global.__ST_withModalSafety__ = __ST_withModalSafety__;
 
-    if (!$.global.__ST_ModalFnsPatched__) {
-        $.global.__ST_ModalFnsPatched__ = true;
-
-        $.global.__ST_alertOriginal__ = alert;
-        alert = function(message, title, errorIcon){
-            return __ST_withModalSafety__(function(){
-                return $.global.__ST_alertOriginal__(message, title, errorIcon);
-            });
-        };
-
-        $.global.__ST_confirmOriginal__ = confirm;
-        confirm = function(question){
-            return __ST_withModalSafety__(function(){
-                return $.global.__ST_confirmOriginal__(question);
-            });
-        };
-
-        $.global.__ST_promptOriginal__ = prompt;
-        prompt = function(question, defaultText){
-            return __ST_withModalSafety__(function(){
-                return $.global.__ST_promptOriginal__(question, defaultText);
-            });
-        };
+    if ($.global.__ST_ModalFnsPatched__) {
+        try { if ($.global.__ST_alertOriginal__) alert = $.global.__ST_alertOriginal__; } catch (eRestoreA) {}
+        try { if ($.global.__ST_confirmOriginal__) confirm = $.global.__ST_confirmOriginal__; } catch (eRestoreC) {}
+        try { if ($.global.__ST_promptOriginal__) prompt = $.global.__ST_promptOriginal__; } catch (eRestoreP) {}
     }
-}catch(ePatch){}
 
+    $.global.__ST_ModalFnsPatched__ = false;
+}catch(ePatch){}
 
 // Runs after a short delay (scheduled) so any in-flight scheduled tasks can finish
 // before we open a modal dialog.
@@ -8093,7 +8854,6 @@ function __ST_RunOffsetLayersModal__(){
 // Expose modal runner for app.scheduleTask (runs in global scope)
 try { $.global.__ST_RunOffsetLayersModal__ = __ST_RunOffsetLayersModal__; } catch(e) {}
 
-
 function offsetSelectedLayers_ShineTools(){
     var comp = _stFrameOffset_getComp();
     if (!comp) return alert("No active comp.");
@@ -8114,14 +8874,9 @@ function offsetSelectedLayers_ShineTools(){
         useCurve: isOptionDown() ? true : false
     };
 
-    // Open the dialog AFTER a short delay so any in-flight scheduled tasks can complete
-    // (prevents AE modal-dialog scheduleTask conflicts).
-    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ $.global.__ST_RunOffsetLayersModal__(); });", 260, false); } catch (e1) {
-        // Fallback: try immediately
-        try { ($.global.__ST_RunOffsetLayersModal__ || __ST_RunOffsetLayersModal__)(); } catch (e2) {}
-    }
+    // Open directly (scheduleTask removed by request).
+    try { ($.global.__ST_RunOffsetLayersModal__ || __ST_RunOffsetLayersModal__)(); } catch (e2) {}
 }
-
 
 function buildUI(thisObj) {
 
@@ -8129,24 +8884,28 @@ function buildUI(thisObj) {
             ? thisObj
             : new Window("palette", "ShineTools_v" + SHINE_VERSION, undefined, { resizeable: true });
 
-
         // Install mousemove-driven hover label updates (no polling)
         try { _stHoverInstallMouseHook(pal); } catch(eHook) {}
 
-        // Also try key hooks for instant modifier flips (best-effort; tick still ensures this works).
+        // Also try key hooks for instant modifier flips (best-effort; SAFE_MODE uses hooks instead of polling).
         try { _stHoverInstallKeyHook(pal); } catch(eKey) {}
-// Failsafe: if the panel loses focus/deactivates, stop any hover tick so it can't stick running.
+        // Failsafe: if the panel loses focus/deactivates, stop any hover tick so it can't stick running.
         try {
-            pal.onDeactivate = function(){
-                try { _hoverClearInternal(); } catch(e0) {}
-                try { _stHoverSetRunning(false); } catch(e1) {}
-                try { _stHoverCancelTask(); } catch(e2) {}
-            };
+            if (!(pal instanceof Panel)) {
+                pal.onDeactivate = function(){
+                    try { _hoverClearInternal(); } catch(e0) {}
+                    try { _stHoverSetRunning(false); } catch(e1) {}
+                    try { _stHoverCancelTask(); } catch(e2) {}
+                };
+                pal.onActivate = function(){
+                    try { _stRecoverAfterHostModal(); } catch(e3) {}
+                };
+            }
         } catch(e) {}
-
 
         // Focus sink (used to kill blue focus ring on buttons after click)
         function ensureFocusSink() {
+            try { if (pal instanceof Panel) return null; } catch (ePanelSink) {}
             if (pal.__focusSink) return pal.__focusSink;
             try {
                 var fs = pal.add("edittext", undefined, "");
@@ -8170,8 +8929,6 @@ function buildUI(thisObj) {
         pal.alignChildren = ["fill", "fill"];
         pal.margins       = 0;
         pal.spacing       = 0;
-
-
 
         function _buildTopTabHeader(pal) {
             // -------------------------
@@ -8229,16 +8986,42 @@ function buildUI(thisObj) {
             tabUnderlineLayer.preferredSize = [10, 6];
             tabUnderlineLayer.maximumSize   = [10000, 6];
 
+            var topMetaRow = tabHeader.add("group");
+            topMetaRow.orientation   = "row";
+            topMetaRow.alignChildren = ["fill", "center"];
+            topMetaRow.alignment     = ["fill", "top"];
+            topMetaRow.margins       = 0;
+            topMetaRow.spacing       = 0;
+            try { topMetaRow.visible = false; } catch (eWSHide0) {}
+            try { topMetaRow.minimumSize = [0, 0]; } catch (eWSHide1) {}
+            try { topMetaRow.preferredSize = [0, 0]; } catch (eWSHide2) {}
+            try { topMetaRow.maximumSize = [0, 0]; } catch (eWSHide3) {}
+
             function _makeTopTabLabel(txt, host) {
                 if (!host) host = tabBarLeft;
                 var st = host.add("statictext", undefined, txt);
 
-                // Compact, left-justified tabs (do NOT stretch across the whole panel).
+                // Keep these labels visually stable during live resize.
+                // ScriptUI can "breathe" horizontally when labels are auto-measured,
+                // which shows up as left/right jitter in the top-right tabs.
                 st.justify = "center";
                 st.margins = 0;
 
-                // Add a touch of padding without forcing a fixed width.
-                try { st.characters = Math.max(4, (txt || "").length + 1); } catch (e) {}
+                var w = 0;
+                try {
+                    w = Math.ceil(st.graphics.measureString(String(txt || "")).width) + 12;
+                } catch (eM) {}
+                if (!w || w < 24) {
+                    if (txt === "REQUESTS") w = 82;
+                    else if (txt === "UPDATES") w = 76;
+                    else if (txt === "HELP") w = 44;
+                    else if (txt === "MAIN") w = 44;
+                    else if (txt === "TEXT") w = 42;
+                    else w = Math.max(24, (String(txt || "").length * 8) + 12);
+                }
+                try { st.minimumSize   = [w, 18]; } catch (e0) {}
+                try { st.preferredSize = [w, 18]; } catch (e1) {}
+                try { st.maximumSize   = [w, 18]; } catch (e2) {}
 
                 return st;
             }
@@ -8336,6 +9119,7 @@ function buildUI(thisObj) {
                 tabBarLeft: tabBarLeft,
                 tabBarRight: tabBarRight,
                 tabUnderlineLayer: tabUnderlineLayer,
+                topMetaRow: topMetaRow,
                 tabLblMain: tabLblMain,
                 tabLblText: tabLblText,
                 tabLblUpdates: tabLblUpdates,
@@ -8359,15 +9143,17 @@ function buildUI(thisObj) {
             tabStack.margins       = 0;
             tabStack.spacing       = 0;
 
-            var tabMain     = tabStack.add("group");
-            var tabText     = tabStack.add("group");
-            var tabRequests = tabStack.add("group");
-            var tabUpdates  = tabStack.add("group");
-            var tabHelp     = tabStack.add("group");
+            var tabMain             = tabStack.add("group");
+            var tabText             = tabStack.add("group");
+            var tabRequests         = tabStack.add("group");
+            var tabUpdates          = tabStack.add("group");
+            var tabHelp             = tabStack.add("group");
+            var tabWorkspaceManager = tabStack.add("group");
 
-            tabRequests.visible = false;
-            tabUpdates.visible  = false;
-            tabHelp.visible     = false;
+            tabRequests.visible         = false;
+            tabUpdates.visible          = false;
+            tabHelp.visible             = false;
+            tabWorkspaceManager.visible = false;
 
             return {
                 tabStack: tabStack,
@@ -8375,7 +9161,8 @@ function buildUI(thisObj) {
                 tabText: tabText,
                 tabRequests: tabRequests,
                 tabUpdates: tabUpdates,
-                tabHelp: tabHelp
+                tabHelp: tabHelp,
+                tabWorkspaceManager: tabWorkspaceManager,
             };
         }
         // -------------------------
@@ -8391,6 +9178,7 @@ function buildUI(thisObj) {
         var tabBarLeft = _topTabs.tabBarLeft;
         var tabBarRight = _topTabs.tabBarRight;
         var tabUnderlineLayer = _topTabs.tabUnderlineLayer;
+        var topMetaRow = _topTabs.topMetaRow;
 
         var tabLblMain = _topTabs.tabLblMain;
         var tabLblText = _topTabs.tabLblText;
@@ -8405,29 +9193,120 @@ function buildUI(thisObj) {
             return _topTabs.setTopTabLabelColor(st, rgbaArr);
         }
 
-
         // -------------------------
         // TAB CONTENT STACK (replaces ScriptUI tabbedpanel so we can style labels safely)
         // -------------------------
         var _tabs = _buildTabStack(pal);
         var tabStack = _tabs.tabStack;
 
-        var tabMain     = _tabs.tabMain;
-        var tabText     = _tabs.tabText;
-        var tabRequests = _tabs.tabRequests;
-        var tabUpdates  = _tabs.tabUpdates;
-        var tabHelp     = _tabs.tabHelp;
+        var tabMain       = _tabs.tabMain;
+        var tabText       = _tabs.tabText;
+        var tabRequests         = _tabs.tabRequests;
+        var tabUpdates          = _tabs.tabUpdates;
+        var tabHelp             = _tabs.tabHelp;
+        var tabWorkspaceManager = _tabs.tabWorkspaceManager;
 
         // Expose tab references for takeover/restore logic
         try {
             pal.__stTabStack    = tabStack;
             pal.__stTabMain     = tabMain;
             pal.__stTabText     = tabText;
-            pal.__stTabRequests = tabRequests;
-            pal.__stTabUpdates  = tabUpdates;
-            pal.__stTabHelp     = tabHelp;
+            pal.__stTabRequests         = tabRequests;
+            pal.__stTabUpdates          = tabUpdates;
+            pal.__stTabHelp             = tabHelp;
+            pal.__stTabWorkspaceManager = tabWorkspaceManager;
         } catch (e) {}
 
+function _stAddPinnedTabFooter(tabRoot, tabKey) {
+    try {
+        if (!tabRoot || tabRoot.__stPinnedFooterBuilt) return null;
+        tabRoot.__stPinnedFooterBuilt = true;
+
+        var spacer = tabRoot.add("group");
+        spacer.alignment = ["fill", "fill"];
+        spacer.minimumSize = [0, 0];
+        spacer.preferredSize = [0, 0];
+
+        var footer = tabRoot.add("group");
+        footer.orientation   = "column";
+        footer.alignChildren = ["left", "center"];
+        footer.alignment     = ["fill", "bottom"];
+        footer.margins       = [16, 4, 10, 6];
+        footer.minimumSize   = [0, 34];
+        footer.maximumSize   = [10000, 34];
+        footer.spacing       = 2;
+
+        var topRow = footer.add("group");
+        topRow.orientation   = "row";
+        topRow.alignChildren = ["left","center"];
+        topRow.alignment = ["left","bottom"];
+        topRow.margins       = [0, 0, 0, 0];
+        topRow.spacing       = 0;
+
+        var line = topRow.add("group");
+        line.margins = 0;
+        line.minimumSize = [4, 16];
+        line.preferredSize = [4, 16];
+        line.maximumSize = [4, 16];
+        line.onDraw = function () {
+            try {
+                var g = this.graphics;
+                var H = this.size[1];
+                var pen = g.newPen(g.PenType.SOLID_COLOR, [1, 0.82, 0.20, 1], 3);
+                var x = 1;
+                g.newPath();
+                g.moveTo(x, 3);
+                g.lineTo(x, H - 1);
+                g.strokePath(pen);
+            } catch (e) {}
+        };
+        try { line.notify("onDraw"); } catch (e0) {}
+
+        var legend = topRow.add("statictext", undefined, "= Multiple options |");
+        legend.justify = "left";
+        legend.margins = 0;
+        legend.alignment = ["left", "center"];
+        try {
+            var __legendG = legend.graphics;
+            __legendG.foregroundColor = __legendG.newPen(__legendG.PenType.SOLID_COLOR, [0.78, 0.78, 0.78, 1], 1);
+        } catch (eLegendColor) {}
+
+        var statusLabel = topRow.add("statictext", undefined, "Update available.");
+        statusLabel.margins = 0;
+        statusLabel.alignment = ["left","center"];
+        try { statusLabel.characters = 22; } catch (eCh) {}
+        try { statusLabel.visible = false; } catch (eVis0) {}
+        try { statusLabel.text = ""; } catch (eTxt0) {}
+
+        var copyRow = footer.add("group");
+        copyRow.orientation   = "row";
+        copyRow.alignChildren = ["left","center"];
+        copyRow.alignment = ["left","bottom"];
+        copyRow.margins       = [0, 0, 0, 0];
+        copyRow.spacing       = 0;
+
+        var copy = copyRow.add("statictext", undefined, "(c) 2025 Shine Creative | v" + SHINE_VERSION);
+        copy.margins = 0;
+        copy.alignment = ["left","center"];
+        try {
+            var __copyG = copy.graphics;
+            __copyG.foregroundColor = __copyG.newPen(__copyG.PenType.SOLID_COLOR, [0.78, 0.78, 0.78, 1], 1);
+        } catch (eCopyColor) {}
+
+        try {
+            if (!pal.__stFooterStatusLabels) pal.__stFooterStatusLabels = [];
+            pal.__stFooterStatusLabels.push(statusLabel);
+        } catch (eStore) {}
+
+        try {
+            if (!pal.__stPinnedFooters) pal.__stPinnedFooters = [];
+            pal.__stPinnedFooters.push(footer);
+        } catch (eStore2) {}
+
+        return footer;
+    } catch (e) {}
+    return null;
+}
 
 // Flexible glue to keep footer pinned to the bottom even in docked panels.
 // ScriptUI can sometimes re-measure the main stack too small after visibility changes;
@@ -8451,13 +9330,14 @@ globalFooter.margins       = [10, 4, 10, 6];
 globalFooter.minimumSize  = [0, 34];
 
 globalFooter.spacing       = 2;
+try { pal.__stFooterGroup = globalFooter; } catch(eFGStore) {}
 
 // Row 1: Legend + Update Status (LEFT pinned)
 var gfTopRow = globalFooter.add("group");
 gfTopRow.orientation   = "row";
 gfTopRow.alignChildren = ["left", "center"];
 gfTopRow.alignment     = ["left", "center"];
-gfTopRow.margins       = 0;
+gfTopRow.margins       = [10, 0, 0, 0];
 gfTopRow.spacing       = 6;
 
 // Yellow option indicator (vertical Shine-yellow line)
@@ -8485,6 +9365,10 @@ var gfLegend = gfTopRow.add("statictext", undefined, "= Multiple options |");
 gfLegend.justify = "left";
 gfLegend.margins = 0;
 gfLegend.alignment = ["left", "center"];
+try {
+    var __gfLegendG = gfLegend.graphics;
+    __gfLegendG.foregroundColor = __gfLegendG.newPen(__gfLegendG.PenType.SOLID_COLOR, [0.78, 0.78, 0.78, 1], 1);
+} catch (eGfLegendColor) {}
 
 // Update status label (immediately to the right of legend)
 // NOTE: ScriptUI statictext created with empty string can get "stuck" at ~0 width.
@@ -8501,39 +9385,77 @@ var gfCopyRow = globalFooter.add("group");
 gfCopyRow.orientation   = "row";
 gfCopyRow.alignChildren = ["left", "center"];
 gfCopyRow.alignment     = ["left", "bottom"];
-gfCopyRow.margins       = 0;
+gfCopyRow.margins = [8, 0, 0, 0];
 gfCopyRow.spacing       = 0;
 
 var gfCopy = gfCopyRow.add("statictext", undefined, "(c) 2025 Shine Creative | v" + SHINE_VERSION);
 gfCopy.margins = 0;
 gfCopy.alignment = ["left","center"];
+try {
+    var __gfCopyG = gfCopy.graphics;
+    __gfCopyG.foregroundColor = __gfCopyG.newPen(__gfCopyG.PenType.SOLID_COLOR, [0.78, 0.78, 0.78, 1], 1);
+} catch (eGfCopyColor) {}
 
 function _setFooterUpdateIndicator(isUpToDate, msgOverride) {
     try {
-        // if caller provides explicit message, use it
+        var nextText = "";
         if (typeof msgOverride === "string") {
-            gfStatusLabel.text = msgOverride;
+            nextText = msgOverride;
         } else if (isUpToDate === true) {
-            gfStatusLabel.text = "✓ Up to date.";
+            nextText = "✓ Up to date.";
         } else if (isUpToDate === false) {
-            gfStatusLabel.text = "Update available.";
+            nextText = "Update available.";
         } else {
-            gfStatusLabel.text = "";
+            nextText = "";
         }
 
-        // Ensure it actually becomes visible (2-line footer can be clipped without relayout)
-        try { gfStatusLabel.visible = (gfStatusLabel.text !== ""); } catch(eV) {}
-        try { globalFooter.layout.layout(true); } catch(eL0) {}
-        try { pal.layout.layout(true); } catch(eL1) {}
-        try { pal.layout.resize(); } catch(eL2) {}
+        try {
+            var labels = pal.__stFooterStatusLabels || [];
+            for (var i = 0; i < labels.length; i++) {
+                try {
+                    if (!labels[i]) continue;
+                    labels[i].text = nextText;
+                    labels[i].visible = (nextText !== "");
+                } catch (eOne) {}
+            }
+        } catch (eList) {}
+
+        try {
+            gfStatusLabel.text = nextText;
+            gfStatusLabel.visible = (nextText !== "");
+        } catch (eGf) {}
+
+        try { if (pal && pal.layout) pal.layout.resize(); } catch (eL0) {}
+        try { if (pal && pal.update) pal.update(); } catch (eL1) {}
     } catch (e) {}
 }
-
 
 // Default until the first check runs
 try {
     gfStatusLabel.text = "";
 } catch(e) {}
+
+try { _stAddPinnedTabFooter(pal.__stMainTabRoot, "MAIN"); } catch (eFootMain) {}
+
+// Keep the old global footer out of layout flow; each tab now owns its own pinned footer.
+try {
+    __footerGlue.visible = false;
+    __footerGlue.enabled = false;
+    __footerGlue.minimumSize = [0,0];
+    __footerGlue.maximumSize = [0,0];
+    __footerGlue.preferredSize = [0,0];
+} catch (eHideGlue) {}
+
+try {
+    globalFooter.visible = false;
+    globalFooter.enabled = false;
+    globalFooter.minimumSize = [0,0];
+    globalFooter.maximumSize = [0,0];
+    globalFooter.preferredSize = [0,0];
+    globalFooter.margins = 0;
+    globalFooter.spacing = 0;
+} catch (eHideFooter) {}
+
 // Deferred build: TEXT tab (speeds initial panel load)
         // --------------------------------------------------
         var __textTabBuilt = false;
@@ -8550,7 +9472,6 @@ try {
             __ph.alignment = ["fill","top"];
             try { __ph.graphics.foregroundColor = __ph.graphics.newPen(__ph.graphics.PenType.SOLID_COLOR, [0.6,0.6,0.6,1], 1); } catch(ePH) {}
         } catch (ePH2) {}
-
 
         // ============================================================
         // REQUESTS + FONT AUDIT (v1.0 additions)
@@ -8575,7 +9496,6 @@ try {
             } catch (e) {}
             return "timestamp";
         }
-
 
         function _showFontAuditDialog() {
             try {
@@ -8602,7 +9522,6 @@ try {
               var LIST_W      = 760;
               var LIST_H_INIT = 320;
 
-
               function isMac(){ return ($.os && $.os.toLowerCase().indexOf("mac") !== -1); }
               function trim(s){ return (s||"").replace(/^\s+|\s+$/g,""); }
               function clip(s, max){ s=(s||""); return (s.length<=max)?s:(s.substring(0, max-1) + "…"); }
@@ -8610,7 +9529,6 @@ try {
               function safeCallSystem(cmd){
                 try{ return system.callSystem(cmd); }catch(e){ return ""; }
               }
-
 
               function prettyText(s){
                 try{
@@ -8656,7 +9574,6 @@ try {
                 return it;
               }
 
-
             function setBold(st, size){
                 try{
                   st.graphics.font = ScriptUI.newFont(st.graphics.font.name, "Bold", size || st.graphics.font.size);
@@ -8683,7 +9600,13 @@ try {
                 for(var i=0;i<arr.length;i++) m[arr[i]] = true;
                 var out = [];
                 for(var k in m) out.push(k);
-                out.sort();
+                out.sort(function (a, b) {
+                    a = String(a || "");
+                    b = String(b || "");
+                    if (a === _stDefaultWorkspaceName() && b !== _stDefaultWorkspaceName()) return -1;
+                    if (b === _stDefaultWorkspaceName() && a !== _stDefaultWorkspaceName()) return 1;
+                    return (a < b) ? -1 : ((a > b) ? 1 : 0);
+                });
                 return out;
               }
 
@@ -9034,7 +9957,6 @@ var home = getHomeDir();
               var dividerLine = win.add("panel");
               dividerLine.minimumSize.height = 1;
               dividerLine.maximumSize.height = 1;
-
 
               // Header row
               var header = win.add("group");
@@ -9398,11 +10320,9 @@ try {
                 }
               }
 
-
               auditBtn.onClick = function(){
                 try{ runAudit(); } catch(e){ alert("Font Audit error:\n" + e.toString()); }
               };
-
 
               // ------------------ Remote font search (network / mounted volumes) ------------------
               // Notes:
@@ -9495,7 +10415,6 @@ try {
                 win.layout.layout(true);
               }
 
-
               getFontsBtn.onClick = function(){
                 try{ copyFoundFontsToProjectFonts(); } catch(e){ alert("COPY FOUND FONTS error:\n" + e.toString()); }
               };
@@ -9530,9 +10449,7 @@ try {
             }
         }
 
-
         function _buildTextTabUI() {
-
 
             try {
                         // =========================================================
@@ -9541,6 +10458,9 @@ try {
                         textRoot.alignChildren = ["fill", "fill"];
                         textRoot.margins       = 0;
                         textRoot.spacing       = 0;
+
+                        // Workspace Manager launcher
+                        _addWorkspaceLauncherRow(textRoot, "TEXT");
 
                         // Same logo header for alignment
                         addLogoHeader(textRoot);
@@ -9628,7 +10548,6 @@ try {
         animRightPad.minimumSize = [TOPROW_DD_RIGHT_TRIM, 1];
         animRightPad.maximumSize = [TOPROW_DD_RIGHT_TRIM, 10000];
 
-
                         try {
                             var f = animDD.graphics.font;
                             var newSize = Math.max(12, (f && f.size ? (f.size + 2) : 13));
@@ -9640,74 +10559,272 @@ try {
                                 function animRebuildDropdown() {
                                     try { animDD.removeAll(); } catch (e0) {}
 
-
-                                    // Blank row (index 0) so we can visually reset to "no selection" (matches MAIN tab behavior)
                                     var blank0 = animDD.add("item", " ");
                                     blank0._isBlank = true;
-                                    // (rebuilt)
-                                    // Bundled (shipped) presets — shown first and not user-removable.
+                                    var __animIndent = "    ";
+
                                     var bundled = [];
                                     try { bundled = _stGetBundledTextAnimatorPaths(); } catch (eB) {}
-                                    for (var bi = 0; bi < bundled.length; bi++) {
-                                        var bp = bundled[bi];
-                                        if (!bp) continue;
-                                        var bItem = animDD.add("item", _stPrettyFileLabel(bp));
-                                        bItem.__path = bp;
-                                        bItem._isDefault = true;
-                                    }
-
-                                    // Divider — user-added items live below
-                                    // Spacer line for visual separation
-                                    var spacer = animDD.add("item", " ");
-                                    spacer._isDivider = true;
-                                    try { spacer.enabled = false; } catch (eSp) {}
-
-                                    var divider = animDD.add("item", "— user presets —");
-                                    divider._isDivider = true;
-                                    try { divider.enabled = false; } catch (eDim) {}
+                                    try { bundled = _applyPathOrder(bundled, animBundledOrderLoad()); } catch (eBO) {}
 
                                     var arrRaw = animLoad();
-                                    // Cleanup: enforce .ffx only and purge legacy/non-ffx saved entries (one-time).
                                     var arr = [];
                                     try {
                                         for (var ci = 0; ci < arrRaw.length; ci++) {
                                             var pp = String(arrRaw[ci] || "");
                                             if (!pp) continue;
-                                            if (!/\.ffx$/i.test(pp)) continue;
-                                            arr.push(pp);
+                                            if (_animIsDividerToken(pp) || /\.ffx$/i.test(pp)) arr.push(pp);
                                         }
-                                        // If anything was removed, persist the cleaned list so it stays clean.
-                                        if (arr.length !== arrRaw.length) {
-                                            animSave(arr);
-                                        }
+                                        if (arr.length !== arrRaw.length) animSave(arr);
                                     } catch (eClean) { arr = arrRaw; }
 
-                                    if (arr.length === 0) {
-                                        var empty = animDD.add("item", "(No saved files)");
-                                        empty.enabled = false;
-                                    } else {
-                                        for (var i = 0; i < arr.length; i++) {
-                                            var p = String(arr[i]);
-                                            // Only allow .ffx entries (filters legacy/invalid saved paths)
-                                            if (!/\.ffx$/i.test(p)) continue;
-                                            var f = new File(p);
-                                            var label = (f && f.exists) ? f.displayName : ("(Missing) " + p);
-                                            try { label = decodeURIComponent(label); } catch (eDec2) {}
-                                            label = label.replace(/%20/g, " ");
-                                            var it = animDD.add("item", label);
-                                            it._fullText = label;
-                                            it.__path = p;
+                                    if (arr.length === 0) arr = _animEnsureDefaultDividers([]);
+
+                                    var unified = [];
+                                    var useUnified = false;
+                                    try { unified = animUnifiedOrderLoad(); } catch (eUni0) { unified = []; }
+                                    try { useUnified = !!(unified && unified.length); } catch (eUni1) { useUnified = false; }
+
+                                    if (!useUnified) {
+                                        unified.push(_animDividerToken("BUNDLED"));
+                                        for (var bi = 0; bi < bundled.length; bi++) {
+                                            var bp0 = String(bundled[bi] || "");
+                                            if (bp0) unified.push("B::" + bp0);
                                         }
+                                        for (var ai = 0; ai < arr.length; ai++) {
+                                            var ap0 = String(arr[ai] || "");
+                                            if (ap0) unified.push(ap0);
+                                        }
+                                    }
+
+                                    var bundledSeen = {};
+                                    var addedSeen = {};
+                                    for (var ui = 0; ui < unified.length; ui++) {
+                                        var uv = String(unified[ui] || "");
+                                        if (!uv) continue;
+
+                                        if (_animIsDividerToken(uv)) {
+                                            var divItem = animDD.add("item", _animDividerDisplay(_animDividerLabelFromToken(uv)));
+                                            divItem._isDivider = true;
+                                            try { divItem.enabled = false; } catch (eAnimDivDis) {}
+                                            continue;
+                                        }
+
+                                        if (uv.indexOf("B::") === 0) {
+                                            var bp = String(uv.substring(3) || "");
+                                            if (!bp || bundledSeen[bp]) continue;
+                                            bundledSeen[bp] = true;
+                                            var __bLabel = String(_animLabelGet("B::" + bp) || _stPrettyFileLabel(bp) || "").replace(/^[\s\u00A0]+/, "");
+                                            var bItem = animDD.add("item", __animIndent + __bLabel);
+                                            bItem._fullText = __animIndent + __bLabel;
+                                            bItem.__path = bp;
+                                            bItem._isDefault = true;
+                                            try { bItem.helpTip = __bLabel; } catch (eTipBund) {}
+                                            continue;
+                                        }
+
+                                        var p = uv;
+                                        if (uv.indexOf("U::") === 0) p = String(uv.substring(3) || "");
+                                        if (!p || addedSeen[p] || !/\.ffx$/i.test(p)) continue;
+                                        addedSeen[p] = true;
+                                        var label = String(_animLabelGet("U::" + p) || _stPrettyFileLabel(p) || "").replace(/^[\s\u00A0]+/, "");
+                                        var it = animDD.add("item", __animIndent + label);
+                                        it._fullText = __animIndent + label;
+                                        it.__path = p;
+                                        try { it.helpTip = label; } catch (eTipAnim) {}
                                     }
 
                                     animDD.add("separator");
                                     var clearIt = animDD.add("item", ANIM_ACTION_CLEAR);
                                     clearIt.__action = "clear";
-                                    // Default selection: none (do not auto-apply)
                                     try { animDD.selection = 0; } catch (eSel) {}
 }
 
                                     _applyDropdownLabelClamp(animDD);
+
+                                try {
+                                    var _openAnimReorder = function () {
+                                        var bundledPaths = [];
+                                        var addedPaths = [];
+                                        var ANIM_DIV_BUNDLED = _animDividerToken("BUNDLED");
+                                        var ANIM_SECTION_CHOICES = ["BUNDLED"];
+
+                                        try { bundledPaths = _applyPathOrder(_stGetBundledTextAnimatorPaths(), animBundledOrderLoad()); } catch (eAB) { bundledPaths = _stGetBundledTextAnimatorPaths(); }
+                                        try { addedPaths = _animEnsureDefaultDividers(animLoad() || []); } catch (eAU) { addedPaths = _animEnsureDefaultDividers([]); }
+
+                                        if ((!bundledPaths || !bundledPaths.length) && (!addedPaths || !addedPaths.length)) {
+                                            alert("No Text Animators found to reorder.");
+                                            return;
+                                        }
+
+                                        var items = [];
+                                        var bi2, ai2, bp2, ap2;
+                                        var unifiedItems = [];
+                                        var __bundledSeen = {};
+                                        var __addedSeen = {};
+
+                                        try { unifiedItems = animUnifiedOrderLoad(); } catch (eAnimUniLoad) { unifiedItems = []; }
+                                        if (unifiedItems && unifiedItems.length) {
+                                            for (var ui2 = 0; ui2 < unifiedItems.length; ui2++) {
+                                                var uid = String(unifiedItems[ui2] || "");
+                                                if (!uid) continue;
+                                                if (_animIsDividerToken(uid)) {
+                                                    var sectionNameU = _animDividerLabelFromToken(uid);
+                                                    if (sectionNameU !== "BUNDLED") ANIM_SECTION_CHOICES.push(sectionNameU);
+                                                    items.push({ id: uid, label: _animDividerDisplay(sectionNameU), _isDivider: true });
+                                                } else if (uid.indexOf("B::") === 0) {
+                                                    bp2 = String(uid.substring(3) || "");
+                                                    if (!bp2 || __bundledSeen[bp2]) continue;
+                                                    __bundledSeen[bp2] = true;
+                                                    items.push({ id: "B::" + bp2, label: String(_animLabelGet("B::" + bp2) || _stPrettyFileLabel(bp2) || "").replace(/^[\s\u00A0]+/, "") });
+                                                } else {
+                                                    ap2 = (uid.indexOf("U::") === 0) ? String(uid.substring(3) || "") : uid;
+                                                    if (!ap2 || __addedSeen[ap2]) continue;
+                                                    __addedSeen[ap2] = true;
+                                                    items.push({ id: "U::" + ap2, label: String(_animLabelGet("U::" + ap2) || _stPrettyFileLabel(ap2) || "").replace(/^[\s\u00A0]+/, "") });
+                                                }
+                                            }
+                                        } else {
+                                            items.push({ id: ANIM_DIV_BUNDLED, label: _animDividerDisplay("BUNDLED"), _isDivider: true });
+                                            for (bi2 = 0; bi2 < bundledPaths.length; bi2++) {
+                                                bp2 = String(bundledPaths[bi2] || "");
+                                                if (!bp2) continue;
+                                                items.push({ id: "B::" + bp2, label: String(_animLabelGet("B::" + bp2) || _stPrettyFileLabel(bp2) || "").replace(/^[\s\u00A0]+/, "") });
+                                            }
+
+                                            for (ai2 = 0; ai2 < addedPaths.length; ai2++) {
+                                                ap2 = String(addedPaths[ai2] || "");
+                                                if (!ap2) continue;
+                                                if (_animIsDividerToken(ap2)) {
+                                                    var sectionName = _animDividerLabelFromToken(ap2);
+                                                    if (sectionName !== "BUNDLED") ANIM_SECTION_CHOICES.push(sectionName);
+                                                    items.push({ id: ap2, label: _animDividerDisplay(sectionName), _isDivider: true });
+                                                } else {
+                                                    items.push({ id: "U::" + ap2, label: String(_animLabelGet("U::" + ap2) || _stPrettyFileLabel(ap2) || "").replace(/^[\s\u00A0]+/, "") });
+                                                }
+                                            }
+                                        }
+
+                                        var outAnim = _shineShowReorderListDialog(
+                                            "Organize Text Animators",
+                                            items,
+                                            ST.UI.Organize.buildConfig("text_animators", {
+                                                onAddFiles: function(lb, dlg, opts) {
+                                                    var picked = animOpenDialogFromDefaultFolder();
+                                                    if (!picked) return false;
+                                                    if (!(picked instanceof Array)) picked = [picked];
+
+                                                    var insertAt = lb.items.length;
+                                                    try {
+                                                        if (lb.selection) {
+                                                            var selId = String(lb.selection._id || "");
+                                                            for (var si = 0; si < lb.items.length; si++) {
+                                                                if (String(lb.items[si]._id || "") === selId) { insertAt = si + 1; break; }
+                                                            }
+                                                        }
+                                                    } catch (eAnimSelIns) {}
+
+                                                    var addedAny = false;
+                                                    for (var pi = 0; pi < picked.length; pi++) {
+                                                        var f = picked[pi];
+                                                        if (!f || !f.exists) continue;
+                                                        var presetPath = String(f.fsName || "");
+                                                        if (!presetPath || !/\.ffx$/i.test(presetPath)) continue;
+                                                        var itemId = "U::" + presetPath;
+
+                                                        var exists = false;
+                                                        for (var li = 0; li < lb.items.length; li++) {
+                                                            try { if (String(lb.items[li]._id || "") === itemId) { exists = true; break; } } catch (eAnimDup) {}
+                                                        }
+                                                        if (exists) continue;
+
+                                                        var addLabel = String(_stPrettyFileLabel(presetPath) || "").replace(/^[\s ]+/, "");
+                                                        var itAdded = lb.add("item", addLabel);
+                                                        try { itAdded._id = itemId; } catch (eAnimSet0) {}
+                                                        try { itAdded._label = addLabel; } catch (eAnimSet1) {}
+                                                        try { itAdded._isDivider = false; } catch (eAnimSet2) {}
+                                                        try { itAdded.helpTip = addLabel; } catch (eAnimSet3) {}
+                                                        try { itAdded.enabled = true; } catch (eAnimSet4) {}
+                                                        try { itAdded.selected = true; } catch (eAnimSet5) {}
+                                                        try {
+                                                            if (typeof insertAt === "number" && insertAt < (lb.items.length - 1)) {
+                                                                itAdded.index = insertAt;
+                                                                insertAt++;
+                                                            }
+                                                        } catch (eAnimReindex) {}
+                                                        addedAny = true;
+                                                    }
+                                                    return addedAny;
+                                                },
+                                                originalFilenameForId: function(id) {
+                                                    var cleanId = String(id || "");
+                                                    if (cleanId.indexOf("B::") === 0) cleanId = String(cleanId.substring(3) || "");
+                                                    else if (cleanId.indexOf("U::") === 0) cleanId = String(cleanId.substring(3) || "");
+                                                    return _stPrettyFileLabel(cleanId);
+                                                },
+                                                displayLabelForId: function(id, label, obj, showOriginalFilename) {
+                                                    if (obj && obj._isDivider) return label;
+                                                    var cleanId = String(id || "");
+                                                    if (cleanId.indexOf("B::") === 0) cleanId = String(cleanId.substring(3) || "");
+                                                    else if (cleanId.indexOf("U::") === 0) cleanId = String(cleanId.substring(3) || "");
+                                                    if (!showOriginalFilename && label) return String(label);
+                                                    return _stPrettyFileLabel(cleanId);
+                                                },
+                                                sectionChoices: ANIM_SECTION_CHOICES,
+                                                sectionTokenForChoice: function(choice) { return _animDividerToken(choice); },
+                                                newDividerTokenForLabel: function(label) { return _animDividerToken(label); },
+                                                newDividerDisplayForLabel: function(label) { return _animDividerDisplay(label); }
+                                            })
+                                        );
+                                        if (!outAnim || !outAnim.length) return;
+
+                                        var outBundled = [];
+                                        var outAdded = [];
+                                        var outUnified = [];
+                                        var outLabelMap = {};
+                                        for (var oa = 0; oa < outAnim.length; oa++) {
+                                            var objAnim = outAnim[oa];
+                                            var idv = String((objAnim && objAnim.id != null) ? objAnim.id : objAnim || "");
+                                            var lblv = String((objAnim && objAnim.label != null) ? objAnim.label : "");
+                                            if (!idv) continue;
+                                            outUnified.push(idv);
+                                            if (_animIsDividerToken(idv)) {
+                                                if (idv !== ANIM_DIV_BUNDLED) outAdded.push(idv);
+                                                continue;
+                                            }
+                                            if (idv.indexOf("B::") === 0) {
+                                                outBundled.push(idv.substring(3));
+                                            } else if (idv.indexOf("U::") === 0) {
+                                                outAdded.push(idv.substring(3));
+                                            }
+                                            if (lblv) outLabelMap[_animNormalizeEntryId(idv)] = lblv;
+                                        }
+                                        animBundledOrderSave(outBundled);
+                                        animSave(outAdded);
+                                        try { animUnifiedOrderSave(outUnified); } catch (eAnimUniSave) {}
+                                        try { _animLabelMapReplace(outLabelMap); } catch (eAnimLblSave) {}
+                                        animRebuildDropdown();
+                                        try { animDD.__shineProgrammatic = true; } catch (eAP0) {}
+                                        try { animDD.selection = 0; } catch (eAP1) {}
+                                        try { animDD.__shineProgrammatic = false; } catch (eAP2) {}
+                                        try { _applyDropdownLabelClamp(animDD); } catch (eClampAnim) {}
+                                        try { if (typeof relayout === "function") relayout(); } catch (eRelayoutAnim) {}
+                                        try { if (textContent && textContent.layout) { textContent.layout.layout(true); textContent.layout.resize(); } } catch (eTextLayoutAnim) {}
+                                        try { if (pal && pal.layout) { pal.layout.layout(true); pal.layout.resize(); } } catch (ePalLayoutAnim) {}
+                                        try { if (pal && pal.update) pal.update(); } catch (ePalUpdateAnim) {}
+                                        try { _applyDropdownLabelClamp(animDD); } catch (eClampAnim) {}
+                                        try { if (typeof relayout === "function") relayout(); } catch (eRelayoutAnim) {}
+                                        try { if (textContent && textContent.layout) { textContent.layout.layout(true); textContent.layout.resize(); } } catch (eTextLayoutAnim) {}
+                                        try { if (pal && pal.layout) { pal.layout.layout(true); pal.layout.resize(); } } catch (ePalLayoutAnim) {}
+                                        try { if (pal && pal.update) pal.update(); } catch (ePalUpdateAnim) {}
+                                    };
+                                    var _animReorderMouse = function(){
+                                        var ks = null; try { ks = ScriptUI.environment.keyboardState; } catch (eKSA) {}
+                                        if (ks && ks.altKey) { _openAnimReorder(); }
+                                    };
+                                    animStar.addEventListener("mousedown", _animReorderMouse);
+                                    animLbl.addEventListener("mousedown", _animReorderMouse);
+                                } catch (eAnimReorder) {}
 
                                 animAddBtn.onClick = function () {
                                     // TEXT tab (+): NORMAL click ONLY adds .ffx preset(s) to the dropdown list.
@@ -9718,7 +10835,7 @@ try {
                                     // Normalize to array
                                     if (!(picked instanceof Array)) picked = [picked];
 
-                                    // Add all picked presets to the saved list (top of list = first picked)
+                                    // Add all picked presets to the current list (top of list = first picked)
                                     var arr = animLoad();
                                     for (var i = picked.length - 1; i >= 0; i--) {
                                         var f = picked[i];
@@ -9731,47 +10848,56 @@ try {
                                         arr.unshift(p);
                                     }
                                     animSave(arr);
+                                    try { animUnifiedOrderSave([]); } catch (eAnimAddU) {}
                                     animRebuildDropdown();
                                 try { _ddFlashAddedFrames(animDD, 20); } catch(eMsg) {}
                                 };
 
                                                                 animDD.onChange = function () {
-                                    if (animDD.__shineProgrammatic) return;
-                                    if (!animDD.selection) return;
-                                    var sel = animDD.selection;
-                                    // Divider is non-selectable — reset to blank.
-                                    if (sel && sel._isDivider) {
-                                        try {
-                                            animDD.__shineProgrammatic = true;
-                                            animDD.selection = 0;
-                                        } catch (eD) {}
-                                        try { animDD.__shineProgrammatic = false; } catch (eD2) {}
-                                        return;
-                                    }
-                                    // Cmd+click removes the item from the saved list (TEXT tab parity with MAIN).
-                                    if (sel && sel.__path && _isCmdDown() && !sel._isDefault) {
-                                        try {
-                                            animRemovePath(sel.__path);
+                                    try {
+                                        if (animDD.__shineProgrammatic) {
+                                            animDD.__shineProgrammatic = false;
+                                            return;
+                                        }
+                                        if (!animDD.selection) return;
+                                        var sel = animDD.selection;
+
+                                        // Divider / blank rows are non-actions.
+                                        if (sel && (sel._isDivider || sel._isBlank)) {
+                                            ST.UI.Dropdown.reset(animDD, 1);
+                                            return;
+                                        }
+
+                                        // Cmd+click removes the item from the current list (TEXT tab parity with MAIN).
+                                        if (sel && sel.__path && _isCmdDown() && !sel._isDefault) {
+                                            try {
+                                                animRemovePath(sel.__path);
+                                                animRebuildDropdown();
+                                                try { if (typeof relayout === "function") relayout(); } catch (eRL) {}
+                                            } catch (eR) {}
+                                            ST.UI.Dropdown.reset(animDD, 1);
+                                            return;
+                                        }
+                                        if (sel.__action === "clear") {
+                                            animClear();
                                             animRebuildDropdown();
-                                            try { if (typeof relayout === "function") relayout(); } catch (eRL) {}
-                                        } catch (eR) {}
-                                        return;
+                                            ST.UI.Dropdown.reset(animDD, 1);
+                                            return;
+                                        }
+
+                                        var presetPath = String(sel.__path || "");
+                                        if (!presetPath) {
+                                            ST.UI.Dropdown.reset(animDD, 1);
+                                            return;
+                                        }
+
+                                        try { $.global._shineToolsApplyFFXPreset(presetPath); } catch (eApply) {
+                                            try { alert("Animation preset apply failed:\n" + eApply.toString()); } catch (eApply2) {}
+                                        }
+                                        ST.UI.Dropdown.reset(animDD, 1);
+                                    } catch (eAnimSel) {
+                                        try { alert("Animation dropdown error:\n" + eAnimSel.toString()); } catch (eAnimSel2) {}
                                     }
-                                    if (sel && sel._isBlank) return;
-                                    if (sel.__action === "clear") {
-                                        animClear();
-                                        animRebuildDropdown();
-                                        return;
-                                    }
-
-                                    var presetPath = sel.__path;
-                                    if (!presetPath) return;
-
-                                    // Show the chosen item in the dropdown box briefly (like MAIN), then revert to blank.
-                                    _ddFlashThenReset(animDD, 1);
-
-                                    // Defer preset application slightly so ScriptUI can repaint the dropdown text first.
-                                    _ddDeferApplyFFX(animDD, presetPath, 50);
                                 };
 
                         animRebuildDropdown();
@@ -9794,8 +10920,8 @@ try {
                         textAccHost.spacing       = 10;
 
                         // Build a TEXT accordion (now supports Auto Collapse, like MAIN)
-                        var textAcc = createAccordion(textAccHost, null, function(){ requestRelayoutSoon(textContent, 40); }, "AccordionOrder_TEXT");
-
+                        textAcc = createAccordion(textAccHost, null, function(){ requestRelayoutSoon(textContent, 40); }, "TEXT_UI");
+                        try { pal.__stTextAccordion = textAcc; } catch (eTextAcc0) {}
 
                 textAcc.defineSection("BREAK APART TEXT", function(body){
                     addGrid2(body, [
@@ -9804,7 +10930,6 @@ try {
                         { text: "BY LINE",      onClick: function(){ breakApartTextRun(SPLIT_MODE.LINES); } }
                     ]);
                 });
-
 
 textAcc.defineSection("NUMBER COUNTERS", function(body){
     // Built-in AE counter presets shipped with ShineTools (relative to this script)
@@ -9828,7 +10953,6 @@ textAcc.defineSection("NUMBER COUNTERS", function(body){
                     candidates.push(Folder(Folder.startup.fsName + "/../Scripts/ScriptUI Panels/ShineTools"));
                 }
             } catch (e2) {}
-
 
             // 3) macOS Applications fallback search (covers odd Folder.startup values)
             try {
@@ -9864,70 +10988,289 @@ textAcc.defineSection("NUMBER COUNTERS", function(body){
 
     // Resolve a preset File from a relative path inside the ShineTools folder
 
-
 // =============================================================
 // Expression Engine Guard (Modern JavaScript required for counters)
+// Non-dirty detection only: NEVER creates temp comps/layers/effects.
+// This avoids marking the project as modified, which can trigger Save dialogs
+// on app quit or project switch.
 // =============================================================
 var _stModernExprCache = null;
 
+function _stParseModernExpressionEngineValue(raw) {
+    try {
+        if (raw === null || typeof raw === "undefined") return null;
+
+        var s = String(raw).toLowerCase();
+        s = s.replace(/^\s+|\s+$/g, "");
+        if (!s) return null;
+
+        if (s.indexOf("javascript") !== -1 || s.indexOf("modern") !== -1) return true;
+        if (s.indexOf("extendscript") !== -1 || s.indexOf("legacy") !== -1) return false;
+
+        // Some hosts may return a simple 0/1-like value; keep this conservative.
+        if (s === "1" || s === "true") return true;
+        if (s === "0" || s === "false") return false;
+    } catch (e) {}
+    return null;
+}
+
+function _stReadExpressionEnginePrefSafe() {
+    var sections = [
+        "Main Pref Section",
+        "Scripting & Expressions",
+        "Scripting and Expressions",
+        "Expressions",
+        "General Section"
+    ];
+    var keys = [
+        "Pref_EXPRESSION_ENGINE",
+        "Pref_ExpressionEngine",
+        "Expression Engine",
+        "expressionEngine",
+        "Pref_SCRIPTING_EXPRESSION_ENGINE"
+    ];
+
+    function _tryRead(methodName, section, key) {
+        try {
+            if (!app || !app.preferences || !app.preferences[methodName]) return null;
+            return app.preferences[methodName](section, key);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    for (var si = 0; si < sections.length; si++) {
+        for (var ki = 0; ki < keys.length; ki++) {
+            var section = sections[si];
+            var key = keys[ki];
+
+            var parsed = _stParseModernExpressionEngineValue(_tryRead("getPrefAsString", section, key));
+            if (parsed !== null) return parsed;
+
+            parsed = _stParseModernExpressionEngineValue(_tryRead("getPrefAsLong", section, key));
+            if (parsed !== null) return parsed;
+
+            parsed = _stParseModernExpressionEngineValue(_tryRead("getPrefAsBool", section, key));
+            if (parsed !== null) return parsed;
+        }
+    }
+    return null;
+}
+
+function _stGetModernExpressionEngineStateNonDirty() {
+    try {
+        if (app && app.project && typeof app.project.expressionEngine !== "undefined") {
+            var parsedProject = _stParseModernExpressionEngineValue(app.project.expressionEngine);
+            if (parsedProject !== null) return parsedProject;
+        }
+    } catch (e0) {}
+
+    try {
+        var parsedPref = _stReadExpressionEnginePrefSafe();
+        if (parsedPref !== null) return parsedPref;
+    } catch (e1) {}
+
+    return null;
+}
+
 function _stIsModernExpressionEngine(comp) {
-    // Cache per-session to avoid repeated probing once we have a definitive result.
+    // Cache per-session to avoid repeated lookups once we have a definitive result.
     if (_stModernExprCache !== null) return _stModernExprCache;
 
     try {
-        // If we can't probe (no active comp), don't block — but also DON'T cache,
-        // otherwise we may permanently "true" the cache before a real probe.
-        if (!comp || !(comp instanceof CompItem)) {
-            return true;
+        var detected = _stGetModernExpressionEngineStateNonDirty();
+        if (detected !== null) {
+            _stModernExprCache = detected;
+            return detected;
         }
 
-        app.beginUndoGroup("ShineTools Expression Engine Probe");
-
-        var testLayer = comp.layers.addNull();
-        testLayer.enabled = false;
-
-        var fxParade = testLayer.property("ADBE Effect Parade");
-        var sliderFx = fxParade.addProperty("ADBE Slider Control");
-        var sliderProp = sliderFx.property(1); // Slider
-
-        // Modern-JS-only syntax. Legacy engine should throw an expression error.
-        sliderProp.expression = "let x = 1; x;";
-
-        // Force evaluation so expressionError is populated.
-        try { sliderProp.value; } catch (eEval1) {}
-        try { sliderProp.valueAtTime(comp.time, false); } catch (eEval2) {}
-
-        var err = "";
-        try { err = sliderProp.expressionError; } catch (eErr) { err = ""; }
-
-        try { testLayer.remove(); } catch (eRem) {}
-        app.endUndoGroup();
-
-        // AE usually returns "" when there is no error; otherwise it returns a message.
-        _stModernExprCache = (!err || err === "");
-        return _stModernExprCache;
-
+        // Unknown: fail open and DO NOT cache. This avoids false warnings while also
+        // guaranteeing we never dirty the project just to check the engine.
+        return true;
     } catch (e) {
-        try { app.endUndoGroup(); } catch (e2) {}
-        // Fail-open to avoid blocking users if probing fails for some unexpected reason.
         _stModernExprCache = null;
         return true;
     }
 }
 
+function _stShowModernExpressionWarningDialog() {
+    var dlg = null;
+    try {
+        dlg = new Window("dialog", "ShineTools Warning");
+        dlg.orientation = "column";
+        dlg.alignChildren = ["fill", "top"];
+        dlg.spacing = 0;
+        dlg.margins = 16;
+        dlg.preferredSize.width = 500;
+
+        var shineYellow = [1.0, 0.8, 0.0, 1.0];
+        var sink = null;
+        try { sink = _stFrameOffset_addFocusSink(dlg); } catch (eSink) { sink = null; }
+
+        var headerGroup = dlg.add("group");
+        headerGroup.orientation = "column";
+        headerGroup.alignChildren = ["fill", "top"];
+        headerGroup.spacing = 8;
+        headerGroup.margins = [0, 0, 0, 0];
+
+        var titleRow = headerGroup.add("group");
+        titleRow.orientation = "row";
+        titleRow.alignChildren = ["left", "center"];
+        titleRow.spacing = 8;
+        titleRow.margins = [0, 0, 0, 0];
+        titleRow.alignment = ["fill", "top"];
+
+        var warnIcon = titleRow.add("group");
+        var iconW = 22, iconH = 20;
+        warnIcon.preferredSize = [iconW, iconH];
+        warnIcon.minimumSize   = [iconW, iconH];
+        warnIcon.maximumSize   = [iconW, iconH];
+        try { warnIcon.alignment = ["left", "center"]; } catch (eAI2) {}
+        warnIcon.onDraw = function () {
+            try {
+                var gr = this.graphics;
+                var w = this.size[0], h = this.size[1];
+                var pad = 1;
+                var topX = Math.round(w * 0.5);
+                var topY = pad;
+                var leftX = pad;
+                var leftY = h - pad;
+                var rightX = w - pad;
+                var rightY = h - pad;
+                var fillBrush = gr.newBrush(gr.BrushType.SOLID_COLOR, shineYellow);
+                gr.newPath();
+                gr.moveTo(topX, topY);
+                gr.lineTo(rightX, rightY);
+                gr.lineTo(leftX, leftY);
+                gr.closePath();
+                gr.fillPath(fillBrush);
+            } catch (eDraw) {}
+        };
+
+        var titleTxt = titleRow.add("statictext", undefined, "Modern JavaScript Expressions Required");
+        titleTxt.alignment = ["fill", "center"];
+        titleTxt.justify = "left";
+        try { titleTxt.preferredSize.width = 430; } catch (eTW) {}
+        try {
+            var tf = titleTxt.graphics.font;
+            titleTxt.graphics.font = ScriptUI.newFont(tf.name, "Bold", tf.size + 2);
+        } catch (eFont1) {}
+        try {
+            titleTxt.graphics.foregroundColor = titleTxt.graphics.newPen(titleTxt.graphics.PenType.SOLID_COLOR, shineYellow, 1);
+        } catch (eTitleColor) {}
+
+        var dividerWrap = headerGroup.add("group");
+        dividerWrap.orientation = "column";
+        dividerWrap.alignChildren = ["fill", "top"];
+        dividerWrap.margins = [0, 2, 0, 0];
+        var divider = dividerWrap.add("panel");
+        divider.alignment = ["fill", "top"];
+        divider.minimumSize.height = 2;
+        divider.maximumSize.height = 2;
+        try {
+            divider.graphics.backgroundColor = divider.graphics.newBrush(divider.graphics.BrushType.SOLID_COLOR, shineYellow);
+        } catch (eDiv) {}
+
+        var bodyGroup = dlg.add("group");
+        bodyGroup.orientation = "column";
+        bodyGroup.alignChildren = ["fill", "top"];
+        bodyGroup.spacing = 10;
+        bodyGroup.margins = [0, 12, 0, 0];
+
+        var introTxt = bodyGroup.add(
+            "statictext",
+            undefined,
+            "These number counters require the Modern JavaScript Expression Engine.",
+            { multiline: true }
+        );
+        introTxt.alignment = ["fill", "top"];
+        try { introTxt.preferredSize.width = 448; } catch (eIW) {}
+        try {
+            var ifn = introTxt.graphics.font;
+            introTxt.graphics.font = ScriptUI.newFont(ifn.name, ifn.style, ifn.size + 2);
+        } catch (eIntroFont) {}
+
+        var stepsTxt = bodyGroup.add(
+            "statictext",
+            undefined,
+            "Enable it here:\n\n" +
+            "• After Effects → Settings (or Preferences) → Scripting & Expressions\n" +
+            "• Expression Engine → JavaScript\n\n" +
+            "You must restart After Effects before using this counter.",
+            { multiline: true }
+        );
+        stepsTxt.alignment = ["fill", "top"];
+        try { stepsTxt.preferredSize.width = 448; } catch (eSW) {}
+        try {
+            var sfn = stepsTxt.graphics.font;
+            stepsTxt.graphics.font = ScriptUI.newFont(sfn.name, sfn.style, sfn.size + 2);
+        } catch (eStepsFont) {}
+
+        var buttonWrap = dlg.add("group");
+        buttonWrap.orientation = "stack";
+        buttonWrap.alignment = ["fill", "top"];
+        buttonWrap.margins = [0, 16, 0, 0];
+        try { buttonWrap.preferredSize.height = 30; } catch (eBWH) {}
+
+        var sinkCell = buttonWrap.add("group");
+        sinkCell.orientation = "row";
+        sinkCell.alignment = ["fill", "fill"];
+        sinkCell.margins = [0, 0, 0, 0];
+        try {
+            sinkCell.add("edittext", [0, 0, 1, 1], "", { readonly:true, borderless:true });
+        } catch (eFS) {}
+
+        var buttonRow = buttonWrap.add("group");
+        buttonRow.orientation = "row";
+        buttonRow.alignChildren = ["center", "center"];
+        buttonRow.alignment = ["center", "center"];
+        buttonRow.spacing = 0;
+        buttonRow.margins = [0, 0, 0, 0];
+
+        var okBtn = buttonRow.add("button", undefined, "OK", { name: "ok" });
+        try { okBtn.preferredSize = [112, 28]; } catch (eBtn) {}
+        try { if (typeof defocusButtonBestEffort === "function") defocusButtonBestEffort(okBtn); } catch (eDF1) {}
+        try {
+            if (typeof _stFrameOffset_defocus === "function") {
+                okBtn.addEventListener("mousedown", function(){ try { _stFrameOffset_defocus(okBtn, sink); } catch (_e1) {} });
+                okBtn.addEventListener("mouseup", function(){ try { _stFrameOffset_defocus(okBtn, sink); } catch (_e2) {} });
+            }
+        } catch (eDF2) {}
+
+        okBtn.onClick = function () {
+            try { if (typeof _stFrameOffset_defocus === "function") _stFrameOffset_defocus(okBtn, sink); } catch (e0) {}
+            try { okBtn.active = false; } catch (e1) {}
+            try { if (sink) sink.active = true; } catch (e2) {}
+            try { dlg.close(1); } catch (e3) { try { dlg.close(); } catch (e4) {} }
+        };
+
+        dlg.onShow = function () {
+            try { if (sink) sink.active = true; } catch (e5) {}
+            try { okBtn.active = false; } catch (e6) {}
+            try { if (dlg && dlg.update) dlg.update(); } catch (e7) {}
+        };
+
+        try { dlg.layout.layout(true); } catch (eLayout) {}
+        try { dlg.center(); } catch (eCenter) {}
+        dlg.show();
+    } catch (e) {
+        try {
+            alert(
+                "These number counters require the Modern JavaScript Expression Engine.\n\n" +
+                "Enable it here:\n" +
+                "After Effects → Settings (or Preferences) → Scripting & Expressions → Expression Engine → JavaScript\n\n" +
+                "You must restart After Effects before using this counter."
+            );
+        } catch (e2) {}
+    }
+}
 
 function _stEnsureModernExpressionsForCounters(comp) {
     if (_stIsModernExpressionEngine(comp)) return true;
 
-    alert(
-        "These number counters require the Modern JavaScript Expression Engine.\n\n" +
-        "Enable it here:\n" +
-        "After Effects → Settings (or Preferences) → Scripting & Expressions → Expression Engine → JavaScript\n\n" +
-        "**YOU MUST RESTART AFTER EFFECTS** before using this counter."
-    );
+    _stShowModernExpressionWarningDialog();
     return false;
 }
-
 
 // ============================================================
 // OFFSET LAYERS (Utilities)
@@ -9936,11 +11279,9 @@ function _stEnsureModernExpressionsForCounters(comp) {
 // ============================================================
 var ST_OFFSETLAYERS_EXP_TOTAL_SPREAD_FRAMES = 24; // total spread for Exponential mode
 
-
 function _stApplyCounterPreset(fileName, newLayerName) {
     // Guard: counters rely on Modern JavaScript expressions
     if (!_stEnsureModernExpressionsForCounters(app.project && app.project.activeItem)) return;
-
 
         try {
             var root = _stGetSharedRootFolder();
@@ -9987,7 +11328,6 @@ function _stApplyCounterPreset(fileName, newLayerName) {
             alert("Could not apply counter preset.\n\n" + e.toString());
         }
     }
-
 
 addGrid2(body, [
         {
@@ -10045,7 +11385,6 @@ addGrid2(body, [
 
                 });
 
-
                 // TEXT TAB: Fonts
                 textAcc.defineSection("FONTS", function(body){
                     // 2-column grid (placeholder auto-added if odd count)
@@ -10057,15 +11396,16 @@ addGrid2(body, [
                     ]);
                 });
 
-
-// Build accordion in persisted order
+// Build accordion in current live session order
                 textAcc.build();
+                // TEXT tab footer removed: an older footer instance was visually overlapping
+                // the bottom of the section area in the docked TEXT tab.
             } catch (eBT) {
                 alert("TEXT tab build error:\n\n" + eBT.toString());
             }
 
-
         }
+var textAcc = null;
 function _buildTextTabIfNeeded() {
             if (__textTabBuilt) return;
             __textTabBuilt = true;
@@ -10084,12 +11424,100 @@ function _buildTextTabIfNeeded() {
                 try { tabText.remove(__textTabPlaceholder); } catch (eRem) {}
             } catch (e0) {}
 
-
             _buildTextTabUI();
-
 
             // One scoped relayout (fast) to settle new controls
             try { relayoutScoped(tabText); } catch (eR) {}
+        }
+
+        function _stRefreshWorkspaceManagerSurface() {
+            try {
+                try { if (pal.__stWorkspaceManagerRoot && pal.__stWorkspaceManagerRoot.layout) pal.__stWorkspaceManagerRoot.layout.layout(true); } catch (e0) {}
+                try { if (tabWorkspaceManager && tabWorkspaceManager.layout) tabWorkspaceManager.layout.layout(true); } catch (e1) {}
+                try { if (pal && pal.update) pal.update(); } catch (e3) {}
+            } catch (e) {}
+        }
+
+        function _stCommitWorkspaceSelectionUI(name, options) {
+            try {
+                var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
+                if (!wanted) return;
+
+                try { pal.__stCurrentWorkspaceName = wanted; } catch (e0) {}
+                try { pal.__stPendingWorkspaceName = wanted; } catch (e1) {}
+                try { pal.__stWorkspaceStatusName = wanted; } catch (e2) {}
+
+                try { _syncWorkspaceDropdownToActiveName(); } catch (e3) {}
+                try { _updateWorkspaceStatusLabel({ suppressLayout: true }); } catch (e4) {}
+
+                // One shared refresh path only.
+                try { _stRefreshWorkspaceManagerSurface(); } catch (e5) {}
+                try { if (!(options && options.skipUpdate) && pal && pal.update) pal.update(); } catch (e6) {}
+            } catch (e) {}
+        }
+
+        function _stSetActiveWorkspaceNameState(name, options) {
+            try {
+                var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
+                try { pal.__stCurrentWorkspaceName = wanted; } catch (e0) {}
+                try { pal.__stPendingWorkspaceName = wanted; } catch (e1) {}
+                try { pal.__stStartupAppliedWorkspaceName = wanted; } catch (e2) {}
+                try { pal.__stWorkspaceStatusName = wanted; } catch (e3) {}
+                try {
+                    if (!(options && options.skipPersist)) _stWriteLastUsedWorkspaceName(wanted);
+                } catch (e4) {}
+            } catch (e) {}
+        }
+
+        function _stApplyWorkspaceStatusText(name) {
+            try {
+                var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
+                var statusText = wanted ? ("Workspace: " + wanted) : "Workspace:";
+                try { if (pal.__stWorkspaceStatusNameLabel_MAIN) pal.__stWorkspaceStatusNameLabel_MAIN.text = statusText; } catch (e0) {}
+                try { if (pal.__stWorkspaceStatusNameLabel_TEXT) pal.__stWorkspaceStatusNameLabel_TEXT.text = statusText; } catch (e1) {}
+                try { if (pal.__stWorkspaceStatusNameLabel) pal.__stWorkspaceStatusNameLabel.text = statusText; } catch (e2) {}
+                return statusText;
+            } catch (e) {}
+            return "Workspace:";
+        }
+
+        function _stPublishWorkspaceApi() {
+            try {
+                ST.Workspaces = ST.Workspaces || {};
+                ST.Workspaces.folder = _stWorkspaceFolder;
+                ST.Workspaces.fileByName = _stWorkspaceFileByName;
+                ST.Workspaces.list = _stListWorkspaceNames;
+                ST.Workspaces.capture = _stCaptureWorkspaceState;
+                ST.Workspaces.apply = _stApplyWorkspaceState;
+                ST.Workspaces.read = _stReadWorkspaceByName;
+                ST.Workspaces.load = _stLoadWorkspaceByName;
+                ST.Workspaces.save = _stSaveWorkspaceByName;
+                ST.Workspaces.remove = _stDeleteWorkspaceByName;
+                ST.Workspaces.importJson = _stImportWorkspaceFromJsonFile;
+                ST.Workspaces.revealInFinder = _stRevealWorkspaceInFinder;
+                ST.Workspaces.syncStatus = _updateWorkspaceStatusLabel;
+                ST.Workspaces.setActiveNameState = _stSetActiveWorkspaceNameState;
+                ST.Workspaces.applyStatusText = _stApplyWorkspaceStatusText;
+            } catch (e) {}
+        }
+
+        function _stRefreshWorkspaceApplySurface() {
+            try {
+                try { if (tabMain && tabMain.layout) tabMain.layout.layout(true); } catch (e0) {}
+                try { if (tabText && tabText.layout) tabText.layout.layout(true); } catch (e1) {}
+                try { if (pal && pal.update) pal.update(); } catch (e3) {}
+            } catch (e) {}
+        }
+
+        function _stSettleWorkspaceManagerInitialWidths() {
+            try {
+                // Only touch the visible workspace-manager surface.
+                try { if (pal.__stWorkspaceManagerRoot && pal.__stWorkspaceManagerRoot.layout) pal.__stWorkspaceManagerRoot.layout.layout(true); } catch (e0) {}
+                try { if (tabWorkspaceManager && tabWorkspaceManager.layout) tabWorkspaceManager.layout.layout(true); } catch (e1) {}
+                try { if (tabWorkspaceManager && tabWorkspaceManager.layout) tabWorkspaceManager.layout.resize(); } catch (e2) {}
+                try { if (pal.__stWorkspaceManagerRoot && pal.__stWorkspaceManagerRoot.layout) pal.__stWorkspaceManagerRoot.layout.layout(true); } catch (e3) {}
+                try { if (pal && pal.update) pal.update(); } catch (e4) {}
+            } catch (e) {}
         }
 
         function _selectTopTab(which) {
@@ -10099,11 +11527,14 @@ function _buildTextTabIfNeeded() {
             var isUpdates = (which === "UPDATES");
             var isRequests = (which === "REQUESTS");
             var isHelp = (which === "HELP");
+            var isWorkspaceManager = (which === "WORKSPACE_MANAGER");
             tabMain.visible = isMain;
             tabText.visible = isText;
             tabUpdates.visible = isUpdates;
             tabRequests.visible = isRequests;
             tabHelp.visible = isHelp;
+            tabWorkspaceManager.visible = isWorkspaceManager;
+            try { topMetaRow.visible = false; } catch (eWSVis) {}
             // Refresh Previous Computer label when Help tab becomes visible
             if (isHelp) {
                 try { if ($.global.__ST_PrevComputerUI && $.global.__ST_PrevComputerUI.refresh) { $.global.__ST_PrevComputerUI.refresh(); } } catch (ePH) {}
@@ -10119,19 +11550,51 @@ function _buildTextTabIfNeeded() {
 // Force underline redraw without full relayout
             try { tabUnderlineLayer.visible = false; tabUnderlineLayer.visible = true; } catch (eU) {}
 
+            // Keep logo headers centered during tab changes too,
+            // not just after deferred resize settles.
+            try { if ($.global.__ShineToolsCenterLogoHeaders__) $.global.__ShineToolsCenterLogoHeaders__(); } catch (eLogoTab0) {}
+
             // Ultra-light tab switching:
             // Avoid full relayout on every switch (it can be very slow on large panels).
-            // Do ONE settling layout the first time only; after that, just update the paint.
+            // Do ONE settling layout the first time only; after that, do a lightweight
+            // immediate resize pass so centered headers do not snap left while the tab changes.
+            if (isWorkspaceManager) {
+                try { _stRefreshWorkspaceManagerSurface(); } catch (e2w0) {}
+                return;
+            }
+
             if (!pal.__didInitialTabLayout) {
                 pal.__didInitialTabLayout = true;
                 try { pal.layout.layout(true); } catch (e1) {}
+                try { if ($.global.__ShineToolsCenterLogoHeaders__) $.global.__ShineToolsCenterLogoHeaders__(); } catch (eLogoTab1) {}
+            } else {
+                try { pal.layout.resize(); } catch (e1b) {}
+                try { if ($.global.__ShineToolsCenterLogoHeaders__) $.global.__ShineToolsCenterLogoHeaders__(); } catch (eLogoTab1b) {}
             }
             try { pal.update(); } catch (e2) {}
+            try { if ($.global.__ShineToolsCenterLogoHeaders__) $.global.__ShineToolsCenterLogoHeaders__(); } catch (eLogoTab2) {}
+            try { if (pal && pal.update) pal.update(); } catch (e2b) {}
+            try { _stKickFooterStableLayout(); } catch (e3) {}
         }
 
         try {
-            tabLblMain.addEventListener("mousedown", function(){ _selectTopTab("MAIN"); });
-            tabLblText.addEventListener("mousedown", function(){ _selectTopTab("TEXT"); });
+            tabLblMain.addEventListener("mousedown", function(){
+                var ks = null; try { ks = ScriptUI.environment.keyboardState; } catch (eKS0) {}
+                if (ks && ks.altKey) {
+                    try { if (mainAcc && mainAcc.showReorderSectionsDialog) mainAcc.showReorderSectionsDialog("Reorder Main Sections"); } catch (eRM) { alert("Reorder failed: " + String(eRM)); }
+                    return;
+                }
+                _selectTopTab("MAIN");
+            });
+            tabLblText.addEventListener("mousedown", function(){
+                var ks = null; try { ks = ScriptUI.environment.keyboardState; } catch (eKS1) {}
+                if (ks && ks.altKey) {
+                    try { _buildTextTabIfNeeded(); } catch (eBT2) {}
+                    try { if (textAcc && textAcc.showReorderSectionsDialog) textAcc.showReorderSectionsDialog("Reorder Text Sections"); } catch (eRT) { alert("Reorder failed: " + String(eRT)); }
+                    return;
+                }
+                _selectTopTab("TEXT");
+            });
             tabLblUpdates.addEventListener("mousedown", function(){ _selectTopTab("UPDATES"); });
             tabLblRequests.addEventListener("mousedown", function(){ _selectTopTab("REQUESTS"); });
             tabLblHelp.addEventListener("mousedown", function(){ _selectTopTab("HELP"); });
@@ -10146,7 +11609,6 @@ function _buildTextTabIfNeeded() {
         tabText.alignChildren = ["fill", "fill"];
         tabText.margins       = 0;
         tabText.spacing       = 0;
-
 
         tabUpdates.orientation   = "column";
         tabUpdates.alignChildren = ["fill", "top"];
@@ -10163,8 +11625,899 @@ function _buildTextTabIfNeeded() {
         tabHelp.margins       = 12;
         tabHelp.spacing       = 4;
 
+        tabWorkspaceManager.orientation   = "column";
+        tabWorkspaceManager.alignChildren = ["fill", "fill"];
+        tabWorkspaceManager.margins       = 0;
+        tabWorkspaceManager.spacing       = 0;
 
+        try { pal.__stWorkspaceReturnTab = "MAIN"; } catch (eWRT0) {}
 
+        function _stWorkspaceFolder() {
+            try {
+                var root = new Folder("~/Documents/ShineTools");
+                if (!root.exists) try { root.create(); } catch (e0) {}
+                var ws = new Folder("~/Documents/ShineTools/Workspaces");
+                if (!ws.exists) try { ws.create(); } catch (e1) {}
+                return ws;
+            } catch (e) {}
+            return new Folder("~/Documents/ShineTools/Workspaces");
+        }
+
+        function _stWorkspaceFileByName(name) {
+            try {
+                name = String(name || "").replace(/^\s+|\s+$/g, "");
+                if (!name) return null;
+                name = name.replace(/[\\\/:*?"<>|]/g, "_");
+                return new File(_stWorkspaceFolder().fsName + "/" + name + ".json");
+            } catch (e) {}
+            return null;
+        }
+
+        function _stDefaultWorkspaceName() {
+            return "Default";
+        }
+
+        function _stIsProtectedWorkspaceName(name) {
+            try {
+                return String(name || "").replace(/^\s+|\s+$/g, "") === _stDefaultWorkspaceName();
+            } catch (e) {}
+            return false;
+        }
+
+        function _stRevealWorkspaceInFinder(name) {
+            try {
+                var target = null;
+                try {
+                    var cleanName = String(name || "").replace(/^\s+|\s+$/g, "");
+                    if (cleanName) {
+                        var workspaceFile = _stWorkspaceFileByName(cleanName);
+                        if (workspaceFile && workspaceFile.exists) target = workspaceFile;
+                    }
+                } catch (e0) {}
+
+                if (!target) {
+                    try { target = _stWorkspaceFolder(); } catch (e1) { target = null; }
+                }
+                if (!target) return false;
+
+                var osStr = "";
+                try { osStr = String($.os || "").toLowerCase(); } catch (e2) { osStr = ""; }
+
+                if (osStr.indexOf("mac") !== -1) {
+                    try {
+                        if (target instanceof File) {
+                            system.callSystem('open -R "' + String(target.fsName || "").replace(/"/g, '\\"') + '"');
+                        } else {
+                            system.callSystem('open "' + String(target.fsName || "").replace(/"/g, '\\"') + '"');
+                        }
+                        return true;
+                    } catch (e3) {}
+                }
+
+                try { target.execute(); return true; } catch (e4) {}
+            } catch (e) {
+                try { alert("Could not reveal workspace in Finder:\n" + String(e)); } catch (eAlert) {}
+            }
+            return false;
+        }
+
+        function _stCloneSimple(v) {
+            try { return _stJsonParse(_stJsonStringify(v)); } catch (e) {}
+            return v;
+        }
+
+        function _stListWorkspaceNames() {
+            var out = [];
+            try {
+                var dir = _stWorkspaceFolder();
+                if (!dir || !dir.exists) return out;
+                var files = dir.getFiles("*.json");
+                for (var i = 0; i < files.length; i++) {
+                    try {
+                        var f = files[i];
+                        if (!(f instanceof File)) continue;
+                        var n = String(f.name || "");
+                        n = n.replace(/\.json$/i, "");
+                        if (n) out.push(n);
+                    } catch (e1) {}
+                }
+                out.sort();
+            } catch (e) {}
+            return out;
+        }
+
+        function _stCaptureWorkspaceState() {
+            var data = {
+                format: "ShineToolsWorkspace",
+                version: 1,
+                savedAt: (new Date()).toString(),
+                mainSectionOrder: [],
+                textSectionOrder: [],
+                mainCollapsed: {},
+                textCollapsed: {},
+                buttonOrderMain: {},
+                buttonOrderText: {},
+                favoritesMain: [],
+                favoritesText: [],
+                textBundledOrder: [],
+                textUnifiedOrder: [],
+                textLabelMap: {}
+            };
+            try { if (pal.__stMainAccordion && pal.__stMainAccordion.getOrder) data.mainSectionOrder = pal.__stMainAccordion.getOrder(); } catch (e0) {}
+            try { if (pal.__stTextAccordion && pal.__stTextAccordion.getOrder) data.textSectionOrder = pal.__stTextAccordion.getOrder(); } catch (e1) {}
+            try { if (pal.__stMainAccordion && pal.__stMainAccordion.getCollapsedMap) data.mainCollapsed = pal.__stMainAccordion.getCollapsedMap(); } catch (e2) {}
+            try { if (pal.__stTextAccordion && pal.__stTextAccordion.getCollapsedMap) data.textCollapsed = pal.__stTextAccordion.getCollapsedMap(); } catch (e3) {}
+            try {
+                if (__ST_SECTION_BUTTONS && __ST_SECTION_BUTTONS["MAIN_UI"]) data.buttonOrderMain = _stCloneSimple(__ST_SECTION_BUTTONS["MAIN_UI"]) || {};
+                if (__ST_SECTION_BUTTONS && __ST_SECTION_BUTTONS["TEXT_UI"]) data.buttonOrderText = _stCloneSimple(__ST_SECTION_BUTTONS["TEXT_UI"]) || {};
+            } catch (e4) {}
+            try { data.favoritesMain = favLoad(); } catch (e5) {}
+            try { data.favoritesText = animLoad(); } catch (e6) {}
+            try { data.textBundledOrder = animBundledOrderLoad(); } catch (e7) {}
+            try { data.textUnifiedOrder = animUnifiedOrderLoad(); } catch (e8) {}
+            try { data.textLabelMap = _animLabelMapLoad(); } catch (e9) {}
+            return data;
+        }
+
+        function _stApplyWorkspaceState(data) {
+            try { if (!data) return false; } catch (e0) {}
+            try {
+                __ST_SECTION_BUTTONS = __ST_SECTION_BUTTONS || {};
+                __ST_SECTION_BUTTONS["MAIN_UI"] = _stCloneSimple(data.buttonOrderMain || {}) || {};
+                __ST_SECTION_BUTTONS["TEXT_UI"] = _stCloneSimple(data.buttonOrderText || {}) || {};
+            } catch (e1) {}
+
+            try { favSave((data.favoritesMain && data.favoritesMain.slice) ? data.favoritesMain.slice(0) : []); } catch (e2) {}
+            try { animSave((data.favoritesText && data.favoritesText.slice) ? data.favoritesText.slice(0) : []); } catch (e3) {}
+            try { animBundledOrderSave((data.textBundledOrder && data.textBundledOrder.slice) ? data.textBundledOrder.slice(0) : []); } catch (e4) {}
+            try { animUnifiedOrderSave((data.textUnifiedOrder && data.textUnifiedOrder.slice) ? data.textUnifiedOrder.slice(0) : []); } catch (e4u) {}
+            try { _animLabelMapReplace(data.textLabelMap || {}); } catch (e4m) {}
+            try { if (pal.__stFavRebuildDropdown) pal.__stFavRebuildDropdown(); } catch (e4a) {}
+            try { if (pal.__stAnimRebuildDropdown) pal.__stAnimRebuildDropdown(); } catch (e4b) {}
+
+            try {
+                if (pal.__stMainAccordion) {
+                    if (data.mainSectionOrder && data.mainSectionOrder.slice) pal.__stMainAccordion.setOrder(data.mainSectionOrder.slice(0));
+                    if (data.mainCollapsed) pal.__stMainAccordion.setCollapsedMap(data.mainCollapsed);
+                }
+            } catch (e5) {}
+            try {
+                if (pal.__stTextAccordion) {
+                    if (data.textSectionOrder && data.textSectionOrder.slice) pal.__stTextAccordion.setOrder(data.textSectionOrder.slice(0));
+                    if (data.textCollapsed) pal.__stTextAccordion.setCollapsedMap(data.textCollapsed);
+                }
+            } catch (e6) {}
+
+            try { _stRefreshWorkspaceApplySurface(); } catch (e7) {}
+            try { if (pal && pal.update) pal.update(); } catch (e9) {}
+            return true;
+        }
+
+        function _stEnsureDefaultWorkspaceExists(seedPayload) {
+            try {
+                var name = _stDefaultWorkspaceName();
+                var f = _stWorkspaceFileByName(name);
+                if (!f) return false;
+                if (f.exists) return true;
+
+                var payload = null;
+                try { payload = seedPayload ? _stCloneSimple(seedPayload) : null; } catch (e0) { payload = null; }
+                if (!payload) {
+                    try { payload = _stCaptureWorkspaceState(); } catch (e1) { payload = null; }
+                }
+                if (!payload || typeof payload !== "object") payload = {};
+                try { payload.name = name; } catch (e2) {}
+                try { if (!payload.format) payload.format = "ShineToolsWorkspace"; } catch (e3) {}
+                try { if (!payload.version) payload.version = 1; } catch (e4) {}
+                try { payload.savedAt = (new Date()).toString(); } catch (e5) {}
+
+                return _stSaveWorkspaceByName(name, payload, { silent: true, skipActiveState: true, allowProtectedOverwrite: true });
+            } catch (e) {}
+            return false;
+        }
+
+        function _stReadWorkspaceByName(name) {
+            var f = null;
+            try {
+                f = _stWorkspaceFileByName(name);
+                if (!f || !f.exists) return null;
+                f.encoding = "UTF-8";
+                if (!f.open("r")) return null;
+                var raw = f.read();
+                f.close();
+                return _stJsonParse(raw);
+            } catch (e) {
+                try { if (f && f.opened) f.close(); } catch (e2) {}
+            }
+            return null;
+        }
+
+        
+        function _stImportWorkspaceFromJsonFile() {
+            var f = null;
+            try {
+                try { f = __ST_selectDialogSafe__("Load Workspace JSON", "*.json"); } catch (ePick0) { f = File.openDialog("Load Workspace JSON", "*.json"); }
+                if (!f) return false;
+
+                f = File(f);
+                if (!f.exists) { alert("Selected workspace file could not be found."); return false; }
+
+                var raw = "";
+                try {
+                    f.encoding = "UTF-8";
+                    if (!f.open("r")) { alert("Could not open workspace file."); return false; }
+                    raw = String(f.read() || "");
+                    f.close();
+                } catch (eRead) {
+                    try { if (f && f.opened) f.close(); } catch (eRead2) {}
+                    alert("Could not read workspace file.");
+                    return false;
+                }
+
+                var data = null;
+                try { data = _stJsonParse(raw); } catch (eParse0) { data = null; }
+                if (!data || typeof data !== "object") {
+                    alert("That file does not appear to be a valid workspace JSON.");
+                    return false;
+                }
+
+                var defaultName = "";
+                try { defaultName = String(data.name || ""); } catch (eName0) { defaultName = ""; }
+                defaultName = defaultName.replace(/^\s+|\s+$/g, "");
+                if (!defaultName) {
+                    try { defaultName = String(f.displayName || f.name || "Imported Workspace"); } catch (eName1) { defaultName = "Imported Workspace"; }
+                    defaultName = defaultName.replace(/\.json$/i, "").replace(/^\s+|\s+$/g, "");
+                }
+                if (!defaultName) defaultName = "Imported Workspace";
+
+                var name = "";
+                try { name = __ST_promptSafe__("Load workspace as:", defaultName); } catch (ePrompt0) { name = prompt("Load workspace as:", defaultName); }
+                if (name === null || name === undefined) return false;
+
+                name = String(name || "").replace(/^\s+|\s+$/g, "");
+                if (!name) { alert("Workspace name cannot be blank."); return false; }
+
+                var existing = null;
+                try { existing = _stReadWorkspaceByName(name); } catch (eExisting) { existing = null; }
+                if (existing) {
+                    if (_stIsProtectedWorkspaceName(name)) {
+                        alert("The Default workspace cannot be overwritten.");
+                        return false;
+                    }
+                    var okOverwrite = false;
+                    try { okOverwrite = __ST_confirmSafe__("Overwrite workspace \"" + name + "\"?"); } catch (eConf0) { okOverwrite = confirm("Overwrite workspace \"" + name + "\"?"); }
+                    if (!okOverwrite) return false;
+                }
+
+                try { data.name = name; } catch (eSetName) {}
+                if (!_stSaveWorkspaceByName(name, data)) {
+                    alert("Could not save imported workspace.");
+                    return false;
+                }
+
+                try { pal.__stCurrentWorkspaceName = name; } catch (e3a) {}
+                try { pal.__stPendingWorkspaceName = name; } catch (e3b) {}
+                try { pal.__stStartupAppliedWorkspaceName = name; } catch (e3c) {}
+                try { pal.__stWorkspaceStatusName = name; } catch (e3d) {}
+                try { _stWriteLastUsedWorkspaceName(name); } catch (e3e) {}
+                try { _wmRefreshDropdown(name); } catch (e3f) {}
+                try {
+                    if (wmDropdown && wmDropdown.selection && String(wmDropdown.selection.text || "") === name) {
+                        if (wmDropdown.onChange) wmDropdown.onChange();
+                    } else {
+                        _stLoadWorkspaceByName(name, { syncDropdown: false });
+                    }
+                } catch (e3g) {
+                    try { _stLoadWorkspaceByName(name, { syncDropdown: false }); } catch (e3h) {}
+                }
+                try { _updateWorkspaceStatusLabel({ suppressLayout: true }); } catch (e3i) {}
+                return true;
+            } catch (eImport) {
+                alert("Load Workspace failed: " + String(eImport));
+            }
+            return false;
+        }
+
+function _stLockFooterDuringWorkspaceSwitch() {
+            var __unlock = function () {};
+            try {
+                var fg = null;
+                try { fg = pal.__stFooterGroup || null; } catch (e0) { fg = null; }
+                if (!fg) return __unlock;
+
+                var oldMin = null, oldMax = null, oldPref = null, oldAlign = null;
+                try { oldMin = fg.minimumSize ? [fg.minimumSize[0], fg.minimumSize[1]] : null; } catch (e1) {}
+                try { oldMax = fg.maximumSize ? [fg.maximumSize[0], fg.maximumSize[1]] : null; } catch (e2) {}
+                try { oldPref = fg.preferredSize ? [fg.preferredSize[0], fg.preferredSize[1]] : null; } catch (e3) {}
+                try { oldAlign = fg.alignment ? [fg.alignment[0], fg.alignment[1]] : null; } catch (e4) {}
+
+                var h = 0;
+                try {
+                    if (fg.size && fg.size[1] && fg.size[1] > 0) h = fg.size[1];
+                } catch (e5) {}
+                try {
+                    if (!h && fg.bounds) h = Math.max(0, fg.bounds.bottom - fg.bounds.top);
+                } catch (e6) {}
+                if (!h) h = 38;
+
+                try { fg.minimumSize = [0, h]; } catch (e7) {}
+                try { fg.maximumSize = [10000, h]; } catch (e8) {}
+                try { fg.preferredSize = [-1, h]; } catch (e9) {}
+                try { fg.alignment = ["fill", "bottom"]; } catch (e10) {}
+
+                __unlock = function () {
+                    try { if (oldMin) fg.minimumSize = oldMin; } catch (u1) {}
+                    try { if (oldMax) fg.maximumSize = oldMax; } catch (u2) {}
+                    try { if (oldPref) fg.preferredSize = oldPref; } catch (u3) {}
+                    try { if (oldAlign) fg.alignment = oldAlign; } catch (u4) {}
+                };
+            } catch (e) {}
+            return __unlock;
+        }
+
+function _stLoadWorkspaceByName(name, options) {
+            try {
+                var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
+                if (!wanted) return false;
+
+                var data = null;
+                try { data = _stReadWorkspaceByName(wanted); } catch (e0) { data = null; }
+                if (!data) return false;
+
+                var __stUnlockFooter = function () {};
+                try { __stUnlockFooter = _stLockFooterDuringWorkspaceSwitch(); } catch (e0a) {}
+
+                try { if (typeof _buildTextTabIfNeeded === "function") _buildTextTabIfNeeded(); } catch (e1) {}
+
+                // Set active-name state immediately so the status line updates before the heavier workspace apply.
+                try { _stSetActiveWorkspaceNameState(wanted); } catch (e2a) {}
+                try { _stApplyWorkspaceStatusText(wanted); } catch (e2b) {}
+
+                try { _stApplyWorkspaceState(data); } catch (e3) {}
+
+                // Reassert active-name state in case the apply path touched any workspace/status variables.
+                try { _stSetActiveWorkspaceNameState(wanted); } catch (e4a) {}
+                try { _stApplyWorkspaceStatusText(wanted); } catch (e4b) {}
+
+                try {
+                    if (options && options.syncDropdown && typeof _wmRefreshDropdown === "function") {
+                        _wmRefreshDropdown(wanted);
+                    }
+                } catch (e5) {}
+
+                // Only sync the dropdown when explicitly needed; onChange already has the correct selection.
+                try {
+                    if (options && options.syncDropdown) _syncWorkspaceDropdownToActiveName();
+                } catch (e6) {}
+
+                try { _updateWorkspaceStatusLabel({ suppressLayout: true }); } catch (e7) {}
+
+                // Keep redraws minimal to avoid the visible "jump" after workspace switches.
+                // Refresh the manager surface only; avoid a second footer/apply-surface settle here.
+                try { _stRefreshWorkspaceManagerSurface(); } catch (e8a) {}
+                try { if (pal.update) pal.update(); } catch (e10) {}
+                return true;
+            } catch (e11) {}
+            return false;
+        }
+        function _stSaveWorkspaceByName(name, explicitPayload, options) {
+            var f = null;
+            try {
+                name = String(name || "").replace(/^\s+|\s+$/g, "");
+                if (!name) return false;
+                options = options || {};
+                if (_stIsProtectedWorkspaceName(name) && !options.allowProtectedOverwrite) return false;
+
+                f = _stWorkspaceFileByName(name);
+                if (!f) return false;
+                var payload = explicitPayload ? _stCloneSimple(explicitPayload) : _stCaptureWorkspaceState();
+                if (!payload || typeof payload !== "object") payload = {};
+                payload.name = String(name || "");
+                var raw = _stJsonStringify(payload);
+                f.encoding = "UTF-8";
+                if (!f.open("w")) return false;
+                f.write(raw);
+                f.close();
+                if (!options.skipActiveState) {
+                    try { pal.__stCurrentWorkspaceName = String(name || ""); } catch (e0) {}
+                    try { pal.__stPendingWorkspaceName = String(name || ""); } catch (e0a) {}
+                    try { pal.__stWorkspaceStatusName = String(name || ""); } catch (e0b) {}
+                    try { _updateWorkspaceStatusLabel({ suppressLayout: true }); } catch (eUpd) {}
+                }
+                return true;
+            } catch (e) {
+                try { if (f && f.opened) f.close(); } catch (e2) {}
+                if (!(options && options.silent)) {
+                    alert("Could not save workspace:\n" + String(e));
+                }
+            }
+            return false;
+        }
+        function _stDeleteWorkspaceByName(name) {
+            try {
+                name = String(name || "").replace(/^\s+|\s+$/g, "");
+                if (!name || _stIsProtectedWorkspaceName(name)) return false;
+                var f = _stWorkspaceFileByName(name);
+                if (!f || !f.exists) return false;
+                return !!f.remove();
+            } catch (e) {
+                alert("Could not delete workspace:\n" + String(e));
+            }
+            return false;
+        }
+
+        try { _stPublishWorkspaceApi(); } catch (ePublishWS) {}
+
+        function _openWorkspaceManager(fromTabName) {
+            try { pal.__stWorkspaceReturnTab = String(fromTabName || pal.__activeTopTab || "MAIN"); } catch (e0) {}
+            try { pal.__stPendingWorkspaceName = String(pal.__stCurrentWorkspaceName || pal.__stPendingWorkspaceName || ""); } catch (e0a) {}
+            try {
+                if (!pal.__stWorkspaceManagerBuilt) _buildWorkspaceManagerShell();
+            } catch (e1) { try { alert("Workspace Manager build error:\n" + String(e1)); } catch (e1a) {} return; }
+            try { _syncWorkspaceDropdownToActiveName(); } catch (e1b) {}
+            try { _selectTopTab("WORKSPACE_MANAGER"); } catch (e2) {}
+            try { _stCommitWorkspaceSelectionUI(pal.__stCurrentWorkspaceName || pal.__stPendingWorkspaceName || "", { skipUpdate: true }); } catch (e2a) {}
+            try { _stSettleWorkspaceManagerInitialWidths(); } catch (e3) {}
+            try { if (pal.update) pal.update(); } catch (e4) {}
+        }
+
+        function _closeWorkspaceManager() {
+            var target = "MAIN";
+            try { target = String(pal.__stWorkspaceReturnTab || "MAIN"); } catch (e0) {}
+            if (target !== "TEXT") target = "MAIN";
+            try { _selectTopTab(target); } catch (e1) { try { _selectTopTab("MAIN"); } catch (e2) {} }
+            try { _updateWorkspaceStatusLabel({ suppressLayout: true }); } catch (e0a) {}
+        }
+
+        function _makeMiniWorkspaceButton(parent, label, width, helpTip, onActivate) {
+            if (!parent) return null;
+
+            var __isWorkspaceLauncher = (String(label || "") === ">");
+            var h = __isWorkspaceLauncher ? 20 : 24;
+            var w = __isWorkspaceLauncher ? 20 : width;
+
+            var wrap = parent.add("group");
+            wrap.orientation   = "stack";
+            wrap.alignChildren = ["fill", "fill"];
+            wrap.alignment     = ["right", "center"];
+            wrap.margins       = 0;
+            wrap.spacing       = 0;
+            try { wrap.minimumSize = [w, h]; } catch (eW0) {}
+            try { wrap.maximumSize = [w, h]; } catch (eW1) {}
+            try { wrap.preferredSize = [w, h]; } catch (eW2) {}
+
+            var btnLabel = __isWorkspaceLauncher ? "\u25B6" : label;
+            var btn = wrap.add("button", undefined, btnLabel);
+            btn.alignment     = ["fill", "fill"];
+            try { btn.minimumSize = [w, h]; } catch (eB0) {}
+            try { btn.maximumSize = [w, h]; } catch (eB1) {}
+            try { btn.preferredSize = [w, h]; } catch (eB2) {}
+            try { btn.helpTip = helpTip || ""; } catch (eTip0) {}
+            try { defocusButtonBestEffort(btn); } catch (eDF) {}
+
+            if (__isWorkspaceLauncher) {
+                try { btn.text = "\u25B6"; } catch (eT0) {}
+                try { btn.justify = "center"; } catch (eT1) {}
+                try { btn.alignment = ["right", "center"]; } catch (eT2) {}
+                try { btn.graphics.font = ScriptUI.newFont("Helvetica", "BOLD", 13); } catch (eT3) {}
+            }
+
+            btn.onClick = function () {
+                try { btn.active = false; } catch (eA0) {}
+                try { if (onActivate) onActivate(); } catch (eAct) { try { alert("Workspace Manager error:\n" + String(eAct)); } catch (eAA) {} }
+                try { btn.active = false; } catch (eA1) {}
+            };
+
+            try { wrap.__label = btn; } catch (eL) {}
+            try { wrap.__button = btn; } catch (eP) {}
+            return wrap;
+        }
+
+        function _addWorkspaceLauncherRow(parent, sourceTabName) {
+            if (!parent) return null;
+            var lane = parent.add("group");
+            lane.orientation   = "row";
+            lane.alignChildren = ["right", "center"];
+            lane.alignment     = ["fill", "top"];
+            lane.margins       = [10, 6, 14, 0];
+            lane.spacing       = 6;
+
+            var spacer = lane.add("group");
+            spacer.alignment   = ["fill", "fill"];
+            spacer.minimumSize = [0, 0];
+            spacer.maximumSize = [10000, 10000];
+
+            var __statusSeedName = "";
+            var __statusSeedHasWorkspaces = false;
+            try {
+                var __statusSeedNames = _stListWorkspaceNames();
+                __statusSeedHasWorkspaces = !!(__statusSeedNames && __statusSeedNames.length);
+            } catch (eLblSeedHas) { __statusSeedHasWorkspaces = false; }
+            if (__statusSeedHasWorkspaces) {
+                try { __statusSeedName = String(pal.__stWorkspaceStatusName || ""); } catch (eLblSeed0) {}
+                try { if (!__statusSeedName) __statusSeedName = String(_stReadLastUsedWorkspaceName() || ""); } catch (eLblSeed1) {}
+                try { if (!__statusSeedName) __statusSeedName = String(pal.__stCurrentWorkspaceName || pal.__stStartupAppliedWorkspaceName || pal.__stPendingWorkspaceName || ""); } catch (eLblSeed2) {}
+            }
+
+            var __statusSeedText = (__statusSeedName && String(__statusSeedName).replace(/^\s+|\s+$/g, "")) ? ("Workspace: " + __statusSeedName) : "Workspace:";
+            var statusLbl = lane.add("statictext", undefined, __statusSeedText);
+            statusLbl.alignment = ["right", "center"];
+            try { statusLbl.justify = "right"; } catch (eLbl0) {}
+            try { statusLbl.minimumSize = [0, 20]; } catch (eLbl1) {}
+            try { statusLbl.maximumSize = [1000, 20]; } catch (eLbl2) {}
+            try { statusLbl.characters = Math.max(12, Math.min(64, __statusSeedText.length + 1)); } catch (eLbl3) {}
+            try { statusLbl.preferredSize = [Math.max(110, Math.min(1000, (__statusSeedText.length * 10) + 16)), 20]; } catch (eLbl4) {}
+            try { _setShineYellowBold(statusLbl); } catch (eLbl5) {}
+
+            try {
+                if (!pal.__stWorkspaceStatusNameLabels) pal.__stWorkspaceStatusNameLabels = [];
+                pal.__stWorkspaceStatusNameLabels.push(statusLbl);
+                pal.__stWorkspaceStatusNameLabel = statusLbl;
+                if (String(sourceTabName || "") === "TEXT") pal.__stWorkspaceStatusNameLabel_TEXT = statusLbl;
+                else pal.__stWorkspaceStatusNameLabel_MAIN = statusLbl;
+            } catch (eStore) {}
+
+            try { _updateWorkspaceStatusLabel(); } catch (eSyncLbl) {}
+            try { if (lane.layout) lane.layout.layout(true); } catch (eSyncLbl2) {}
+
+            _makeMiniWorkspaceButton(
+                lane,
+                ">",
+                26,
+                "WORKSPACE MANAGER",
+                function () { _openWorkspaceManager(sourceTabName || "MAIN"); }
+            );
+
+            return lane;
+        }
+
+        function _buildWorkspaceManagerShell() {
+            try {
+                if (pal.__stWorkspaceManagerBuilt && pal.__stWorkspaceManagerRoot) return true;
+            } catch (eBuilt0) {}
+
+            try {
+                while (tabWorkspaceManager.children && tabWorkspaceManager.children.length) {
+                    try { tabWorkspaceManager.remove(tabWorkspaceManager.children[0]); } catch (eRm) { break; }
+                }
+            } catch (e1) {}
+
+            tabWorkspaceManager.orientation   = "column";
+            tabWorkspaceManager.alignChildren = ["fill", "fill"];
+            tabWorkspaceManager.alignment     = ["fill", "fill"];
+            tabWorkspaceManager.margins       = 0;
+            tabWorkspaceManager.spacing       = 0;
+
+            var wmRoot = tabWorkspaceManager.add("group");
+            wmRoot.orientation   = "column";
+            wmRoot.alignChildren = ["fill", "top"];
+            wmRoot.alignment     = ["fill", "fill"];
+            wmRoot.margins       = [10, 34, 10, 10];
+            wmRoot.spacing       = 8;
+
+            var wmHeader = wmRoot.add("group");
+            wmHeader.orientation   = "row";
+            wmHeader.alignChildren = ["left", "center"];
+            wmHeader.alignment     = ["fill", "top"];
+            wmHeader.margins       = 0;
+            wmHeader.spacing       = 8;
+
+            var wmBackBtn = _makeMiniWorkspaceButton(
+                wmHeader,
+                "< BACK",
+                86,
+                "Back to previous tab",
+                function () { _closeWorkspaceManager(); }
+            );
+            try { wmBackBtn.alignment = ["left", "center"]; } catch (eB0) {}
+            try { wmBackBtn.minimumSize = [86, 24]; } catch (eB1) {}
+            try { wmBackBtn.maximumSize = [86, 24]; } catch (eB2) {}
+            try { wmBackBtn.preferredSize = [86, 24]; } catch (eB3) {}
+
+            var wmTitle = wmHeader.add("statictext", undefined, "WORKSPACE MANAGER");
+            try { _setShineYellowBold(wmTitle); } catch (e) {}
+            try { wmTitle.graphics.foregroundColor = wmTitle.graphics.newPen(wmTitle.graphics.PenType.SOLID_COLOR, [1, 0.8, 0], 1); } catch (e2) {}
+            try { _setShineYellowBold(wmTitle); } catch (e) {}
+            try { wmTitle.alignment = ["left", "center"]; } catch (eT0) {}
+            try { _setShineYellowBold(wmTitle); } catch (eT1) {}
+
+            var wmSpacer = wmHeader.add("group");
+            wmSpacer.alignment   = ["fill", "fill"];
+            wmSpacer.minimumSize = [0, 0];
+            wmSpacer.maximumSize = [10000, 10000];
+
+            var wmHelpText = wmRoot.add("statictext", undefined,
+                "Layout and Favorites changes are NOT saved automatically.\nAlways click \"Save Changes to This Workspace\" after making edits.",
+                { multiline: true }
+            );
+            var wmHelpSpacer = wmRoot.add("group");
+            wmHelpSpacer.minimumSize = [0, 8];
+            wmHelpSpacer.maximumSize = [10000, 8];
+
+            try { wmHelpText.alignment = ["fill", "top"]; } catch (eHT0) {}
+            try { wmHelpText.characters = 48; } catch (eHT1) {}
+
+            var wmBody = wmRoot.add("group");
+            wmBody.orientation   = "column";
+            wmBody.alignChildren = ["fill", "top"];
+            wmBody.alignment     = ["fill", "fill"];
+            wmBody.margins       = [0, 8, 0, 0];
+            wmBody.spacing       = 10;
+
+            var wmDropWrap = wmBody.add("group");
+            wmDropWrap.orientation   = "row";
+            wmDropWrap.alignChildren = ["left", "center"];
+            wmDropWrap.alignment     = ["fill", "top"];
+            wmDropWrap.margins       = 0;
+            wmDropWrap.spacing       = 3;
+
+            var wmDropLabel = wmDropWrap.add("statictext", undefined, "Workspace:");
+            try { _setShineYellowBold(wmDropLabel); } catch (eL0) {}
+            try { wmDropLabel.minimumSize = [78, 20]; } catch (eL1) {}
+            try { wmDropLabel.maximumSize = [78, 20]; } catch (eL2) {}
+
+            var wmDropdown = wmDropWrap.add("dropdownlist", undefined, []);
+            wmDropdown.alignment = ["fill", "center"];
+            try { wmDropdown.minimumSize = [220, 24]; } catch (eDD0) {}
+            try { pal.__stWorkspaceDropdown = wmDropdown; } catch (eDD1) {}
+
+            var wmBtns = wmBody.add("group");
+            wmBtns.orientation   = "column";
+            wmBtns.alignChildren = ["fill", "top"];
+            wmBtns.alignment     = ["fill", "top"];
+            wmBtns.margins       = 0;
+            wmBtns.spacing       = 8;
+
+            function _wmMakeActionButton(labelText, onClickFn) {
+                var row = wmBtns.add("group");
+                row.orientation   = "row";
+                row.alignChildren = ["fill", "center"];
+                row.alignment     = ["fill", "top"];
+                row.margins       = 0;
+                row.spacing       = 0;
+
+                var b = row.add("button", undefined, labelText);
+                b.alignment = ["fill", "center"];
+                try { b.preferredSize.height = 24; } catch (eH) {}
+                try { defocusButtonBestEffort(b); } catch (eDF) {}
+                b.onClick = onClickFn;
+                return b;
+            }
+
+            var btnSaveCurrent = _wmMakeActionButton("Save Changes to This Workspace", function () {
+                var name = "";
+                try { name = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) {}
+                if (!name) { alert("No workspace selected."); return; }
+                if (_stIsProtectedWorkspaceName(name)) { alert("The Default workspace cannot be overwritten."); return; }
+
+                var ok = false;
+                try { ok = __ST_confirmSafe__("Overwrite workspace \"" + name + "\"?"); } catch (e1a) { ok = confirm("Overwrite workspace \"" + name + "\"?"); }
+                if (!ok) return;
+
+                _stSaveWorkspaceByName(name);
+                try { _wmRefreshDropdown(name); } catch (e1) {}
+                try { _updateWorkspaceStatusLabel(); } catch (e2) {}
+            });
+
+            var btnSaveAsNew = _wmMakeActionButton("Save as New Workspace...", function () {
+                var proposed = "";
+                try { proposed = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) {}
+                var name = "";
+                try { name = __ST_promptSafe__("Name the new workspace:", proposed || "New Workspace"); } catch (e1) { name = prompt("Name the new workspace:", proposed || "New Workspace"); }
+                try { name = String(name || "").replace(/^\s+|\s+$/g, ""); } catch (e2) {}
+                if (!name) return;
+                if (_stSaveWorkspaceByName(name)) {
+                    try { pal.__stCurrentWorkspaceName = name; } catch (e3a) {}
+                    try { pal.__stPendingWorkspaceName = name; } catch (e3b) {}
+                    try { pal.__stStartupAppliedWorkspaceName = name; } catch (e3c) {}
+                    try { pal.__stWorkspaceStatusName = name; } catch (e3d) {}
+                    try { _stWriteLastUsedWorkspaceName(name); } catch (e3e) {}
+                    try { _wmRefreshDropdown(name); } catch (e3) {}
+                    try {
+                        if (wmDropdown && wmDropdown.selection && String(wmDropdown.selection.text || "") === name) {
+                            if (wmDropdown.onChange) wmDropdown.onChange();
+                        }
+                    } catch (e3f) {}
+                    try { _updateWorkspaceStatusLabel(); } catch (e3g) {}
+                }
+            });
+
+            
+            var btnLoadWorkspace = _wmMakeActionButton("Load Workspace...", function () {
+                try { _stImportWorkspaceFromJsonFile(); } catch (eLoadBtn) { alert("Load Workspace failed: " + String(eLoadBtn)); }
+            });
+
+            var btnRevealWorkspace = _wmMakeActionButton("Reveal Workspace in Finder", function () {
+                var name = "";
+                try { name = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) {}
+                try {
+                    if (!_stRevealWorkspaceInFinder(name)) {
+                        alert("Could not reveal the workspace in Finder.");
+                    }
+                } catch (eRevealBtn) {
+                    alert("Reveal Workspace in Finder failed: " + String(eRevealBtn));
+                }
+            });
+
+var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
+                var name = "";
+                try { name = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) {}
+                if (!name) { alert("Choose a workspace to delete."); return; }
+                if (_stIsProtectedWorkspaceName(name)) { alert("The Default workspace cannot be deleted."); return; }
+                var ok = false;
+                try { ok = __ST_confirmSafe__("Delete workspace \"" + name + "\"?"); } catch (e1) { ok = confirm("Delete workspace \"" + name + "\"?"); }
+                if (!ok) return;
+
+                if (_stDeleteWorkspaceByName(name)) {
+
+                    try { _wmRefreshDropdown(""); } catch (e0a) {}
+
+                    var names = [];
+                    try { names = _stListWorkspaceNames() || []; } catch (e0b) { names = []; }
+
+                    if (!names || !names.length) {
+                        try { pal.__stCurrentWorkspaceName = ""; } catch (e1a) {}
+                        try { pal.__stPendingWorkspaceName = ""; } catch (e1b) {}
+                        try { pal.__stStartupAppliedWorkspaceName = ""; } catch (e1c) {}
+                        try { pal.__stWorkspaceStatusName = ""; } catch (e1d) {}
+                        try { _stWriteLastUsedWorkspaceName(""); } catch (e1e) {}
+                        try { if (wmDropdown) wmDropdown.selection = null; } catch (e1f) {}
+
+                        var fallback = "Workspace:";
+                        try { if (pal.__stWorkspaceStatusNameLabel_MAIN) pal.__stWorkspaceStatusNameLabel_MAIN.text = fallback; } catch (e1g) {}
+                        try { if (pal.__stWorkspaceStatusNameLabel_TEXT) pal.__stWorkspaceStatusNameLabel_TEXT.text = fallback; } catch (e1h) {}
+                        try { if (pal.__stWorkspaceStatusNameLabel) pal.__stWorkspaceStatusNameLabel.text = fallback; } catch (e1i) {}
+
+                        try { _updateWorkspaceStatusLabel(); } catch (e1j) {}
+                    } else {
+                        var __nextName = "";
+                        try {
+                            if (wmDropdown && wmDropdown.selection) __nextName = String(wmDropdown.selection.text || "");
+                        } catch (e2a) {}
+                        if (!__nextName) {
+                            try { __nextName = String(names[0] || ""); } catch (e2b) { __nextName = ""; }
+                            try {
+                                if (wmDropdown && wmDropdown.items) {
+                                    for (var i = 0; i < wmDropdown.items.length; i++) {
+                                        try {
+                                            if (String(wmDropdown.items[i].text || "") === __nextName) {
+                                                wmDropdown.selection = i;
+                                                break;
+                                            }
+                                        } catch (e2c) {}
+                                    }
+                                }
+                            } catch (e2d) {}
+                        }
+
+                        if (__nextName) {
+                            try { pal.__stCurrentWorkspaceName = __nextName; } catch (e3a) {}
+                            try { pal.__stPendingWorkspaceName = __nextName; } catch (e3b) {}
+                            try { pal.__stStartupAppliedWorkspaceName = __nextName; } catch (e3c) {}
+                            try { pal.__stWorkspaceStatusName = __nextName; } catch (e3d) {}
+
+                            var __statusText = "Workspace: " + __nextName;
+                            try { if (pal.__stWorkspaceStatusNameLabel_MAIN) pal.__stWorkspaceStatusNameLabel_MAIN.text = __statusText; } catch (e3f) {}
+                            try { if (pal.__stWorkspaceStatusNameLabel_TEXT) pal.__stWorkspaceStatusNameLabel_TEXT.text = __statusText; } catch (e3g) {}
+                            try { if (pal.__stWorkspaceStatusNameLabel) pal.__stWorkspaceStatusNameLabel.text = __statusText; } catch (e3h) {}
+
+                            try { _stLoadWorkspaceByName(__nextName, { syncDropdown: false }); } catch (e3i) {}
+                        } else {
+                            try { _updateWorkspaceStatusLabel(); } catch (e3j) {}
+                        }
+                    }
+
+                    try { if (pal.layout) pal.layout.layout(true); } catch (e4a) {}
+                    try { if (pal.update) pal.update(); } catch (e4b) {}
+                }
+            });
+
+            function _wmRefreshDropdown(selectName) {
+                var names = _stListWorkspaceNames();
+                try { wmDropdown.removeAll(); } catch (e0) {}
+                for (var i = 0; i < names.length; i++) {
+                    try { wmDropdown.add("item", names[i]); } catch (e1) {}
+                }
+
+                if (!names || !names.length) {
+                    // Do not clear current/pending/startup workspace state here.
+                    // The dropdown can refresh before the list is repopulated, and we still want
+                    // the saved active workspace to survive that rebuild.
+                    try { pal.__stWorkspaceStatusName = ""; } catch (eEmpty3) {}
+                }
+
+                var wanted = String(selectName || "");
+                if (!wanted) {
+                    try { wanted = String(pal.__stCurrentWorkspaceName || pal.__stStartupAppliedWorkspaceName || pal.__stPendingWorkspaceName || ""); } catch (e1a) { wanted = ""; }
+                }
+                if (!wanted) {
+                    try { wanted = String(_stReadLastUsedWorkspaceName() || ""); } catch (e1b) { wanted = ""; }
+                }
+                wanted = String(wanted || "").replace(/^\s+|\s+$/g, "");
+
+                var idxSel = -1;
+                if (wanted) {
+                    for (var j = 0; j < wmDropdown.items.length; j++) {
+                        if (String(wmDropdown.items[j].text) === wanted) { idxSel = j; break; }
+                    }
+                }
+                if (idxSel < 0 && wmDropdown.items.length) idxSel = 0;
+
+                try { pal.__stWorkspaceDropdownSyncing = true; } catch (eSync0) {}
+                if (idxSel >= 0) {
+                    try { wmDropdown.selection = idxSel; } catch (e2) {}
+                } else {
+                    try { wmDropdown.selection = null; } catch (e3) {}
+                }
+                try { pal.__stWorkspaceDropdownSyncing = false; } catch (eSync1) {}
+
+                if (wmDropdown.selection) {
+                    try {
+                        var __selName = String(wmDropdown.selection.text || "");
+                        // Mirror the visible dropdown selection into the status text only.
+                        // Do NOT commit current/pending/startup workspace state here; that happens only
+                        // after a workspace is actually loaded/applied.
+                        pal.__stWorkspaceStatusName = __selName;
+                    } catch (eSelSync) {}
+                }
+
+                if ((!names || !names.length) || !wmDropdown.selection) {
+                    try { pal.__stWorkspaceStatusName = ""; } catch (eClr0) {}
+                    try { _updateWorkspaceStatusLabel(); } catch (eClr1) {}
+                } else {
+                    try { _updateWorkspaceStatusLabel(); } catch (eClr2) {}
+                }
+
+                try {
+                    var __selNameBtn = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : "";
+                    btnSaveCurrent.enabled = (!!wmDropdown.selection && !_stIsProtectedWorkspaceName(__selNameBtn));
+                } catch (e4) {}
+                try {
+                    var __selNameDel = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : "";
+                    btnDelete.enabled = (!!wmDropdown.selection && !_stIsProtectedWorkspaceName(__selNameDel));
+                } catch (e5) {}
+            }
+
+            wmDropdown.onChange = function () {
+                try { if (pal.__stWorkspaceDropdownSyncing) return; } catch (eSyncGuard) {}
+                var name = "";
+                try { name = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) {}
+                if (!name) return;
+
+                // Update the status line immediately so the UI feels responsive.
+                try { pal.__stCurrentWorkspaceName = name; } catch (e0a) {}
+                try { pal.__stPendingWorkspaceName = name; } catch (e0b) {}
+                try { pal.__stStartupAppliedWorkspaceName = name; } catch (e0c) {}
+                try { pal.__stWorkspaceStatusName = name; } catch (e0d) {}
+                try { _stWriteLastUsedWorkspaceName(name); } catch (e0dd) {}
+                try { _updateWorkspaceStatusLabel(); } catch (e0e) {}
+
+                if (!_stLoadWorkspaceByName(name, { syncDropdown: false })) {
+                    alert("Could not load workspace \"" + name + "\".");
+                    return;
+                }
+
+                try { _selectTopTab(pal.__stWorkspaceReturnTab || "MAIN"); } catch (e2) {}
+            };
+
+            try {
+                var __stInitialWanted = "";
+                try { __stInitialWanted = String(_stReadLastUsedWorkspaceName() || ""); } catch (eR0) { __stInitialWanted = ""; }
+                try { if (!__stInitialWanted) __stInitialWanted = String(_resolveActiveWorkspaceStatusName() || ""); } catch (eR1) {}
+                _wmRefreshDropdown(__stInitialWanted);
+            } catch (eR) {}
+
+            try { pal.__stWorkspaceManagerRoot = wmRoot; } catch (e2a) {}
+            try { pal.__stWorkspaceManagerBuilt = true; } catch (e2b) {}
+            try { tabWorkspaceManager.visible = true; } catch (e2c) {}
+            try { wmRoot.visible = true; } catch (e2d) {}
+            try { wmRoot.layout.layout(true); } catch (e2e) {}
+            try { tabWorkspaceManager.layout.layout(true); } catch (e2f) {}
+            try { _stSettleWorkspaceManagerInitialWidths(); } catch (e2g0) {}
+            try { if (pal.update) pal.update(); } catch (e2h) {}
+            try { if (pal && pal.update) pal.update(); } catch (e2i) {}
+            return true;
+        }
         function _buildUpdatesTab(tabUpdates) {
             // -------------------------
             // UPDATES TAB CONTENT (UI only for now)
@@ -10250,7 +12603,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             updatesDivider.maximumSize = [10000, 1];
             try { updatesDivider.margins = 0; } catch(eDiv) {}
 
-
             // Controls (kept above the changelog so nothing shifts when buttons appear)
             var updatesControlsCol = updatesWrap.add("group");
             updatesControlsCol.orientation   = "column";
@@ -10276,9 +12628,8 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             var btnCheckUpdates = checkCell.add("button", undefined, __UPD_LABELS.BTN_CHECK);
             try { defocusButtonBestEffort(btnCheckUpdates); } catch(eDFu1) {}
 
-
                         _setHelpTipBestEffort(btnCheckUpdates, "Check GitHub for a newer ShineTools version. If an update is found, INSTALL UPDATE will appear below.");
-            // Auto-check toggle (persisted)
+            // Auto-check toggle
             var autoChkGrp = updatesControlsRow.add("group");
             autoChkGrp.orientation   = "row";
             autoChkGrp.alignChildren = ["left","center"];
@@ -10311,7 +12662,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             btnInstallUpdate.visible = false;
             btnInstallUpdate.enabled = false;
 
-
             // Spacer: push Changelog lower below the buttons
             var _updatesChangelogSpacer = updatesWrap.add("group");
             _updatesChangelogSpacer.minimumSize = [10, 14];
@@ -10332,59 +12682,12 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             chBox.alignment     = ["fill", "top"];
             chBox.minimumSize   = [10, 340];
             chBox.preferredSize = [10, 340];
-
-            var __UPD_SETTINGS_SECTION = "ShineToolsUpdates";
-
-            var __UPD_KEYS = {
-                CHANGELOG_TEXT: "changelogText",
-                LAST_CHECKED: "lastChecked",
-                CACHED_PAYLOAD: "cachedPayload",
-                AUTO_CHECK: "autoCheckOnLaunch"
-            };
-
-
-            // Populate Changelog immediately on launch from cached data (no need to click CHECK).
-            try {
-                var cachedCL = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CHANGELOG_TEXT, "");
-                if (cachedCL && cachedCL.length) {
-                    chBox.text = cachedCL;
-                } else {
-                    // If no cached text, try cached payload (offline friendly)
-                    var cp = _loadCachedPayloadSafe();
-                    if (cp && cp.latest) {
-                        var _n = cp.notes || cp.changelog || [];
-                        if (typeof _n === "string") _n = [_n];
-                        var _h = cp.history || cp.changelogHistory || cp.releaseHistory || null;
-                        _setUpdatesChangelogStructured(cp.latest, _n, _h);
-                    }
-                }
-
-                var cachedLast = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.LAST_CHECKED, "");
-                if (cachedLast && cachedLast.length) {
-                    kvLast.val.text = cachedLast;
-                }
-
-
-            // Restore persisted Auto-check state
-            var __autoCheckEnabled = false;
-            try {
-                var rawAuto = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.AUTO_CHECK, "false");
-                __autoCheckEnabled = (String(rawAuto).toLowerCase() === "true");
-            } catch (eAuto0) { __autoCheckEnabled = false; }
-            try { cbAutoCheck.value = __autoCheckEnabled; } catch (eAuto1) {}
-            cbAutoCheck.onClick = function(){
-                try {
-                    __autoCheckEnabled = !!cbAutoCheck.value;
-                    _settingsSet(__UPD_SETTINGS_SECTION, __UPD_KEYS.AUTO_CHECK, __autoCheckEnabled ? "true" : "false");
-                } catch (eAuto2) {}
-            };
-
-            } catch (eCacheInit) {}
-
+            // Start clean each launch: no saved Updates-tab state.
+            try { cbAutoCheck.value = false; } catch (eAutoInit) {}
+            cbAutoCheck.onClick = function(){};
 
             // GitHub update check
             var GITHUB_VERSION_JSON_URL = "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/version.json";
-
 
     // --- version.json format (single source of truth) ---
     // Required:
@@ -10410,55 +12713,10 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 pkgUrl: null,
                 notes: null
             };
-
-            // ------------------------------------------------------------
-            // Updates tab persistence (simple cache so Changelog survives AE restart)
-            // ------------------------------------------------------------
-            function _cacheChangelogTextSafe(t) {
-                try {
-                    if (t === undefined || t === null) return;
-                    // Never cache placeholder dash
-                    if (String(t).replace(/\s+/g,"") === "—") return;
-                    _settingsSet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CHANGELOG_TEXT, String(t));
-                } catch (e) {}
-            }
-
-            function _cacheUpdatesPayloadSafe(obj) {
-                // Optional: persist last good parsed JSON for offline launch
-                try {
-                    var s = null;
-                    if (typeof JSON !== "undefined" && JSON && JSON.stringify) {
-                        s = JSON.stringify(obj);
-                    } else if (obj && obj.toSource) {
-                        s = obj.toSource();
-                    } else {
-                        s = String(obj);
-                    }
-                    _settingsSet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CACHED_PAYLOAD, s);
-                } catch (e) {}
-            }
-
-            function _loadCachedPayloadSafe() {
-                try {
-                    var raw = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CACHED_PAYLOAD, "");
-                    if (!raw || !raw.length) return null;
-
-                    // Try JSON.parse first
-                    try {
-                        if (typeof JSON !== "undefined" && JSON && JSON.parse) {
-                            return JSON.parse(raw);
-                        }
-                    } catch (eJSON) {}
-
-                    // Fallback to eval for ExtendScript
-                    try {
-                        return eval("(" + raw + ")");
-                    } catch (eE) {}
-
-                } catch (e) {}
-                return null;
-            }
-
+            // Updates-tab caching removed.
+            function _cacheChangelogTextSafe(t) {}
+            function _cacheUpdatesPayloadSafe(obj) {}
+            function _loadCachedPayloadSafe() { return null; }
 
             function _normalizeUpdateUrl(url) {
                 // Normalize update URLs (GitHub raw only).
@@ -10507,7 +12765,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     return "";
                 }
 
-
             function _toMediaGithubusercontent(url) {
                 // Convert raw.githubusercontent.com URL to media.githubusercontent.com (sometimes more reliable than raw/cdn).
                 // raw:   https://raw.githubusercontent.com/ORG/REPO/BRANCH/path/to/file
@@ -10538,7 +12795,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 }
             }
             }
-
 
     // ------------------ Updater Hardening Helpers ------------------
     function _sleepMs(ms){ try{ $.sleep(ms); }catch(e){} }
@@ -10697,7 +12953,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                         return { ok:true, msg: msg };
                     }
 
-
                     return { ok:false, msg:(msg || "Download failed.") };
                 } catch (e2) {
                     return { ok:false, msg:String(e2) };
@@ -10716,7 +12971,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 }
             }
 
-
             function _readTextFile(pathOrFile) {
                 // Reads a text file and returns a string (best-effort).
                 // Used only for light probing (e.g., detecting HTML instead of JSON/JSX).
@@ -10733,7 +12987,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     return "";
                 }
             }
-
 
             function _extractJsonValue(jsonText, key) {
                 // Very small helper to extract a top-level string/number value from JSON text.
@@ -10773,7 +13026,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 } catch (e) { return []; }
             }
 
-
             function _ensureFolder(pathOrFolder) {
                 // Returns a Folder (created if needed) or null.
                 try {
@@ -10786,7 +13038,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     return null;
                 }
             }
-
 
     function _runPkgInstaller(pkgPath) {
                 // Use AppleScript to prompt for admin and run installer.
@@ -10818,7 +13069,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             function _setUpdatesLastChecked(d) {
                 try {
                     kvLast.val.text = _formatStamp(d || new Date());
-                    _settingsSet(__UPD_SETTINGS_SECTION, __UPD_KEYS.LAST_CHECKED, kvLast.val.text);
+                    
                 } catch (e) {}
             }
 
@@ -10829,7 +13080,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             function _setUpdatesVersion(ver) {
                 try { kvLatest.val.text = ver || "—"; } catch (e) {}
             }
-
 
             function _setUpdatesChangelogStructured(latestVer, currentNotes, historyArr) {
                 // Visual separation:
@@ -10899,14 +13149,9 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     chBox.text = s || "—";
                     _cacheChangelogTextSafe(chBox.text);
                 } catch (e) {
-                    try {
-                        var cached = _settingsGet(__UPD_SETTINGS_SECTION, __UPD_KEYS.CHANGELOG_TEXT, "");
-                        if (cached && cached.length) chBox.text = cached;
-                        else chBox.text = "—";
-                    } catch(_e) { try { chBox.text = "—"; } catch(__e) {} }
+                    try { chBox.text = "—"; } catch(_e) {}
                 }
             }
-
 
             function _compareVersions(a, b) {
                 // returns 1 if a>b, -1 if a<b, 0 if equal (numeric dotted versions)
@@ -11156,7 +13401,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                             }
                         }
 
-
     // Validate downloaded script looks like ShineTools (signature check)
     if (!newRaw || !_looksLikeShineToolsJsx(newRaw)) {
         var why = _classifyDownloadBody(newRaw);
@@ -11334,7 +13578,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 } catch (e) {}
             }
 
-
             btnCheckUpdates.onClick = function () {
                 _safeRun("updates", "Check for updates", function () {
                     _doCheckForUpdates();
@@ -11342,7 +13585,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
                 // Preserve prior user-facing error messaging if something bubbles outside _safeRun
             };
-
 
             // Auto-check on panel launch (when enabled): check for updates and auto-open the UPDATES tab if needed.
             try {
@@ -11358,10 +13600,9 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
             try {
                 if (__autoCheckEnabled) {
-                    app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{ if($.global.__ShineToolsUpdateAutoCheck) $.global.__ShineToolsUpdateAutoCheck(); }catch(e){}});", 250, false);
+                    try { $.global.__ShineToolsUpdateAutoCheck(); } catch (eNow) {}
                 }
             } catch (eS) {}
-
 
         }
 
@@ -11542,9 +13783,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
         }
     };;
 
-
         }
-
 
         function _buildHelpTab(tabHelp) {
             // Ensure HELP tab lays out from the top (prevents vertical centering gaps)
@@ -11593,11 +13832,12 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 } catch (e) {}
                 return null;
             }
+            _spacer(2);
+            _spacer(20);
 
             // Title
             var helpTitleTop = helpWrap.add("statictext", undefined, "NAVIGATING THE SHINETOOLS INTERFACE:");
             try { helpTitleTop.alignment = ["fill","top"]; } catch(e) {}
-
 
             _setShineYellowBold(helpTitleTop);
 // Divider
@@ -11617,10 +13857,10 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             }
 
             // SECTIONS bullets (single-line controls to avoid extra vertical padding)
-            _addHelpLine("• Single-click a section name to expand or collapse it");
-            _addHelpLine("• SHIFT-click a section name to expand multiple sections");
-            _addHelpLine("• CMD-click a section name to collapse all sections");
-            _addHelpLine("• Hidden arrows on the right side allow you to reorder sections");
+            _addHelpLine("• OPTION-click the MAIN or TEXT tab to reorder sections.");
+            _addHelpLine("• Single-click a section name to expand or collapse it.");
+            _addHelpLine("• SHIFT-click a section name to expand multiple sections.");
+            _addHelpLine("• CMD-click a section name to collapse all sections.");
 
             _spacer(24);
 
@@ -11628,9 +13868,13 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             var hdrButtons = helpWrap.add("statictext", undefined, "BUTTONS & MODIFIERS");
             _setShineYellowBold(hdrButtons);
 
-            _addHelpLine("• Buttons with a yellow indicator support modifier keys");
+            _addHelpLine("• Buttons with a yellow indicator support modifier keys.");
             _addHelpLine("  (CMD, OPTION, or SHIFT for alternate actions)");
-            _addHelpLine("• OPTION-click a section name to reorder the buttons in that section");
+            var line1 = helpWrap.add("statictext", undefined,
+    "• OPTION-click a section name to reorder the buttons\n   in that section.",
+    { multiline: true }
+);
+line1.alignment = ["fill", "top"];
 
             _spacer(24);
 
@@ -11638,11 +13882,10 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             var hdrFav = helpWrap.add("statictext", undefined, "FAVORITES & IMPORTS");
             _setShineYellowBold(hdrFav);
 
-            _addHelpLine("• Single-click the PLUS (+) icon to add files to your Favorites");
-            _addHelpLine("• CMD-click the PLUS (+) icon to add files to your Favorites and timeline");
-            _addHelpLine("• In the Favorites list:");
-            _addHelpLine("  – CMD-click a file to remove it from the list");
-            _addHelpLine("  – OPTION-click sets blend mode to ADD");
+            _addHelpLine("• Click the plus sign to add elements to the favorites list.");
+            _addHelpLine("• Select a file to import it to the timeline at the CTI.");
+            _addHelpLine("• OPTION-click the STAR to organize Favorites lists.");
+            _addHelpLine("• OPTION-click a file from the list to set ADD blend mode.");
 
             _spacer(24);
 
@@ -11650,8 +13893,12 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             var hdrRender = helpWrap.add("statictext", undefined, "RENDER SETTINGS");
             _setShineYellowBold(hdrRender);
 
-            _addHelpLine("• Must set up a render template labeled PRORES 422 and PRORES 4444");
-            _addHelpLine("  to use Render button");
+            var line2 = helpWrap.add("statictext", undefined,
+    "• Must set up a render template labeled PRORES 422\n   and PRORES 4444",
+    { multiline: true }
+);
+line2.alignment = ["fill", "top"];
+            _addHelpLine("  to use Render button.");
 
             _spacer(24);
             // --- REQUIRED SETTINGS ---
@@ -11659,8 +13906,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             _setShineYellowBold(hdrReq);
 
             _addHelpLine("• Enable \"Allow Scripts to Write Files and Access Network\"");
-            _addHelpLine("• File > Project Settings > Expressions must be set to JavaScript");
-
+            _addHelpLine("• File > Project Settings > Expressions must be set to JavaScript.");
 
             _spacer(24);
 
@@ -11668,11 +13914,9 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             var hdrTips = helpWrap.add("statictext", undefined, "TOOL TIPS");
             _setShineYellowBold(hdrTips);
 
-            _addHelpLine("• Hover over buttons for more info");
+            _addHelpLine("• Hover over buttons for more info.");
 
             _spacer(24);
-
-
 
             try {
                 (function _ST_PreviousComputerRow_inHelp(parent) {
@@ -11811,7 +14055,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                         return "—";
                     }
 
-
 // ---------- Display mapping ----------
 // Map internal machine codes -> friendly display labels
 var __ST_COMP_LABELS = {
@@ -11869,10 +14112,10 @@ function __st_formatComputerDisplay(code) {
                         };
                     } catch (eReg) {}
 
-                    // Initial populate + delayed refresh (covers opening a project after the panel is already loaded)
+                    // Initial populate + one immediate refresh
                     try { prevValue.text = __st_getPreviousComputerName(); } catch (eSet) {}
                     try {
-                        app.scheduleTask('try{ if ($.global.__ST_PrevComputerUI && $.global.__ST_PrevComputerUI.refresh) { $.global.__ST_PrevComputerUI.refresh(); } }catch(e){}', 250, false);
+                        if ($.global.__ST_PrevComputerUI && $.global.__ST_PrevComputerUI.refresh) { $.global.__ST_PrevComputerUI.refresh(); }
                     } catch (eSch) {}
 try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.resize(); } } catch (eL) {}
 
@@ -12033,7 +14276,6 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
 
         _buildHelpTab(tabHelp);
 
-
         // Default selection
         _selectTopTab("MAIN");
         // -------------------------
@@ -12069,7 +14311,6 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
         // (Keeps both MAIN and TEXT dropdowns visually aligned.)
         var TOPROW_DD_RIGHT_TRIM = 3;
 
-
         // Chevron colors (reorder arrows)
 
         // Section label blink feedback (5-frame-ish flash)
@@ -12078,9 +14319,6 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
         var SECTION_LABEL_COLOR_BLINK = [1.00, 0.82, 0.00, 1]; // Shine yellow
         var BLINK_FRAME_MS = 33; // ~30fps
         var BLINK_FRAMES   = 10;
-
-        var _blinkSeq = 0;
-        var _blinkTitle = null;
 
         function _setLabelColor(st, rgba) {
             try {
@@ -12151,22 +14389,30 @@ if (w && dd.list) {
 
             var _prevActivate = dd.onActivate;
             dd.onActivate = function () {
+                try { _stMarkDropdownInteraction(dd, 5000); } catch (eMarkA) {}
                 if (_prevActivate) { try { _prevActivate(); } catch (ePrev) {} }
                 _clamp();
             };
 
+            var _prevDeactivate = dd.onDeactivate;
+            dd.onDeactivate = function () {
+                if (_prevDeactivate) { try { _prevDeactivate(); } catch (ePrevD) {} }
+                try { _stClearDropdownInteraction(dd, 1200); } catch (eMarkD) {}
+            };
+
             // Extra safety: some hosts don't fire onActivate reliably for dropdowns.
             try {
-                dd.addEventListener('mousedown', function () { _clamp(); });
+                dd.addEventListener('mousedown', function () { try { _stMarkDropdownInteraction(dd, 5000); } catch (eMD) {} _clamp(); });
+                try { dd.addEventListener('mouseup', function () { _stMarkDropdownInteraction(dd, 1500); }); } catch (eMU) {}
                 // Docked panels on macOS can sometimes miss onActivate; clamp on hover/focus too.
                 try { dd.addEventListener('mouseover', function () { _clamp(); }); } catch (e4) {}
-                try { dd.addEventListener('focus', function () { _clamp(); }); } catch (e5) {}
+                try { dd.addEventListener('focus', function () { try { _stMarkDropdownInteraction(dd, 5000); } catch (eF) {} _clamp(); }); } catch (e5) {}
+                try { dd.addEventListener('blur', function () { _stClearDropdownInteraction(dd, 1200); }); } catch (e6) {}
             } catch (e3) {}
         }
 
         // Popup width helper: clamp the dropdown popup list to the content width (not the closed control width).
         // Useful when the CLOSED dropdown is wide (fills the row) but we want a tighter POPUP like the TEXT tab.
-
 
         // Keep dropdown popup width from ballooning by ensuring item labels
         // never exceed the *current* closed-control width.
@@ -12194,7 +14440,6 @@ if (w && dd.list) {
                     }
                     if (lw && lw > w) w = lw;
                 } catch (eL) {}
-
 
                 // Leave room for arrow + insets (empirical; keeps popup from expanding wider than control)
                 var usable = Math.max(50, w - 28);
@@ -12235,6 +14480,13 @@ if (w && dd.list) {
         function _stPrettyFileLabel(pathOrLabel) {
             var s = pathOrLabel;
             try {
+                if (s && typeof s === "object" && !(s instanceof File)) {
+                    var lbl = _favEntryLabel(s);
+                    if (lbl) return String(lbl);
+                    s = _favEntryPath(s);
+                }
+            } catch (eObj) {}
+            try {
                 if (s instanceof File) {
                     if (s && s.name) return String(s.name);
                 }
@@ -12251,7 +14503,6 @@ if (w && dd.list) {
             return s;
         }
 
-
         function _applyDropdownLabelClamp(dd) {
             try {
                 if (!dd || !dd.items) return;
@@ -12259,7 +14510,7 @@ if (w && dd.list) {
                 if (dd.__shineNoTruncate) return;
                 for (var i = 0; i < dd.items.length; i++) {
                     var it = dd.items[i];
-                    if (!it || it._isBlank || it.text === "(No saved files)" || it.text === "(No saved presets)" || it.type === "separator") continue;
+                    if (!it || it._isBlank || it.text === "(No files)" || it.text === "(No presets)" || it.type === "separator") continue;
                     var full = it._fullText || it._pathName || it._name || it.text;
                     it._fullText = full;
                     it.text = _truncateDropdownLabel(dd, full);
@@ -12318,7 +14569,6 @@ if (w && dd.list) {
             } catch (e) {}
         }
 
-
         // Chain a small Y-shift to a parent group's onLayout without breaking existing handlers.
         // Useful for pixel-perfect alignment nudges (e.g., the ★ icon).
         function _chainOnLayoutShiftY(parentGroup, ctrl, dy) {
@@ -12332,34 +14582,6 @@ if (w && dd.list) {
                 } catch (e) {}
             };
         }
-
-        function _blinkSectionLabel(st, seqAtCall) {
-    if (!st) return;
-    try { st._blinkSeq = seqAtCall; } catch (e0) {}
-    try { st._isBlinking = true; } catch (eB) {}
-
-    // Flash YELLOW immediately (5-ish frames), then revert to the correct state color.
-    try { _setLabelColor(st, SECTION_LABEL_COLOR_EXPANDED); } catch (eF) {}
-
-    // revert after ~5 frames; ignore if another blink started
-    try {
-        var fn = "__ShineTools_BlinkLabel__";
-        $.global[fn] = function () {
-            try {
-                if (!st || !st.graphics) return;
-                if (st._blinkSeq !== seqAtCall) return;
-                try { st._isBlinking = false; } catch (eB2) {}
-                var col = (st && st._getExpanded && st._getExpanded()) ? SECTION_LABEL_COLOR_EXPANDED : SECTION_LABEL_COLOR_IDLE;
-                _setLabelColor(st, col);
-                try { st.parent && st.parent.parent && st.parent.parent.update(); } catch (eU) {}
-            } catch (e) {}
-        };
-
-        // ALWAYS schedule the revert (safe-mode should not block a UI flash)
-        try { app.scheduleTask(fn + "()", BLINK_FRAME_MS * BLINK_FRAMES, false); } catch (eSched) {}
-    } catch (e1) {}
-}
-
 
         var ARROW_COLOR_IDLE  = [0.35, 0.35, 0.35, 1]; // dark gray
         var ARROW_COLOR_HOVER = [1.00, 0.82, 0.00, 1]; // Shine yellow
@@ -12375,6 +14597,12 @@ if (w && dd.list) {
 // --------------------------------------------------
 
 function relayoutScoped(scopeGroup) {
+    try {
+        if ($.global.__ShineToolsIsLiveResizing__ === true) {
+            try { pal.layout.resize(); } catch (e0) {}
+            return;
+        }
+    } catch (eLive0) {}
     try { (scopeGroup || pal).layout.layout(true); } catch (e1) {}
     try { (scopeGroup || pal).layout.resize(); } catch (e2) {}
     // A window resize pass helps redraw without forcing a full tree relayout.
@@ -12386,115 +14614,26 @@ function relayout() {
     relayoutScoped(pal);
 }
 
-
-
-var __ST_RelayoutTaskId = 0;
-var __ST_RELAYOUT_TICK_FN = "__ShineTools_BatchedRelayoutTick__";
-
-
-$.global.__ST_RelayoutAfterSettleTick__ = function () {
-    __ST_RelayoutAfterSettleTaskId = 0;
-    try {
-        // trigger a batched relayout soon (uses existing queue)
-        requestRelayoutSoon(pal, 40);
-    } catch (e) {}
-};
-
 // ---- Render-safe helpers (avoid ScriptUI layout during Render Queue) ----
 function _stIsRendering() {
     try { return !!(app && app.project && app.project.renderQueue && app.project.renderQueue.rendering); } catch (e) { return false; }
 }
 
-// One-shot monitor used ONLY while rendering to defer relayout until render completes.
-var __ST_AfterRenderTaskId = 0;
-var __ST_AfterRenderRetries = 0;
-function _stScheduleRelayoutAfterRender() {
-    try {
-        if (__ST_AfterRenderTaskId) return;
-        __ST_AfterRenderRetries = 0;
-        $.global.__ShineTools_AfterRenderTick__ = function () {
-            __ST_AfterRenderTaskId = 0;
-            // If still rendering, reschedule a few times (lightweight, only during render)
-            if (_stIsRendering()) {
-                __ST_AfterRenderRetries++;
-                if (__ST_AfterRenderRetries <= 60) { // ~60 * 250ms = 15s max
-                    __ST_AfterRenderTaskId = app.scheduleTask("$.global.__ShineTools_AfterRenderTick__ && $.global.__ShineTools_AfterRenderTick__()", 250, false);
-                }
-                return;
-            }
-            // Render finished: run any queued relayout tick ASAP
-            try { _stCancelRelayoutTick(); } catch (e0) {}
-            try { __ST_RelayoutTaskId = app.scheduleTask("$.global['" + __ST_RELAYOUT_TICK_FN + "'] && $.global['" + __ST_RELAYOUT_TICK_FN + "']()", 50, false); } catch (e1) {}
-        };
-        __ST_AfterRenderTaskId = app.scheduleTask("$.global.__ShineTools_AfterRenderTick__ && $.global.__ShineTools_AfterRenderTick__()", 250, false);
-    } catch (e) { __ST_AfterRenderTaskId = 0; }
-}
-
-function _stQueueRelayout(scopeGroup) {
-    try {
-        if (!$.global.__ShineToolsRelayoutQueue) $.global.__ShineToolsRelayoutQueue = [];
-        var q = $.global.__ShineToolsRelayoutQueue;
-        // De-dupe by strict equality
-        for (var i = 0; i < q.length; i++) { if (q[i] === scopeGroup) return; }
-        q.push(scopeGroup);
-    } catch (e) {}
-}
-
-function _stCancelRelayoutTick() {
-    try { if (__ST_RelayoutTaskId) app.cancelTask(__ST_RelayoutTaskId); } catch (e) {}
-    __ST_RelayoutTaskId = 0;
-}
-
-// Request a relayout soon (debounced). If scopeGroup is null, falls back to pal.
+// Immediate relayout request. The old batched scheduleTask debounce was removed,
+// so this helper now keeps the call sites but performs the relayout directly.
 function requestRelayoutSoon(scopeGroup, delayMs) {
-// During Render Queue rendering, any ScriptUI relayout/draw is a high-risk deadlock point.
-    // Queue the relayout and defer execution until rendering completes.
     try {
-        if (_stIsRendering()) {
-            try { _stQueueRelayout(scopeGroup || pal); } catch(eQ) {}
-            try { _stScheduleRelayoutAfterRender(); } catch(eAR) {}
-            return;
-        }
-    } catch (eR) {}
-
-
-    try {
-        if (ST && ST.SAFE_MODE === true) {
-            // Synchronous relayout (no scheduleTask) for stability.
-            relayoutScoped(scopeGroup || pal);
-            return;
-        }
-    } catch (eSafeRL) {}
-try {
-        _stQueueRelayout(scopeGroup || pal);
-        _stCancelRelayoutTick();
-
-        // Define tick once (uses the queued objects stored on $.global)
-        $.global[__ST_RELAYOUT_TICK_FN] = function () {
-            __ST_RelayoutTaskId = 0;
-            var q = null;
-            try { q = $.global.__ShineToolsRelayoutQueue; } catch (eQ) { q = null; }
-            try { $.global.__ShineToolsRelayoutQueue = []; } catch (eClr) {}
-
-            if (!q || !q.length) return;
-
-            // Relayout each queued scope group. If the palette itself is included,
-            // do it last so child scopes don't immediately get re-laid out again.
-            var palQueued = false;
-            for (var i = 0; i < q.length; i++) {
-                try { if (q[i] === pal) { palQueued = true; continue; } } catch (eP) {}
-                try { relayoutScoped(q[i]); } catch (eR) {}
-            }
-            if (palQueued) {
-                try { relayoutScoped(pal); } catch (eR2) {}
-            }
-        };
-
-        var ms = Math.max(0, (delayMs == null ? 40 : delayMs));
-        __ST_RelayoutTaskId = app.scheduleTask("$.global['" + __ST_RELAYOUT_TICK_FN + "'] && $.global['" + __ST_RELAYOUT_TICK_FN + "']()", ms, false);
+        relayoutScoped(scopeGroup || pal);
     } catch (e) {
-        // Fallback: immediate scoped relayout
-        try { relayoutScoped(scopeGroup || pal); } catch (e2) {}
+        try {
+            if (scopeGroup && scopeGroup.layout) {
+                scopeGroup.layout.layout(true);
+                scopeGroup.layout.resize();
+            } else if (pal && pal.layout) {
+                pal.layout.layout(true);
+                pal.layout.resize();
+            }
+        } catch (e2) {}
     }
 }
 
@@ -12506,8 +14645,6 @@ try {
             d.enabled     = false;
             return d;
         }
-
-
 
     function _focusSafeMargins(grp, leftPx, topPx, rightPx, bottomPx) {
         try {
@@ -12523,7 +14660,6 @@ try {
     function _setHelpTipBestEffort(ctrl, tip) {
         try { if (ctrl && tip) ctrl.helpTip = String(tip); } catch (e) {}
     }
-
 
     function _walkUIControls(root, visitFn) {
         try {
@@ -12574,18 +14710,17 @@ try {
         });
     }
 
-
 function defocusButtonBestEffort(btn) {
             btn.addEventListener("mousedown", function () {
                 try { btn.active = false; } catch (e) {}
-                try { pal.active = true; } catch (e2) {}
             });
             btn.addEventListener("mouseup", function () {
                 try { btn.active = false; } catch (e) {}
-                try { pal.active = true; } catch (e2) {}
+            });
+            btn.addEventListener("mouseout", function () {
+                try { btn.active = false; } catch (e) {}
             });
         }
-
 
 // -------------------------
 // PLUS glyph button (no box, hover turns PLUS yellow)
@@ -12755,8 +14890,8 @@ function addDropdownHeader(col, text, insetPx) {
             _hoverLastShift = null;
 
             _hoverUpdateIfChanged(); // initial set (uses current modifiers)
-            _stHoverEnsureTick(); // instant modifier flips while hovered (stops automatically on mouseout)
-}
+            _stHoverEnsureTick(); // disabled in SAFE_MODE; mouse/key hooks still update labels
+        }
 
         function _hoverStop(btn, baseText) {
             if (_hoverBtn === btn) _hoverClearInternal();
@@ -12771,8 +14906,8 @@ function addDropdownHeader(col, text, insetPx) {
         // To avoid ANY background tasks (and reduce panel lockups), we now refresh hover labels
         // ONLY when the mouse moves while a button is hovered (or on mouseover/mouseout).
 
-        // Backwards-compat: re-introduce a VERY small hover tick, but ONLY while a button is hovered.
-// This brings back instant modifier-hover label flips (no mouse movement required) without keeping any always-on background work.
+        // Optional backwards-compat tick. SAFE_MODE disables it because AE can run scheduleTask
+        // while a host/native modal dialog is open, which can wedge docked ScriptUI panels.
 var _stHoverRunning = false;
 var _stHoverTaskId  = null;
 
@@ -12794,6 +14929,13 @@ function _stHoverCancelTask(){
 }
 
 function _stHoverEnsureTick(){
+    try {
+        if (ST && ST.SAFE_MODE === true) {
+            _stHoverRunning = false;
+            _stHoverCancelTask();
+            return;
+        }
+    } catch (eSafe) {}
     if (_stHoverRunning) return;
     _stHoverRunning = true;
     _stHoverTickInternal();
@@ -12808,6 +14950,20 @@ function _stHoverStopTickIfIdle(){
 
 function _stHoverTickInternal(){
     if (!_stHoverRunning) return;
+    try {
+        if (ST && ST.SAFE_MODE === true) {
+            _stHoverRunning = false;
+            _stHoverCancelTask();
+            return;
+        }
+    } catch (eSafe) {}
+    try {
+        if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) {
+            _stHoverRunning = false;
+            _stHoverCancelTask();
+            return;
+        }
+    } catch (eTouch) {}
 
     try { if (_hoverBtn) _hoverUpdateIfChanged(); } catch(e0) {}
 
@@ -12828,6 +14984,36 @@ function _stHoverTickInternal(){
     }
 }
 
+function _stRecoverAfterHostModal(){
+    try {
+        if (ST && ST.SAFE_MODE === true) {
+            _stHoverCancelTask();
+            _stHoverRunning = false;
+        }
+    } catch(e0) {}
+    try {
+        if ($.global && $.global.__ST_BUSY__ === true) {
+            var started = 0;
+            try { started = $.global.__ST_BUSY_STARTED_MS__ || 0; } catch(eB0) { started = 0; }
+            var now = 0;
+            try { now = (new Date()).getTime(); } catch(eB1) { now = 0; }
+            if (!started || !now || (now - started) > 10000) {
+                $.global.__ST_BUSY__ = false;
+                $.global.__ST_BUSY_STARTED_MS__ = 0;
+            }
+        }
+    } catch(e2) {}
+    try {
+        if ($.global && $.global.__ST_LONGOP__ === true) {
+            var stillSaving = false;
+            var stillRendering = false;
+            try { stillSaving = !!(app && app.isSaving); } catch(eS) { stillSaving = false; }
+            try { stillRendering = !!(app && app.project && app.project.renderQueue && app.project.renderQueue.rendering); } catch(eR) { stillRendering = false; }
+            if (!stillSaving && !stillRendering) $.global.__ST_LONGOP__ = false;
+        }
+    } catch(e3) {}
+}
+
 // Install a single mousemove listener on the palette/panel to refresh hovered button label.
 function _stHoverInstallMouseHook(root){
     try {
@@ -12837,6 +15023,7 @@ function _stHoverInstallMouseHook(root){
 
         root.addEventListener("mousemove", function(){
             try {
+                _stRecoverAfterHostModal();
                 if (_hoverBtn) _hoverUpdateIfChanged();
             } catch(e0) {}
         });
@@ -12844,8 +15031,13 @@ function _stHoverInstallMouseHook(root){
         // Also refresh once on mouseover anywhere in the panel (helps first enter)
         root.addEventListener("mouseover", function(){
             try {
+                _stRecoverAfterHostModal();
                 if (_hoverBtn) _hoverUpdateIfChanged();
             } catch(e1) {}
+        });
+
+        root.addEventListener("mousedown", function(){
+            try { _stRecoverAfterHostModal(); } catch(e2) {}
         });
     } catch(e) {}
 }
@@ -12866,7 +15058,6 @@ function _stHoverInstallKeyHook(root){
     } catch(e3) {}
 }
 
-
 function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
             btn.addEventListener("mouseover", function () { _hoverStart(btn, baseText, hoverText, optionHoverText, ""); });
             btn.addEventListener("mouseout",  function () { _hoverStop(btn, baseText); });
@@ -12878,11 +15069,11 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
         }
 
 // -------------------------
-        // Per-section BUTTON order (Option+Click on section header)
+        // Per-section button registry for live reorder dialogs
         // -------------------------
         var __ST_BTN_ORDER_SECTION = "ShineTools";
-        var __ST_BTN_ORDER_PREFIX  = "ButtonOrder::";
-        var __ST_SECTION_BUTTONS   = {}; // { accordionKey: { sectionTitle: [ {id:String, label:String} ] } }
+        var __ST_BTN_ORDER_PREFIX  = "";
+        var __ST_SECTION_BUTTONS   = {}; // { accordionKey: { sectionTitle: [ String label, ... ] } }
 
         function _stBO_safeStr(v){ try{ return String(v==null?"":v); }catch(e){ return ""; } }
 
@@ -12929,10 +15120,6 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
             return out;
         }
 
-        function _stBO_key(accordionKey, sectionTitle){
-            return __ST_BTN_ORDER_PREFIX + _stBO_safeStr(accordionKey) + '::' + _stBO_safeStr(sectionTitle);
-        }
-
         function _stBO_clearRegistry(accordionKey, sectionTitle){
             try {
                 if (!accordionKey || !sectionTitle) return;
@@ -12958,141 +15145,17 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
             return '';
         }
 
-        function _stBO_hash32(str){
-            // Deterministic 32-bit hash (djb2); stable across sessions and order.
-            try {
-                str = String(str);
-                var h = 5381;
-                for (var i = 0; i < str.length; i++) {
-                    h = ((h << 5) + h) + str.charCodeAt(i);
-                    h = h & 0xFFFFFFFF;
-                }
-                // Convert to unsigned-ish string
-                if (h < 0) h = 0xFFFFFFFF + h + 1;
-                return String(h);
-            } catch (e) { return "0"; }
-        }
-
-        function _stBO_stableIdForItem(it, idx){
-            // CRITICAL: this ID must NOT depend on truncated labels or layout-dependent text.
-            // Prefer explicit IDs, otherwise hash ONLY the onClick function source.
-            // This keeps the ID stable across sessions/rebuilds.
-            try {
-                if (it && it.id !== undefined && it.id !== null && String(it.id) !== "") return _stBO_safeStr(it.id);
-            } catch (e0) {}
-            try {
-                if (it && it._stId !== undefined && it._stId !== null && String(it._stId) !== "") return _stBO_safeStr(it._stId);
-            } catch (e1) {}
-
-            var fn = "";
-            try { if (it && it.onClick) fn = String(it.onClick); } catch (e3) { fn = ""; }
-            if (fn) return "fn_" + _stBO_hash32(fn);
-
-            // Fallback: hash the label text if there's no onClick.
-            var lbl = "";
-            try {
-                if (it && it.hoverLabels && it.hoverLabels.base) lbl = _stBO_safeStr(it.hoverLabels.base);
-                else if (it && it.text) lbl = _stBO_safeStr(it.text);
-            } catch (e2) { lbl = ""; }
-            return "lbl_" + _stBO_hash32(lbl || ("BTN_" + idx));
-        }
-
-        function _stBO_makeIds(items){
-            // IMPORTANT: IDs must remain stable across sessions and NOT depend on the *current* order.
-            // We prefer explicit IDs if authors provide them. Otherwise we hash function+label (+helpTip)
-            // and only fall back to an index suffix when *true duplicates* exist.
-            var out = [];
-            var seen = {};
-            for (var i=0; i<items.length; i++) {
-                var it = items[i];
-                var base = _stBO_stableIdForItem(it, i);
-                if (!base) base = 'BTN_' + i;
-
-                var id = base;
-                if (seen[id] !== undefined) {
-                    // Duplicate action+label+helpTip: suffix with a deterministic hash that includes the original slot.
-                    // NOTE: We only use index when duplicates exist.
-                    id = base + "@@" + _stBO_hash32(base + "@@" + String(i));
-                }
-                seen[base] = true;
-
-                try { it._stBO_id = id; } catch (e2) {}
-                out.push(id);
-            }
-            return out;
-        }
-
         function _stBO_register(accordionKey, sectionTitle, items){
             try {
                 if (!accordionKey || !sectionTitle || !items || !items.length) return;
                 if (!__ST_SECTION_BUTTONS[accordionKey]) __ST_SECTION_BUTTONS[accordionKey] = {};
-                if (!__ST_SECTION_BUTTONS[accordionKey][sectionTitle]) __ST_SECTION_BUTTONS[accordionKey][sectionTitle] = [];
-
-                _stBO_makeIds(items);
-
-                var reg = __ST_SECTION_BUTTONS[accordionKey][sectionTitle];
-                // Append in current grid order
+                var labels = [];
                 for (var i=0; i<items.length; i++) {
-                    var it = items[i];
-                    var id = it && it._stBO_id ? _stBO_safeStr(it._stBO_id) : _stBO_safeStr(_stBO_itemLabel(it) || ('BTN_' + i));
-                    var label = _stBO_itemLabel(it) || id;
-                    reg.push({ id: id, label: label });
+                    var lbl = _stBO_itemLabel(items[i]) || ('BTN_' + i);
+                    labels.push(_stBO_safeStr(lbl));
                 }
+                __ST_SECTION_BUTTONS[accordionKey][sectionTitle] = labels;
             } catch (e) {}
-        }
-
-        function _stBO_loadOrder(accordionKey, sectionTitle){
-            try {
-                var key = _stBO_key(accordionKey, sectionTitle);
-                // Prefer the most complete source. app.settings can sometimes fail or write stale '[]'
-                // while the file-backed store contains the correct value.
-                var rawApp  = _settingsGetRawApp(__ST_BTN_ORDER_SECTION, key);
-                var rawFile = _settingsGetRawFile(__ST_BTN_ORDER_SECTION, key);
-                var arrApp  = _stBO_parseArray(rawApp);
-                var arrFile = _stBO_parseArray(rawFile);
-                if (arrFile && arrFile.length) return arrFile;
-                if (arrApp && arrApp.length) return arrApp;
-            } catch (e) {}
-            return null;
-        }
-
-        function _stBO_saveOrder(accordionKey, sectionTitle, arr){
-            try {
-                var key = _stBO_key(accordionKey, sectionTitle);
-                var payload = arr && arr.length ? _stBO_stringifyArray(arr) : '[]';
-                var ok = _settingsSet(__ST_BTN_ORDER_SECTION, key, payload);
-                if (!ok) {
-                    var pth = "";
-                    try { var f = _stSettingsFilePath(); if (f) pth = f.fsName; } catch (eP) {}
-                    alert("ShineTools couldn't save button order.\n\nThis usually means a write-permission issue.\n\nTried saving to:\n" + (pth || "(unknown)"));
-                }
-            } catch (e) {}
-        }
-
-        function _stBO_applyOrder(items, savedIds){
-            if (!items || !items.length || !savedIds || !savedIds.length) return items;
-            _stBO_makeIds(items);
-
-            var map = {};
-            for (var i=0; i<items.length; i++) {
-                try { map[_stBO_safeStr(items[i]._stBO_id)] = items[i]; } catch (e) {}
-            }
-
-            var out = [];
-            // First: items in saved order
-            for (var j=0; j<savedIds.length; j++) {
-                var id = _stBO_safeStr(savedIds[j]);
-                if (map[id]) {
-                    out.push(map[id]);
-                    map[id] = null;
-                }
-            }
-            // Then: any new/unseen items
-            for (var k=0; k<items.length; k++) {
-                var id2 = _stBO_safeStr(items[k]._stBO_id);
-                if (map[id2]) out.push(items[k]);
-            }
-            return out;
         }
 
 // 2-column grid with badge indicator support
@@ -13101,7 +15164,7 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
 	        // NOTE: Indicator is implemented as a fixed-width sibling (NOT an overlay)
 	        // to keep clicks reliable and resizing snappy.
 	        function addGrid2(parentBody, items) {
-            // Apply per-section button order when inside an accordion section.
+            // Register per-section buttons when inside an accordion section.
             // IMPORTANT: buildFns often create nested groups inside the section body and call addGrid2()
             // on those nested groups. So we must walk up the parent chain to find the tagged section body.
             try {
@@ -13119,12 +15182,33 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
                 var _sTitle = tagged && tagged._stSectionTitle;
 
                 if (_aKey && _sTitle && items && items.length) {
-                    // Register these buttons for the dialog list (append; section build clears registry once).
+                    try {
+                        var _savedOrder = _stBO_getRegistry(_aKey, _sTitle) || [];
+                        if (_savedOrder && _savedOrder.length) {
+                            var _usedMap = {};
+                            var _reordered = [];
+                            var _ii, _jj, _lbl;
+                            for (_ii = 0; _ii < _savedOrder.length; _ii++) {
+                                _lbl = String(_savedOrder[_ii] || "");
+                                if (!_lbl || _usedMap[_lbl]) continue;
+                                for (_jj = 0; _jj < items.length; _jj++) {
+                                    if (_stBO_itemLabel(items[_jj]) === _lbl) {
+                                        _reordered.push(items[_jj]);
+                                        _usedMap[_lbl] = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            for (_jj = 0; _jj < items.length; _jj++) {
+                                _lbl = _stBO_itemLabel(items[_jj]);
+                                if (_lbl && _usedMap[_lbl]) continue;
+                                _reordered.push(items[_jj]);
+                            }
+                            items = _reordered;
+                        }
+                    } catch (eBOApply) {}
+                    // Register these buttons for the current live session dialog list.
                     _stBO_register(_aKey, _sTitle, items);
-
-                    // Apply saved ordering to the grid.
-                    var _saved = _stBO_loadOrder(_aKey, _sTitle);
-                    if (_saved && _saved.length) items = _stBO_applyOrder(items, _saved);
                 }
             } catch (eBO) {}
 
@@ -13225,13 +15309,12 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
         // Shared Logo Header helper (used on BOTH tabs)
         // -------------------------
         function addLogoHeader(parent) {
-            // A robust centering approach for ScriptUI:
-            //  - Outer "stack" group fills the width.
-            //  - Inner group is center-aligned, so the logo/placeholder stays centered at any width.
+            // Keep the logo truly centered, but avoid auto-center remeasurement jitter during live resize.
+            // We create a fill-width outer row, then manually position the fixed-width center lane.
             var outer = parent.add("group");
-            outer.orientation   = "stack";
+            outer.orientation   = "row";
             outer.alignment     = ["fill", "top"];
-            outer.alignChildren = ["fill", "fill"];
+            outer.alignChildren = ["left", "center"];
             outer.margins       = [0, 8, 0, 6];
             outer.spacing       = 0;
 
@@ -13239,29 +15322,51 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
             outer.minimumSize = [0, LOGO_H];
             outer.maximumSize = [10000, LOGO_H];
 
-            var inner = outer.add("group");
-            inner.orientation   = "column";
-            inner.alignment     = ["center", "center"];
-            inner.alignChildren = ["center", "center"];
-            inner.margins       = 0;
-            inner.spacing       = 0;
+            // Use a stack so the fixed-width logo lane starts centered immediately on first paint,
+            // before any manual recenter pass runs. We still keep the manual centering helper below
+            // for resize changes, but this avoids the brief left snap on load/open.
+            outer.orientation   = "stack";
+            outer.alignChildren = ["center", "center"];
+
+            var fillLane = outer.add("group");
+            fillLane.orientation   = "row";
+            fillLane.alignment     = ["fill", "fill"];
+            fillLane.alignChildren = ["fill", "fill"];
+            fillLane.margins       = 0;
+            fillLane.spacing       = 0;
+            try { fillLane.minimumSize = [0, LOGO_H]; } catch (eFL1) {}
+            try { fillLane.maximumSize = [10000, LOGO_H]; } catch (eFL2) {}
+
+            var centerLane = outer.add("group");
+            centerLane.orientation   = "column";
+            centerLane.alignment     = ["center", "center"];
+            centerLane.alignChildren = ["center", "center"];
+            centerLane.margins       = 0;
+            centerLane.spacing       = 0;
+            try { centerLane.minimumSize = [LOGO_W, LOGO_H]; } catch (eCL1) {}
+            try { centerLane.preferredSize = [LOGO_W, LOGO_H]; } catch (eCL2) {}
+            try { centerLane.maximumSize = [LOGO_W, LOGO_H]; } catch (eCL3) {}
 
             var logoFile = findShineLogoFileLocal();
             if (logoFile && logoFile.exists) {
-                var img = inner.add("image", undefined, logoFile);
+                var img = centerLane.add("image", undefined, logoFile);
                 img.alignment     = ["center", "center"];
                 img.preferredSize = [LOGO_W, LOGO_H];
                 img.minimumSize   = [LOGO_W, LOGO_H];
                 img.maximumSize   = [LOGO_W, LOGO_H];
             } else {
-                var fb = inner.add("statictext", undefined, "SHINE TOOLS (logo missing)");
+                var fb = centerLane.add("statictext", undefined, "SHINE TOOLS (logo missing)");
                 fb.alignment = ["center", "center"];
                 fb.justify   = "center";
-                // Give the placeholder a stable width so it truly centers.
                 fb.preferredSize = [260, LOGO_H];
                 fb.minimumSize   = [260, LOGO_H];
                 fb.maximumSize   = [260, LOGO_H];
             }
+
+            try {
+                if (!$.global.__ShineToolsLogoHeaders) $.global.__ShineToolsLogoHeaders = [];
+                $.global.__ShineToolsLogoHeaders.push({ outer: outer, lane: centerLane, width: LOGO_W, height: LOGO_H });
+            } catch (eReg) {}
 
             // 15px GAP BELOW LOGO (matches MAIN)
             var gap = parent.add("group");
@@ -13308,11 +15413,9 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
         // -------------------------
 
 // -------------------------
-// Accordion factory (reusable per-tab) + optional section re-ordering
-//   - Adds Up/Down chevrons on header hover
-//   - Persists order via app.settings (per accordion key)
+// Accordion factory (reusable per-tab)
 // -------------------------
-function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orderSettingsKeyOrNull) {
+function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, accordionKeyOrNull) {
 
     // Relayout can get called a lot during accordion toggles/reorders.
     // Guard against re-entrant layout calls (can freeze ScriptUI over time).
@@ -13325,173 +15428,17 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
         _stIsRelayouting = false;
     }
 
+    // Session-only accordion model (all disk/prefs persistence removed)
+    var defs = [];            // { title:String, buildFn:Function }
+    var statesByTitle = {};   // { title: { collapsed:Boolean } }
+    var currentOrder = [];    // live-session order only
 
-    // Persisted order helpers
-    var ORDER_SETTINGS_SECTION = "ShineTools";
-        function _stEnsureDir(dir) {
-        try { if (dir && !dir.exists) dir.create(); } catch (e) {}
-        return (dir && dir.exists) ? dir : null;
-    }
-
-    // JSON helpers (centralized): use the global _stJsonParse/_stJsonStringify implementations
-    // so every persistence system behaves consistently.
-    function _stParseOrder(raw) {
-        try { return _stJsonParse(raw); } catch (e) {}
-        return null;
-    }
-
-    function _stStringifyOrder(arr) {
-        try {
-            var s = _stJsonStringify(arr || []);
-            return (s === undefined || s === null) ? "[]" : String(s);
-        } catch (e) {}
-        return "[]";
-    }
-
-
-    function _stAccordionOrderFilePrimary() {
-        try {
-            if (!orderSettingsKeyOrNull) return null;
-            var dir = _stEnsureDir(Folder(Folder.myDocuments.fsName + "/ShineTools"));
-            if (!dir) return null;
-            return File(dir.fsName + "/" + orderSettingsKeyOrNull + ".json");
-        } catch (e) {}
-        return null;
-    }
-
-    function loadOrder() {
-        if (!orderSettingsKeyOrNull) return [];
-
-        // Unified persistence (preferred): stored via _settingsGet/_settingsSet with file fallback.
-        var unifiedKey = "AccordionOrder::" + orderSettingsKeyOrNull;
-
-        // 0) Unified settings first
-        try {
-            var rawU = _settingsGet(ORDER_SETTINGS_SECTION, unifiedKey, "");
-            var arrU = _stParseOrder(rawU);
-            if (arrU && arrU.length) return arrU;
-        } catch (eU) {}
-
-        var arr = [];
-
-        // 1) Legacy dedicated per-accordion file (migration path)
-        try {
-            var f = _stAccordionOrderFilePrimary();
-            if (f && f.exists) {
-                f.encoding = "UTF-8";
-                f.open("r");
-                var rawF = f.read();
-                f.close();
-                if (rawF) {
-                    var arrF = _stParseOrder(rawF);
-                    if (arrF && arrF.length) arr = arrF;
-                }
-            }
-        } catch (eF) {}
-
-        // 2) Legacy app.settings fallback (migration path)
-        if (!arr || !arr.length) {
-            try {
-                if (_appHaveSetting(ORDER_SETTINGS_SECTION, orderSettingsKeyOrNull)) {
-                    var rawS = _appGetSetting(ORDER_SETTINGS_SECTION, orderSettingsKeyOrNull, "") || "";
-                    var arrS = _stParseOrder(rawS);
-                    if (arrS && arrS.length) arr = arrS;
-                }
-            } catch (eS) {}
-        }
-
-        // Migrate legacy -> unified (best effort)
-        if (arr && arr.length) {
-            try { _settingsSet(ORDER_SETTINGS_SECTION, unifiedKey, _stStringifyOrder(arr)); } catch (eM) {}
-        }
-
-        return arr || [];
-    }
-
-    function saveOrder(arr) {
-        if (!orderSettingsKeyOrNull) return;
-
-        arr = arr || [];
-        var unifiedKey = "AccordionOrder::" + orderSettingsKeyOrNull;
-
-        // 0) Unified persistence (preferred)
-        try { _settingsSet(ORDER_SETTINGS_SECTION, unifiedKey, _stStringifyOrder(arr)); } catch (eU) {}
-
-        // 1) Legacy app.settings (keep for backwards compatibility)
-        try {
-            _appSaveSetting(ORDER_SETTINGS_SECTION, orderSettingsKeyOrNull, _stStringifyOrder(arr));
-        } catch (e1) {}
-
-        // 2) Legacy dedicated per-accordion file(s)
-        try {
-            var f2 = _stAccordionOrderFilePrimary();
-            if (f2) {
-                f2.encoding = "UTF-8";
-                f2.open("w");
-                f2.write(_stStringifyOrder(arr));
-                f2.close();
-            }
-        } catch (e2) {}
-    }
-
-    var defs = [];            // {title:String, buildFn:Function}
-    var statesByTitle = {};   // { title: {collapsed:Boolean} }
-    var currentOrder = loadOrder();
-
-
-    // Persisted collapsed/expanded state (per accordion key)
-    // Stored alongside order persistence so users get the exact same UI state after restart.
-    var _stCollapsedMap = {}; // { title: Boolean(collapsed) }
-    function _stParseCollapsedMap(raw) {
-        try {
-            var obj = _stJsonParse(raw);
-            if (obj && typeof obj === "object") return obj;
-        } catch (e) {}
-        return {};
-    }
-    function loadCollapsedMap() {
-        if (!orderSettingsKeyOrNull) return {};
-        var unifiedKey = "AccordionCollapsed::" + orderSettingsKeyOrNull;
-        try {
-            var rawU = _settingsGet(ORDER_SETTINGS_SECTION, unifiedKey, "");
-            if (rawU) return _stParseCollapsedMap(rawU);
-        } catch (eU) {}
-        return {};
-    }
-    function saveCollapsedMap() {
-        if (!orderSettingsKeyOrNull) return;
-        var unifiedKey = "AccordionCollapsed::" + orderSettingsKeyOrNull;
-        var out = {};
-        try {
-            for (var t in statesByTitle) {
-                if (!statesByTitle.hasOwnProperty(t)) continue;
-                out[t] = (statesByTitle[t] && statesByTitle[t].collapsed) ? true : false;
-            }
-        } catch (eLoop) {}
-        try { _settingsSet(ORDER_SETTINGS_SECTION, unifiedKey, _stJsonStringify(out)); } catch (eS) {}
-    }
-    _stCollapsedMap = loadCollapsedMap();
-// Ensure persisted order is flushed to disk once at startup (helps AE restart persistence)
-    try { if (currentOrder && currentOrder.length) saveOrder(currentOrder); } catch (eFlush) {}
-
-    function collapseAllNow() {
-        try { api.collapseAll(); } catch (e) {}
-        try { safeRelayout(); } catch (e) {}
-        try { var fs = ensureFocusSink(); if (fs) fs.active = true; } catch (e3) {}
-    }
-
-    // ---- internal build (creates UI in correct order) ----
+    // ---- internal build (creates UI in current runtime order only) ----
     function _buildAccordionUI() {
-        // snapshot collapsed state
         try {
             for (var k = 0; k < defs.length; k++) {
                 var t = defs[k].title;
-                if (!statesByTitle[t]) {
-                    // Default collapsed unless we have a persisted value
-                    var _pc = true;
-                    try { if (_stCollapsedMap && _stCollapsedMap.hasOwnProperty(t)) _pc = !!_stCollapsedMap[t]; } catch (ePC) {}
-                    statesByTitle[t] = { collapsed: _pc };
-                }
+                if (!statesByTitle[t]) statesByTitle[t] = { collapsed: true };
             }
         } catch (eSnap) {}
 
@@ -13510,9 +15457,9 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
             }
         }
 
-        // finalize order list
+        // finalize current live order list
         var order = [];
-        // keep saved order first (only if defs exist)
+        // keep current in-memory order first (only if defs exist)
         for (var iO = 0; iO < currentOrder.length; iO++) {
             var titleO = currentOrder[iO];
             for (var d0 = 0; d0 < defs.length; d0++) {
@@ -13526,33 +15473,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
             for (var o1 = 0; o1 < order.length; o1++) if (order[o1] === t1) { found = true; break; }
             if (!found) order.push(t1);
         }
-        // keep for persistence
         currentOrder = order;
-        saveOrder(currentOrder);
-
-        function reorder(title, dir) {
-            if (!orderSettingsKeyOrNull) return; // reordering disabled
-            var idx = -1;
-            for (var i = 0; i < currentOrder.length; i++) { if (currentOrder[i] === title) { idx = i; break; } }
-            if (idx < 0) return;
-
-            var newIdx = idx + dir;
-            if (newIdx < 0 || newIdx >= currentOrder.length) return;
-
-            // swap
-            var tmp = currentOrder[idx];
-            currentOrder[idx] = currentOrder[newIdx];
-            currentOrder[newIdx] = tmp;
-
-            saveOrder(currentOrder);
-
-            // Visual feedback: blink the moved section label after rebuild
-            _blinkSeq++;
-            _blinkTitle = title;
-
-            _buildAccordionUI();
-            try { safeRelayout(); } catch (e) {}
-        }
 
         function addAccordionSection(title, buildFn) {
             var section = container.add("group");
@@ -13580,102 +15501,9 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, orde
             var label = hitArea.add("statictext", undefined, title);
             label.alignment = ["fill", "center"];
             label.justify   = "left";
-            // Section label base color (and blink feedback when moved)
+            // Section label base color
             _setLabelColor(label, SECTION_LABEL_COLOR_IDLE);
-            if (_blinkTitle && _blinkTitle === title) {
-                var _seq = _blinkSeq;
-                _blinkTitle = null; // consume
-                _blinkSectionLabel(label, _seq);
-            }
             try { label.graphics.font = ScriptUI.newFont(label.graphics.font.name, "Bold", label.graphics.font.size); } catch (e) {}
-
-            // Reorder chevrons (invisible until hovered; larger hit area for reliable clicks)
-            var reorderWrap = header.add("group");
-            reorderWrap.orientation   = "row";
-            reorderWrap.alignChildren = ["center", "center"];
-            reorderWrap.alignment     = ["right", "center"];
-            reorderWrap.spacing       = 2;
-            reorderWrap.margins       = 0;
-
-            // Use actual buttons (not statictext) for stable hit-testing
-            var upBtn = reorderWrap.add("button", undefined, "▲");
-            var dnBtn = reorderWrap.add("button", undefined, "▼");
-
-            function styleChevronButton(btn) {
-                // Custom-drawn chevron button:
-                //  - Idle: dark gray
-                //  - Hover/pressed: Shine yellow
-                //  - No native button box/border (we draw only the glyph)
-                btn.minimumSize = [30, UI.headerH - 2];
-                btn.maximumSize = [30, UI.headerH - 2];
-                btn.alignment   = ["right", "center"];
-                btn.margins     = 0;
-                try { btn.helpTip = "Move section"; } catch (eTip) {}
-
-                // Capture glyph then clear native text so the OS theme doesn't draw it
-                try { btn._glyph = btn.text; } catch (eG) { btn._glyph = "▲"; }
-                btn.text = "";
-
-                // Hover/pressed state
-                btn._isHover = false;
-                btn._isDown  = false;
-
-                function invalidate() {
-                    try { btn.notify("onDraw"); } catch (eN) {}
-                    try { btn.parent.update(); } catch (eU) {}
-                }
-
-                // Events
-                btn.addEventListener("mouseover", function(){ btn._isHover = true; invalidate(); });
-                btn.addEventListener("mouseout",  function(){ btn._isHover = false; btn._isDown = false; invalidate(); });
-                btn.addEventListener("mousedown", function(){ btn._isDown = true; invalidate(); });
-                btn.addEventListener("mouseup",   function(){ btn._isDown = false; invalidate(); });
-
-                // Draw only the chevron glyph (no box)
-                btn.onDraw = function () {
-                    var g = this.graphics;
-
-                    // Invisible until hovered/pressed
-                    if (!(this._isHover || this._isDown)) {
-                        return;
-                    }
-
-                    // Pick color (hover/pressed only)
-                    var col = ARROW_COLOR_HOVER;
-
-                    // Ensure a consistent font size across hover/click (prevents "bouncing")
-                    try {
-                        if (!this._glyphFont) {
-                            var _fName = g.font.name;
-                            var _fSize = g.font.size;
-                            // Choose a stable size once, then reuse (avoid per-state font metrics changes)
-                            this._glyphFont = ScriptUI.newFont(_fName, "Regular", Math.max(12, _fSize + 4));
-                        }
-                        g.font = this._glyphFont;
-                    } catch (eF) {}
-var w = this.size[0], h = this.size[1];
-
-                    // Center glyph visually (slight nudge feels better for ▲/▼)
-                    var x = Math.round(w/2 - 4);
-                    var y = Math.round(h/2 - (g.font.size/2) - 1);
-
-                    // Transparent background: draw nothing but the glyph
-                    try {
-                        var pen = g.newPen(g.PenType.SOLID_COLOR, col, 1);
-                        g.drawString(this._glyph || "▲", pen, x, y);
-                    } catch (eD) {}
-                };
-            }styleChevronButton(upBtn);
-            styleChevronButton(dnBtn);
-
-            // Only enable if settings key provided
-            if (!orderSettingsKeyOrNull) {
-                upBtn.enabled = false; dnBtn.enabled = false;
-            }
-
-            // Click handlers (buttons won’t interfere with header toggle)
-            upBtn.onClick = function () { reorder(title, -1); };
-            dnBtn.onClick = function () { reorder(title,  1); };
 
             makeDivider(section);
 
@@ -13686,15 +15514,14 @@ var w = this.size[0], h = this.size[1];
 
             var body = bodyWrap.add("group");
             body.orientation   = "column";
-            // Tag this body so addGrid2 can persist per-section button order
+            // Tag this body so addGrid2 can identify the section host
             try { body._stSectionTitle = title; } catch (eTag1) {}
-            try { body._stAccordionKey = orderSettingsKeyOrNull || "NOACC"; } catch (eTag2) {}
+            try { body._stAccordionKey = accordionKeyOrNull || "SESSION_ONLY"; } catch (eTag2) {}
 
             body.alignChildren = ["fill", "top"];
             body.alignment     = ["fill", "top"];
             body.margins       = [8, 0, 8, 0];
             body.spacing       = UI.btnGap;
-
 
                         var state = statesByTitle[title] || { collapsed: true };
             statesByTitle[title] = state;
@@ -13709,7 +15536,6 @@ var w = this.size[0], h = this.size[1];
             // We build once, the first time the section is expanded.
             if (state._built !== true) state._built = false;
 
-
             // For blink revert + expanded label color
             try { label._getExpanded = function(){ return !state.collapsed; }; } catch (eGE) {}
             function _ensureBuilt() {
@@ -13718,11 +15544,7 @@ var w = this.size[0], h = this.size[1];
                 if (state._built && state._builtHost === body) return;
                 if (!buildFn) { state._built = true; return; }
                 try {
-                    // Reset button registry for this section before rebuilding
-                    try {
-                        var _aK = (body && body._stAccordionKey) ? body._stAccordionKey : (orderSettingsKeyOrNull || "NOACC");
-                        _stBO_clearRegistry(_aK, title);
-                    } catch (eClr) {}
+                    // Keep current button-order registry so rebuilt UI can honor the live/session order.
                     buildFn(body);
                     state._built = true;
                 } catch (eBuild) {
@@ -13733,12 +15555,10 @@ var w = this.size[0], h = this.size[1];
 
             function setCollapsed(v, silent) {
                 state.collapsed = v;
-                try { saveCollapsedMap(); } catch (eSave) {}
                 twirlBox._collapsed = v;
 
                 // Build UI only when opening
                 if (!v) _ensureBuilt();
-
 
                 // Header label color: yellow when expanded (unless blink is active)
                 try {
@@ -13751,11 +15571,13 @@ var w = this.size[0], h = this.size[1];
 try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                 try { bodyWrap.maximumSize = v ? [10000, 0] : [10000, 200000]; } catch (eMax) {}
 
-
                 if (!silent) safeRelayout();
 }
 
             function _showReorderButtonsDialog(title, aKey, reg) {
+
+                var used = {};
+                reg = reg || [];
 
                 try {
 
@@ -13769,60 +15591,31 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     dlg.margins = [10, 10, 10, 10];
 
-
                     var info = dlg.add("statictext", undefined, "Reorder buttons for this section (affects the grid order).");
 
                     info.alignment = ["fill", "top"];
-
 
                     var lb = dlg.add("listbox", undefined, [], { multiselect: false });
 
                     lb.preferredSize = [220, 220];
 
+                    function addItem(labelText){
 
-                    // Build list in saved order if it exists; otherwise registry order
+                        var it = lb.add('item', labelText);
 
-                    var saved = _stBO_loadOrder(aKey, title) || [];
-
-                    var used = {};
-
-
-                    function addItem(r){
-
-                        var it = lb.add('item', r.label);
-
-                        it._id = r.id;
-
-                    }
-
-
-                    if (saved && saved.length) {
-
-                        for (var si=0; si<saved.length; si++) {
-
-                            var sid = String(saved[si]);
-
-                            for (var ri=0; ri<reg.length; ri++) {
-
-                                if (String(reg[ri].id) === sid && !used[sid]) { addItem(reg[ri]); used[sid]=true; break; }
-
-                            }
-
-                        }
+                        it._id = String(labelText || '');
 
                     }
 
                     for (var ri2=0; ri2<reg.length; ri2++) {
 
-                        var rid = String(reg[ri2].id);
+                        var rid = String(reg[ri2]);
 
                         if (!used[rid]) { addItem(reg[ri2]); used[rid]=true; }
 
                     }
 
-
                     if (lb.items.length) lb.selection = 0;
-
 
                     var controls = dlg.add("group");
 
@@ -13832,23 +15625,21 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     controls.spacing = 8;
 
-
                     // Arrow-only buttons using the SAME custom chevron architecture as section reordering
 
                     // (draw-only glyph, no blue focus ring look)
 
                     function _styleDlgChevron(btn, glyph, tip) {
 
-                        btn.minimumSize = [30, 26];
+                        btn.minimumSize = [32, 28];
 
-                        btn.maximumSize = [30, 26];
+                        btn.maximumSize = [32, 28];
 
                         btn.alignment   = ['left','center'];
 
                         btn.margins     = 0;
 
                         try { btn.helpTip = tip; } catch (eTip2) {}
-
 
                         btn._glyph = glyph;
 
@@ -13857,7 +15648,6 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                         btn._isHover = false;
 
                         btn._isDown  = false;
-
 
                         function _inv(){ try { btn.notify('onDraw'); } catch(e0) {} try { btn.parent.update(); } catch(e1) {} }
 
@@ -13868,7 +15658,8 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                         btn.addEventListener('mousedown', function(){ btn._isDown = true; _inv(); });
 
                         btn.addEventListener('mouseup',   function(){ btn._isDown = false; _inv(); });
-
+                        btn.onMouseEnter = function(){ btn._isHover = true; _inv(); };
+                        btn.onMouseExit  = function(){ btn._isHover = false; btn._isDown = false; _inv(); };
 
                         btn.onDraw = function(){
 
@@ -13876,13 +15667,13 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                             // Always visible in dialog: idle gray, hover/pressed yellow
 
-                            var col = (this._isHover || this._isDown) ? ARROW_COLOR_HOVER : [0.70,0.70,0.70,1];
+                            var col = (this._isHover || this._isDown) ? ARROW_COLOR_HOVER : [0.62,0.62,0.62,1];
 
                             try {
 
                                 if (!this._glyphFont) {
 
-                                    this._glyphFont = ScriptUI.newFont(g.font.name, 'Regular', Math.max(12, g.font.size + 4));
+                                    this._glyphFont = ScriptUI.newFont(g.font.name, 'Regular', Math.max(13, g.font.size + 5));
 
                                 }
 
@@ -13894,7 +15685,7 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                             var x = Math.round(w/2 - 4);
 
-                            var y = Math.round(h/2 - (g.font.size/2) - 1);
+                            var y = Math.round(h/2 - (g.font.size/2) - 4);
 
                             try {
 
@@ -13906,11 +15697,9 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                         };
 
-
                         defocusButtonBestEffort(btn);
 
                     }
-
 
                     // Keep arrows close together
 
@@ -13920,10 +15709,9 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     arrowGrp.alignChildren = ['left','center'];
 
-                    arrowGrp.spacing = 2;
+                    arrowGrp.spacing = 0;
 
                     arrowGrp.margins = 0;
-
 
                     var btnUp = arrowGrp.add("button", undefined, "▲");
 
@@ -13933,7 +15721,6 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     _styleDlgChevron(btnDn, '▼', 'Move down');
 
-
                     // Dialog action buttons using the SAME stack-cell architecture used elsewhere (e.g. Font Audit CLOSE)
 
                     // This avoids the native focus-ring look on macOS.
@@ -13941,7 +15728,6 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                     var __dlgBtnH2 = clippedBtnH();
 
                     var __dlgMinW2 = 90;
-
 
                     function __makeDlgCellBtn__(parent, label, minW){
 
@@ -13954,7 +15740,6 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                         cell.alignment     = ['left','center'];
 
                         cell.margins       = 0;
-
 
                         var b = cell.add('button', undefined, label);
 
@@ -13972,9 +15757,7 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     }
 
-
                     controls.add('statictext', undefined, '   ');
-
 
                     var __okPack     = __makeDlgCellBtn__(controls, 'OK', 70);
 
@@ -13984,11 +15767,9 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     var btnCancel    = __cancelPack.btn;
 
-
                     // Do NOT force focus to OK (causes highlight ring). Keep focus on listbox.
 
                     try { lb.active = true; } catch(eAF){ }
-
 
                     function moveSel(dir){
 
@@ -14018,16 +15799,13 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     }
 
-
                     btnUp.onClick = function(){ moveSel(-1); };
 
                     btnDn.onClick = function(){ moveSel(1); };
 
-
                     btnCancel.onClick = function(){ dlg.close(0); };
 
                     btnOk.onClick = function(){ dlg.close(1); };
-
 
                     var res = dlg.show();
 
@@ -14041,8 +15819,10 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                         }
 
-                        _stBO_saveOrder(aKey, title, outIds);
-
+                        try {
+                            if (!__ST_SECTION_BUTTONS[aKey]) __ST_SECTION_BUTTONS[aKey] = {};
+                            __ST_SECTION_BUTTONS[aKey][title] = outIds.slice(0);
+                        } catch (eRegSave) {}
 
                         // Rebuild the accordion UI (prevents duplicate UI nodes when sections have complex buildFns)
 
@@ -14053,7 +15833,8 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                         // IMPORTANT: after rebuilding UI nodes, request a single debounced full palette relayout (avoids layout storms).
 
                         try { requestFullRelayoutSoon(); } catch (eFR) {}
-
+                try { if (container && container.layout) container.layout.layout(true); } catch (eCL) {}
+                try { if (container && container.parent && container.parent.layout) container.parent.layout.layout(true); } catch (eCPL) {}
 
                     }
 
@@ -14065,11 +15846,9 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
             }
 
-
             // Pass 4.8: expose Button Reorder dialog helper
 
             try { ST.UI.showReorderButtonsDialog = _showReorderButtonsDialog; } catch (e) {}
-
 
             function toggle() {
                 // Debounce: prevent accidental double-toggles from overlapping mouse handlers
@@ -14077,7 +15856,6 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                 try { now = (new Date()).getTime(); } catch (eT) { now = 0; }
                 if (now && state._lastToggle && (now - state._lastToggle) < 180) return;
                 state._lastToggle = now;
-
 
                 var ks = null;
                 try { ks = ScriptUI.environment.keyboardState; } catch (eKS) {}
@@ -14092,7 +15870,7 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                          // Ensure contents are built at least once so we know the section's buttons
                          _ensureBuilt();
 
-                         var aKey = (body && body._stAccordionKey) ? body._stAccordionKey : (orderSettingsKeyOrNull || "NOACC");
+                         var aKey = (body && body._stAccordionKey) ? body._stAccordionKey : "SESSION_ONLY";
                          var reg = _stBO_getRegistry(aKey, title) || [];
                          if (!reg || !reg.length) {
                              alert("No buttons found in this section yet.\n\nTry expanding the section once, then Option+Click again.");
@@ -14124,7 +15902,6 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                     safeRelayout();
 return;
                 }
-
 
                  // Normal click = accordion behavior (open one, close others)
                 if (state.collapsed) {
@@ -14166,7 +15943,115 @@ state.setCollapsed = setCollapsed;
     var api = {
         defineSection: function(title, buildFn) { defs.push({ title: title, buildFn: buildFn }); },
         build: function() { _buildAccordionUI(); },
-        collapseAll: function() { try { collapseAllNow(); } catch (e) {} }
+        collapseAll: function() { try { collapseAllNow(); } catch (e) {} },
+        getOrder: function() {
+            try { return currentOrder ? currentOrder.slice(0) : []; } catch (e) {}
+            return [];
+        },
+        getCollapsedMap: function() {
+            var out = {};
+            try {
+                for (var k in statesByTitle) {
+                    if (!statesByTitle.hasOwnProperty(k)) continue;
+                    out[k] = !!(statesByTitle[k] && statesByTitle[k].collapsed);
+                }
+            } catch (e) {}
+            return out;
+        },
+        setCollapsedMap: function(mapObj) {
+            try {
+                mapObj = mapObj || {};
+                for (var k in mapObj) {
+                    if (!mapObj.hasOwnProperty(k)) continue;
+                    if (!statesByTitle[k]) statesByTitle[k] = { collapsed: true };
+                    statesByTitle[k].collapsed = !!mapObj[k];
+                }
+                _buildAccordionUI();
+                try { safeRelayout(); } catch (eRL3) {}
+                try { requestFullRelayoutSoon(); } catch (eFR3) {}
+            } catch (eSetCol) {}
+        },
+        setOrder: function(arr, skipSave) {
+            try {
+                currentOrder = (arr && arr.slice) ? arr.slice(0) : [];
+                try {
+                    if (defs && defs.length) {
+                        var __orderedDefs1 = [];
+                        var __usedDefs1 = {};
+                        for (var __i1 = 0; __i1 < currentOrder.length; __i1++) {
+                            var __t1 = String(currentOrder[__i1]);
+                            for (var __j1 = 0; __j1 < defs.length; __j1++) {
+                                if (defs[__j1] && defs[__j1].title === __t1 && !__usedDefs1[__t1]) {
+                                    __orderedDefs1.push(defs[__j1]);
+                                    __usedDefs1[__t1] = true;
+                                    break;
+                                }
+                            }
+                        }
+                        for (var __k1 = 0; __k1 < defs.length; __k1++) {
+                            var __d1 = defs[__k1];
+                            var __dt1 = (__d1 && __d1.title) ? String(__d1.title) : "";
+                            if (!__dt1 || __usedDefs1[__dt1]) continue;
+                            __orderedDefs1.push(__d1);
+                            __usedDefs1[__dt1] = true;
+                        }
+                        defs = __orderedDefs1;
+                    }
+                } catch (eSync1) {}
+                _buildAccordionUI();
+                try { safeRelayout(); } catch (eRL2) {}
+                try { requestFullRelayoutSoon(); } catch (eFR2) {}
+            } catch (eSetOrd) {}
+        },
+        showReorderSectionsDialog: function(dialogTitle) {
+            try {
+                var items = [];
+                for (var i = 0; i < currentOrder.length; i++) {
+                    items.push({ id: currentOrder[i], label: currentOrder[i] });
+                }
+                var outIds = _shineShowReorderListDialog(
+                    dialogTitle || "Reorder Sections",
+                    items,
+                    {
+                        infoText: "Reorder sections for the MAIN tab.",
+                        dialogW: 360,
+                        listW: 324,
+                        listH: 400
+                    }
+                );
+                if (!outIds || !outIds.length) return;
+                currentOrder = outIds.slice(0);
+                try {
+                    if (defs && defs.length) {
+                        var __orderedDefs2 = [];
+                        var __usedDefs2 = {};
+                        for (var __i2 = 0; __i2 < currentOrder.length; __i2++) {
+                            var __t2 = String(currentOrder[__i2]);
+                            for (var __j2 = 0; __j2 < defs.length; __j2++) {
+                                if (defs[__j2] && defs[__j2].title === __t2 && !__usedDefs2[__t2]) {
+                                    __orderedDefs2.push(defs[__j2]);
+                                    __usedDefs2[__t2] = true;
+                                    break;
+                                }
+                            }
+                        }
+                        for (var __k2 = 0; __k2 < defs.length; __k2++) {
+                            var __d2 = defs[__k2];
+                            var __dt2 = (__d2 && __d2.title) ? String(__d2.title) : "";
+                            if (!__dt2 || __usedDefs2[__dt2]) continue;
+                            __orderedDefs2.push(__d2);
+                            __usedDefs2[__dt2] = true;
+                        }
+                        defs = __orderedDefs2;
+                    }
+                } catch (eSync2) {}
+                _buildAccordionUI();
+                try { safeRelayout(); } catch (eRL) {}
+                try { requestFullRelayoutSoon(); } catch (eFR) {}
+            } catch (eDlg) {
+                alert("Reorder failed: " + String(eDlg));
+            }
+        }
     };
 
     return api;
@@ -14179,10 +16064,14 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         // MAIN TAB UI
         // =========================================================
         var root = tabMain.add("group");
+        try { pal.__stMainTabRoot = root; } catch (eStoreMain) {}
         root.orientation   = "column";
         root.alignChildren = ["fill", "fill"];
         root.margins       = 0;
         root.spacing       = 0;
+
+        // Workspace Manager launcher
+        _addWorkspaceLauncherRow(root, "MAIN");
 
         // LOGO HEADER (shared helper)
         addLogoHeader(root);
@@ -14276,7 +16165,6 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         favRightPad.minimumSize = [TOPROW_DD_RIGHT_TRIM, 1];
         favRightPad.maximumSize = [TOPROW_DD_RIGHT_TRIM, 10000];
 
-
         try {
             var f = favDD.graphics.font;
             var newSize = Math.max(12, (f && f.size ? (f.size + 2) : 13));
@@ -14290,25 +16178,36 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                     try { favDD.removeAll(); } catch (e0) {}
                     var blank = favDD.add("item", " ");
                     blank._isBlank = true;
+                    var __favIndent = "    ";
                     var favs = favLoad();
                     if (favs.length === 0) {
-                        var empty = favDD.add("item", "(No saved files)");
+                        var empty = favDD.add("item", "(No files)");
                         empty.enabled = false;
                     } else {
                         for (var i = 0; i < favs.length; i++) {
-                            var ff = new File(favs[i]);
-                            var displayName = _stPrettyFileLabel(favs[i]);
-                            // Do not manually ellipsis; let ScriptUI clip naturally based on popup width.
-                            var it = favDD.add("item", displayName);
-                            it._fullText = displayName;
-                            it._path = favs[i];
+                            var favEntry = favs[i];
+                            var rawFav = _favEntryPath(favEntry);
+                            if (!rawFav) continue;
+
+                            if (_favIsDividerToken(rawFav)) {
+                                var divLabel = _favDividerDisplay(_favDividerLabelFromToken(rawFav));
+                                var divItem = favDD.add("item", divLabel);
+                                divItem._isDivider = true;
+                                divItem._fullText = divLabel;
+                                try { divItem.enabled = false; } catch (eDivDis) {}
+                                continue;
+                            }
+
+                            var displayName = String(_favEntryLabel(favEntry) || _stPrettyFileLabel(rawFav) || "").replace(/^[\s\u00A0]+/, "");
+                            var it = favDD.add("item", __favIndent + displayName);
+                            it._fullText = __favIndent + displayName;
+                            it._path = rawFav;
                             try { it.helpTip = displayName; } catch (eTip) {}
                         }
                     }
 
                     favDD.add("separator");
                     favDD.add("item", FAV_ACTION_CLEAR);
-                    // Default selection: blank row
                     try { favDD.selection = 0; } catch (eSel) {}
                 }
 
@@ -14316,14 +16215,127 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                     _applyDropdownLabelClamp(favDD);
 
                 favRebuildDropdown();
+                try { pal.__stFavRebuildDropdown = favRebuildDropdown; } catch (eFavHook) {}
+
+                try {
+                    var _openFavReorder = function () {
+                        var favs = favLoad() || [];
+                        if (!favs.length) { alert("No Library Elements to reorder."); return; }
+                        var items = [];
+                        for (var iFR = 0; iFR < favs.length; iFR++) {
+                            var favEntry = favs[iFR];
+                            var fp = _favEntryPath(favEntry);
+                            if (!fp) continue;
+                            if (_favIsDividerToken(fp)) {
+                                var __favDivLbl = _favDividerDisplay(_favDividerLabelFromToken(fp));
+                                items.push({ id: fp, label: __favDivLbl, _isDivider: true });
+                            } else {
+                                items.push({ id: fp, label: String(_favEntryLabel(favEntry) || _stPrettyFileLabel(fp) || "").replace(/^[\s\u00A0]+/, "") });
+                            }
+                        }
+                        var outFav = _shineShowReorderListDialog(
+                            "Organize Library Elements",
+                            items,
+                            ST.UI.Organize.buildConfig("library_elements", {
+                                onAddFiles: function(lb, dlg, opts) {
+                                    var picked = favOpenDialogFromDefaultFolder();
+                                    if (!picked) return false;
+                                    if (!(picked instanceof Array)) picked = [picked];
+
+                                    var insertAt = lb.items.length;
+                                    try {
+                                        if (lb.selection) {
+                                            var selId = String(lb.selection._id || "");
+                                            for (var si = 0; si < lb.items.length; si++) {
+                                                if (String(lb.items[si]._id || "") === selId) { insertAt = si + 1; break; }
+                                            }
+                                        }
+                                    } catch (eFavSelIns) {}
+
+                                    var addedAny = false;
+                                    for (var pi = 0; pi < picked.length; pi++) {
+                                        var f = picked[pi];
+                                        if (!f || !f.exists) continue;
+                                        var favPath = String(f.fsName || "");
+                                        if (!favPath) continue;
+
+                                        var exists = false;
+                                        for (var li = 0; li < lb.items.length; li++) {
+                                            try { if (String(lb.items[li]._id || "") === favPath) { exists = true; break; } } catch (eFavDup) {}
+                                        }
+                                        if (exists) continue;
+
+                                        var addLabel = String(_stPrettyFileLabel(favPath) || "").replace(/^[\s ]+/, "");
+                                        var itAdded = lb.add("item", addLabel);
+                                        try { itAdded._id = favPath; } catch (eFavSet0) {}
+                                        try { itAdded._label = addLabel; } catch (eFavSet1) {}
+                                        try { itAdded._isDivider = false; } catch (eFavSet2) {}
+                                        try { itAdded.helpTip = addLabel; } catch (eFavSet3) {}
+                                        try { itAdded.enabled = true; } catch (eFavSet4) {}
+                                        try { itAdded.selected = true; } catch (eFavSet5) {}
+                                        try {
+                                            if (typeof insertAt === "number" && insertAt < (lb.items.length - 1)) {
+                                                itAdded.index = insertAt;
+                                                insertAt++;
+                                            }
+                                        } catch (eFavReindex) {}
+                                        addedAny = true;
+                                    }
+                                    return addedAny;
+                                },
+                                originalFilenameForId: function(id) { return _stPrettyFileLabel(id); },
+                                displayLabelForId: function(id, label, obj, showOriginalFilename) {
+                                    if (obj && obj._isDivider) return label;
+                                    if (!showOriginalFilename && label) return String(label);
+                                    return _stPrettyFileLabel(id);
+                                },
+                                sectionChoices: FAV_DEFAULT_DIVIDERS,
+                                sectionTokenForChoice: function(choice) { return _favDividerToken(choice); },
+                                newDividerTokenForLabel: function(label) { return _favDividerToken(label); },
+                                newDividerDisplayForLabel: function(label) { return _favDividerDisplay(label); }
+                            })
+                        );
+                        if (!outFav || !outFav.length) return;
+
+                        var outEntries = [];
+                        for (var iFO = 0; iFO < outFav.length; iFO++) {
+                            var obj = outFav[iFO];
+                            var outId = String(obj.id || "");
+                            if (!outId) continue;
+                            if (_favIsDividerToken(outId)) {
+                                outEntries.push(outId);
+                            } else {
+                                outEntries.push(_favMakeEntry(outId, String(obj.label || "")));
+                            }
+                        }
+
+                        try { outEntries = _favEnsureDefaultDividers(outEntries); } catch (eFavDivSave) {}
+                        favSave(outEntries);
+                        favRebuildDropdown();
+                        try { _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 900, padW: 44 }); } catch (eFit2) {}
+
+                        try {
+                            var __wsName = String((pal && pal.__stCurrentWorkspaceName) ? pal.__stCurrentWorkspaceName : "");
+                            if (__wsName && typeof _stSaveWorkspaceByName === "function") _stSaveWorkspaceByName(__wsName);
+                        } catch (eWSSave) {}
+                    };
+                    var _favReorderMouse = function(){
+                        var ks = null; try { ks = ScriptUI.environment.keyboardState; } catch (eKSF) {}
+                        if (ks && ks.altKey) { _openFavReorder(); }
+                    };
+                    favStar.addEventListener("mousedown", _favReorderMouse);
+                    favLbl.addEventListener("mousedown", _favReorderMouse);
+                } catch (eFavReorder) {}
 
                 // Keep the popup list tight to content (no excessive empty space on the right)
                 _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 520, padW: 44 });
                 try {
-                    favDD.onActivate = function () { _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 520, padW: 44 }); };
+                    favDD.onActivate = function () {
+                        try { ST.UI.Dropdown.markInteraction(favDD, 5000); } catch (eMarkFav) {}
+                        _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 520, padW: 44 });
+                    };
                     favDD.onMouseDown = favDD.onActivate; // some builds fire mouse down earlier than activate
                 } catch (ePop) {}
-
 
                 favAddBtn.onClick = function () {
                     if (!requireProject()) return;
@@ -14339,7 +16351,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                     // Normalize to array
                     if (!(picked instanceof Array)) picked = [picked];
 
-                    // Add to saved list (no import on normal click)
+                    // Add to list (no import on normal click)
                     for (var i = 0; i < picked.length; i++) {
                         var f = picked[i];
                         if (!f || !f.exists) continue;
@@ -14362,48 +16374,61 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                 };
 
                 favDD.onChange = function () {
-                    if (favDD.__shineProgrammatic) return;
-                    if (!favDD.selection) return;
+                    try {
+                        if (favDD.__shineProgrammatic) {
+                            favDD.__shineProgrammatic = false;
+                            return;
+                        }
+                        if (!favDD.selection) return;
 
-                    var item = favDD.selection;
+                        var item = favDD.selection;
 
-                    // Cmd+click (modified selection) removes the item from the list.
-                    if (item && item._path && _isCmdDown()) {
-                        try {
-                            favRemovePath(item._path);
+                        // Cmd+click (modified selection) removes the item from the list.
+                        if (item && item._path && _isCmdDown()) {
+                            try {
+                                favRemovePath(item._path);
+                                favRebuildDropdown();
+                                relayout();
+                            } catch (eR) {}
+                            ST.UI.Dropdown.reset(favDD, 1);
+                            return;
+                        }
+                        if (item && item._isBlank) {
+                            ST.UI.Dropdown.reset(favDD, 1);
+                            return;
+                        }
+                        var choice = item.text;
+
+                        if (choice === "(No files)") { ST.UI.Dropdown.reset(favDD, 1); return; }
+
+                        if (choice === FAV_ACTION_CLEAR) {
+                            favClear();
                             favRebuildDropdown();
                             relayout();
-                        } catch (eR) {}
-                        return;
+                            ST.UI.Dropdown.reset(favDD, 1);
+                            return;
+                        }
+
+                        var path = String(item._path || "");
+                        if (!path) {
+                            ST.UI.Dropdown.reset(favDD, 1);
+                            return;
+                        }
+
+                        var fileObj = new File(path);
+                        if (!fileObj.exists) {
+                            alert("This file can’t be found:\n" + path + "\n\nIt will stay in Favorites until you Clear Favorites.");
+                            ST.UI.Dropdown.reset(favDD, 1);
+                            return;
+                        }
+
+                        try { favImportToBinAndTimeline(fileObj); } catch (eFavImp) {
+                            try { alert("Favorite import failed:\n" + eFavImp.toString()); } catch (eFavImp2) {}
+                        }
+                        ST.UI.Dropdown.reset(favDD, 1);
+                    } catch (eFavSel) {
+                        try { alert("Favorites dropdown error:\n" + eFavSel.toString()); } catch (eFavSel2) {}
                     }
-                    if (item && item._isBlank) return;
-                    var choice = item.text;
-
-                    function resetSoon() {
-                        try { _ddFlashThenReset(favDD, 25); } catch (eRS) {}
-                    }
-
-                    if (choice === "(No saved files)") { try { favDD.selection = 0; } catch (e0) {} return; }
-
-                    if (choice === FAV_ACTION_CLEAR) {
-                        favClear();
-                        favRebuildDropdown();
-                        relayout();
-                        return;
-                    }
-
-                    var path = item._path;
-                    if (!path) return;
-
-                    var fileObj = new File(path);
-                    if (!fileObj.exists) {
-                        alert("This file can’t be found:\n" + path + "\n\nIt will stay in Favorites until you Clear Favorites.");
-                        return;
-                    }
-
-                    favImportToBinAndTimeline(fileObj);
-                    // Keep the selection visible briefly, then revert to blank.
-                    resetSoon();
                 };
 
                 var favGap = favWrap.add("group");
@@ -14425,8 +16450,8 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         accHost.margins       = ST_CONST.COLORS.TRANSPARENT_RGBA;
         accHost.spacing       = 10;
 
-        var mainAcc = createAccordion(accHost, null, function(){ requestRelayoutSoon(content, 40); }, "AccordionOrder_MAIN");
-
+        var mainAcc = createAccordion(accHost, null, function(){ requestRelayoutSoon(content, 40); }, "MAIN_UI");
+        try { pal.__stMainAccordion = mainAcc; } catch (eMainAcc0) {}
 
 // =========================
 // Sections / buttons (MAIN)  (re-orderable with header chevrons)
@@ -14476,7 +16501,7 @@ mainAcc.defineSection(ST_LABELS.UTILITIES, function(body){
         {
             text: "ADD PHOTO BORDER",
             onClick: addPhotoBorder_Util,
-            helpTip: "Creates a stroke-only rectangle border shape layer sized to the comp."
+            helpTip: "Click: Create a photo border rig around the selected image.\nOption: Refit the selected bordered precomp to the current BORDER_CONTENT size and center."
         },
         {
             text: "EXTEND BORDERS",
@@ -14547,8 +16572,7 @@ mainAcc.defineSection("RENDER", function(body){
         }]);
 });
 
-
-// Build accordion in persisted order
+// Build accordion in current live session order
 mainAcc.build();
 
 var collapseGap = content.add("group");
@@ -14568,6 +16592,21 @@ var collapseGap = content.add("group");
         try { pal.minimumSize = [300, 260]; } catch (eMin) {}
 
         // --------------------------------------------------
+        // Panel close/hide cleanup
+        // --------------------------------------------------
+        function _stPanelCloseCleanup() {
+            try {
+                if (!(myPal instanceof Window)) return;
+            } catch (eDock) {}
+            try { $.global.__ShineToolsClosing__ = true; } catch (e0) {}
+            try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (e0a) {}
+            try { if (__resizeTask) app.cancelTask(__resizeTask); } catch (e1) {}
+            try { if (_stHoverTaskId !== null) app.cancelTask(_stHoverTaskId); } catch (e4) {}
+            try { $.global.__ShineTools_pal = null; } catch (e6) {}
+            try { $.global.__ShineToolsInitialized = false; } catch (e7) {}
+        }
+
+        // --------------------------------------------------
         // Resize / relayout (optimized + stable)
         // --------------------------------------------------
         // ScriptUI can flicker if we call layout(true) repeatedly while dragging.
@@ -14584,8 +16623,6 @@ var collapseGap = content.add("group");
             }
         }
 
-
-
         function _clampAllDropdowns() {
             try {
                 var dds = $.global.__ShineToolsAllDropdowns;
@@ -14596,40 +16633,196 @@ var collapseGap = content.add("group");
                 }
             } catch (eDD) {}
         }
+
+        var __lastLiveResizeMs = 0;
+        var __LIVE_RESIZE_INTERVAL_MS = 120;
+
+        function _stNowMsLocal() {
+            try { return (new Date()).getTime(); } catch (eNow) {}
+            return 0;
+        }
+
         $.global[__RESIZE_TICK_FN] = function () {
             __resizeTask = 0;
+            try { if ($.global.__ShineToolsClosing__ === true) return; } catch (ePC5) {}
             try { pal.layout.layout(true); } catch (e1) {}
+            try { __stCenterLogoHeaders(); } catch (e1a) {}
             try { pal.layout.resize(); } catch (e2) {}
-            // Keep the yellow badge indicators stable during/after resize
-// After resize, re-clamp dropdown item labels so popup widths match controls.
+            try { __stCenterLogoHeaders(); } catch (e2a) {}
+            // Only do the expensive dropdown text clamp once after resize settles.
             _clampAllDropdowns();
+            try { if (pal && pal.update) pal.update(); } catch (e3) {}
         };
 
         function requestFullRelayoutSoon() {
-            _cancelResizeTask();
-            // Small debounce keeps UI smooth but correct after drag and after accordion toggles.
-            try { __resizeTask = app.scheduleTask(__RESIZE_TICK_FN + "()", 80, false); } catch (e1) {
-                try { pal.layout.layout(true); } catch (e2) {}
-                try { pal.layout.resize(); } catch (e3) {}
-            }
+            try { if ($.global.__ShineToolsClosing__ === true) return; } catch (e0) {}
+            try { if (pal && pal.layout) pal.layout.resize(); } catch (e5) {}
+            try { __stCenterLogoHeaders(); } catch (e6) {}
+            try { _clampAllDropdowns(); } catch (e7) {}
+            try { if (pal && pal.update) pal.update(); } catch (e8) {}
         }
 
         // Expose relayout request so long operations can refresh UI after blocking calls (render, etc.)
         try { $.global.__ShineTools_RequestFullRelayoutSoon__ = requestFullRelayoutSoon; } catch (eExp) {}
 
+        var __lastLiveResizeW = -1;
+        var __lastLiveResizeH = -1;
+        var __stLiveResizeChromeFrozen = false;
+        var __stLiveResizeFrozenCtrls = [];
+
+        function __stCenterLogoHeaders() {
+            try {
+                var arr = $.global.__ShineToolsLogoHeaders;
+                if (!arr || !arr.length) return;
+                for (var i = 0; i < arr.length; i++) {
+                    var item = arr[i];
+                    try {
+                        if (!item || !item.outer || !item.lane) continue;
+                        var outerW = 0, laneW = 0, y = 0;
+                        try {
+                            if (item.outer.size) outerW = item.outer.size[0];
+                            if (item.lane.size) laneW = item.lane.size[0];
+                        } catch (eSz) {}
+                        if (outerW <= 0) {
+                            try { outerW = item.outer.bounds[2] - item.outer.bounds[0]; } catch (eB0) {}
+                        }
+                        if (laneW <= 0) {
+                            try { laneW = item.lane.bounds[2] - item.lane.bounds[0]; } catch (eB1) {}
+                        }
+                        if (laneW <= 0 && item.width) laneW = item.width;
+                        try { y = item.lane.location ? item.lane.location[1] : 0; } catch (eY) { y = 0; }
+                        if (outerW > 0 && laneW > 0) {
+                            var x = Math.round((outerW - laneW) / 2);
+                            try { item.lane.location = [x, y]; } catch (eLoc) {}
+                        }
+                    } catch (eOne) {}
+                }
+            } catch (e) {}
+        }
+
+        try { $.global.__ShineToolsCenterLogoHeaders__ = __stCenterLogoHeaders; } catch (eExpLogo) {}
+
+        function __stFreezeCtrlSize(ctrl) {
+            try {
+                if (!ctrl || ctrl.__stFrozenByLiveResize) return;
+                var w = 0, h = 0;
+                try {
+                    if (ctrl.size) { w = ctrl.size[0]; h = ctrl.size[1]; }
+                    if ((!w && w !== 0) || (!h && h !== 0)) {
+                        w = ctrl.bounds[2] - ctrl.bounds[0];
+                        h = ctrl.bounds[3] - ctrl.bounds[1];
+                    }
+                } catch (eB) {}
+                if (w <= 0 || h <= 0) return;
+                ctrl.__stOldMinSize = ctrl.minimumSize;
+                ctrl.__stOldPrefSize = ctrl.preferredSize;
+                ctrl.__stOldMaxSize = ctrl.maximumSize;
+                try { ctrl.minimumSize = [w, h]; } catch (e0) {}
+                try { ctrl.preferredSize = [w, h]; } catch (e1) {}
+                try { ctrl.maximumSize = [w, h]; } catch (e2) {}
+                ctrl.__stFrozenByLiveResize = true;
+                __stLiveResizeFrozenCtrls.push(ctrl);
+            } catch (e) {}
+        }
+
+        function __stFreezeLiveResizeChrome() {
+            if (__stLiveResizeChromeFrozen) return;
+            __stLiveResizeChromeFrozen = true;
+            __stLiveResizeFrozenCtrls = [];
+            try { __stFreezeCtrlSize(tabBarLeft); } catch (e0) {}
+            try { __stFreezeCtrlSize(tabBarRight); } catch (e1) {}
+            try { __stFreezeCtrlSize(tabLblMain); } catch (e2) {}
+            try { __stFreezeCtrlSize(tabLblText); } catch (e3) {}
+            try { __stFreezeCtrlSize(tabLblRequests); } catch (e4) {}
+            try { __stFreezeCtrlSize(tabLblUpdates); } catch (e5) {}
+            try { __stFreezeCtrlSize(tabLblHelp); } catch (e6) {}
+            try { __stFreezeCtrlSize(wsMgrBackBtn); } catch (e9) {}
+            try { __stFreezeCtrlSize(wsMgrTitle); } catch (e10) {}
+        }
+
+        function __stUnfreezeLiveResizeChrome() {
+            var arr = __stLiveResizeFrozenCtrls || [];
+            for (var i = 0; i < arr.length; i++) {
+                var ctrl = arr[i];
+                try {
+                    if (!ctrl) continue;
+                    try { if (ctrl.__stOldMinSize !== undefined) ctrl.minimumSize = ctrl.__stOldMinSize; } catch (e0) {}
+                    try { if (ctrl.__stOldPrefSize !== undefined) ctrl.preferredSize = ctrl.__stOldPrefSize; } catch (e1) {}
+                    try { if (ctrl.__stOldMaxSize !== undefined) ctrl.maximumSize = ctrl.__stOldMaxSize; } catch (e2) {}
+                    try { ctrl.__stFrozenByLiveResize = false; } catch (e3) {}
+                } catch (e) {}
+            }
+            __stLiveResizeFrozenCtrls = [];
+            __stLiveResizeChromeFrozen = false;
+        }
+
         pal.onResizing = function () {
             _cancelResizeTask();
-            try { pal.layout.resize(); } catch (e0) {}
-            // Keep badge indicators stable while the user is actively dragging the panel size
-            _clampAllDropdowns();
+            try { $.global.__ShineToolsIsLiveResizing__ = true; } catch (eFlag0) {}
+            try { if (pal && pal.layout) pal.layout.resize(); } catch (e0) {}
+            try { __stCenterLogoHeaders(); } catch (e0a) {}
+            try { if (pal && pal.update) pal.update(); } catch (e1) {}
         };
 
         pal.onResize = function () {
-            requestFullRelayoutSoon();
+            try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (eFlag1) {}
+            __lastLiveResizeW = -1;
+            __lastLiveResizeH = -1;
+            __lastLiveResizeMs = 0;
+
+            try { if (pal && pal.layout) pal.layout.resize(); } catch (e0) {}
+            try { __stCenterLogoHeaders(); } catch (e1) {}
+            try { _clampAllDropdowns(); } catch (e2) {}
+            try { if (pal && pal.update) pal.update(); } catch (e3) {}
         };
 
+        function _stApplyInitialWorkspaceOnLaunch() {
+            try {
+                try { _stEnsureDefaultWorkspaceExists(_stCaptureWorkspaceState()); } catch (eDef0) {}
+
+                var names = [];
+                try { names = _stListWorkspaceNames() || []; } catch (eNames) { names = []; }
+
+                if (!names || !names.length) {
+                    try { pal.__stCurrentWorkspaceName = ""; } catch (e0a) {}
+                    try { pal.__stPendingWorkspaceName = ""; } catch (e0b) {}
+                    try { pal.__stStartupAppliedWorkspaceName = ""; } catch (e0c) {}
+                    try { pal.__stWorkspaceStatusName = ""; } catch (e0d) {}
+                    try { _stWriteLastUsedWorkspaceName(""); } catch (e0e) {}
+                    try { _updateWorkspaceStatusLabel(); } catch (e0f) {}
+                    return;
+                }
+
+                var wanted = "";
+                try { wanted = String(_stReadLastUsedWorkspaceName() || ""); } catch (e1) { wanted = ""; }
+                wanted = String(wanted || "").replace(/^\s+|\s+$/g, "");
+
+                var exists = false;
+                if (wanted) {
+                    for (var i = 0; i < names.length; i++) {
+                        try { if (String(names[i] || "") === wanted) { exists = true; break; } } catch (e1a) {}
+                    }
+                }
+                if (!exists) {
+                    try { wanted = String(names[0] || ""); } catch (e2) { wanted = ""; }
+                }
+                if (!wanted) {
+                    try { _updateWorkspaceStatusLabel(); } catch (e3) {}
+                    return;
+                }
+
+                try { _stLoadWorkspaceByName(wanted, { syncDropdown: true }); } catch (e4) {}
+            } catch (eInitWS) {}
+        }
+
+        try { _stApplyInitialWorkspaceOnLaunch(); } catch (eInitWS2) {}
+
         relayout();
+        try { __stCenterLogoHeaders(); } catch (eCen0) {}
                 try { _applyDefaultHelpTips(pal); } catch(eTT) {}
+        try { _updateWorkspaceStatusLabel(); } catch (eStat0) {}
+        try { if (pal.layout) pal.layout.layout(true); } catch (eStat1) {}
+        try { _updateWorkspaceStatusLabel(); } catch (eStat2) {}
 
         return pal;
     }
@@ -14663,7 +16856,6 @@ var collapseGap = content.add("group");
     }
 
     try { if (ST && ST.DEBUG === true) ST_DEBUG_VALIDATE_SYNTAX(); } catch (eDbg) {}
-
 
     // ------------------------------------------------------------
     // TEST CLEANUP: Remove any "Solids"/"SOLIDS" folders + their solid items
@@ -14713,13 +16905,10 @@ var collapseGap = content.add("group");
     // Expose + run delayed cleanups (startup checks may create Solids after initial UI)
     try { $.global.__ShineToolsCleanupSolidsFoldersBestEffort = _cleanupSolidsFoldersBestEffort; } catch(eG) {}
 
-    // Run several times over the first ~5 seconds to catch late-created Solids folders.
+    // scheduleTask startup repeats removed by request.
     try {
-        for (var dly = 250; dly <= 5250; dly += 500) {
-            app.scheduleTask("$.global.__ST_withModalSafety__(function(){try{$.global.__ShineToolsCleanupSolidsFoldersBestEffort&&$.global.__ShineToolsCleanupSolidsFoldersBestEffort();}catch(e){}});", dly, false);
-        }
+        _cleanupSolidsFoldersBestEffort();
     } catch (eT) {}
-
 
 // ------------------------------------------------------------
 // ShineTools Launch Setup Check (TAKEOVER WARNING)
@@ -14772,86 +16961,11 @@ try {
         }
 
         function _stProjectSaysJavaScriptExpressions() {
-    // Robust across AE versions: set a JS-only expression and read expressionError.
-    // If the project is using Legacy expressions, this should produce an error string.
-    if (!app.project) return false;
-
-    var testComp = null;
-    var testLayer = null;
-    var ok = true;
-
-    try {
-        testComp = app.project.items.addComp("_ST_JS_TEST_", 16, 16, 1, 1, 30);
-        testLayer = testComp.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "_ST_TEST_SOLID_JS_", 16, 16, 1);
-
-        var prop = testLayer.opacity;
-        prop.expression = "(()=>100)()";
-
-        // Force a parse/eval pass (some hosts are lazy until value is queried)
-        try { prop.valueAtTime(0, false); } catch (eEval) {}
-
-        var err = "";
-        try { err = prop.expressionError; } catch (eErr) { err = ""; }
-
-        if (err && err.toString && err.toString().length > 0) ok = false;
-    } catch (e) {
-        ok = false;
-    }
-
-    // Cleanup
-    try { if (testComp) testComp.remove(); } catch (e2) {}
-
-    return ok;
-}
-
-function _stEnsureProjectForProbe() {
-            try { if (!app.project) app.newProject(); } catch (e) {}
-            return app.project || null;
-        }
-
-        function _stProbeJavaScriptExpressions() {
-            var proj = _stEnsureProjectForProbe();
-            if (!proj) return null;
-
-            var comp = null, layer = null, prop = null;
-            // Use a token legacy doesn't support. 'const' should fail in Legacy ExtendScript expressions.
-            var expr = "var a = (()=>1)(); a*100;";
-
-            function attemptOnce() {
-                var out = { ok: false, err: "", val: null };
-                try {
-                    comp = proj.items.addComp("_ST_JS_PROBE_", 16, 16, 1, 1, 30);
-                    layer = comp.layers.addSolid(ST_CONST.COLORS.WHITE_RGB, "_probeSolid", 16, 16, 1);
-                    prop = layer.property("ADBE Transform Group").property("ADBE Opacity");
-                    prop.expression = expr;
-                    prop.expressionEnabled = true;
-
-                    try { out.val = prop.valueAtTime(0, false); } catch (eVal) {}
-                    try { out.err = prop.expressionError || ""; } catch (eErr) { out.err = ""; }
-
-                    if (!out.err || out.err === "") {
-                        if (typeof out.val === "number" && Math.abs(out.val - 100) < 0.001) out.ok = true;
-                    }
-                } catch (e) {
-                    out.ok = false;
-                    out.err = String(e);
-                } finally {
-                    try { if (comp) comp.remove(); } catch (eRm) {}
-                    comp = null; layer = null; prop = null;
-                }
-                return out;
-            }
-
-            for (var i = 0; i < 3; i++) {
-                var res = attemptOnce();
-                if (res.ok === true) return true;
-
-                var err = (res.err || "").toLowerCase();
-                if (err.indexOf("syntax") !== -1 || err.indexOf("unexpected") !== -1 || err.indexOf("parse") !== -1) return false;
-                try { $.sleep(50); } catch (eS) {}
-            }
-
-            return false;
+            // Non-dirty read only. Returns:
+            //   true  = definitely Modern JavaScript
+            //   false = definitely Legacy / ExtendScript
+            //   null  = unknown (do not block, do not probe)
+            try { return _stGetModernExpressionEngineStateNonDirty(); } catch (e) { return null; }
         }
 
         function _stRunLaunchChecks() {
@@ -14860,14 +16974,9 @@ function _stEnsureProjectForProbe() {
             var jsExpr = null;
             try { jsExpr = _stProjectSaysJavaScriptExpressions(); } catch (e1) { jsExpr = null; }
 
-            if (jsExpr === null) {
-                try { app.beginUndoGroup("ShineTools - Launch Check"); } catch (eUG) {}
-                try { jsExpr = _stProbeJavaScriptExpressions(); } catch (eP) { jsExpr = null; }
-                try { app.endUndoGroup(); } catch (eUE) {}
-            }
-
             var canWriteOk = (canWrite === true);
-            var jsExprOk   = (jsExpr === true);
+            // Unknown should not block launch and should not show the takeover.
+            var jsExprOk   = (jsExpr !== false);
             return { ok: (canWriteOk && jsExprOk), canWrite: canWriteOk, jsExpr: jsExprOk };
         }
 
@@ -15102,7 +17211,6 @@ function _stCollapseWarn() {
             } catch (eL) {}
         }
 
-
         _stBuildTakeoverUI();
         _stCollapseWarn();
         _stApplyTakeoverVisibility(false);
@@ -15127,13 +17235,15 @@ function _stCollapseWarn() {
     })(myPal);
 } catch (eLaunchCheck) {}
 
-
 // Expose pal + a safe "kick" relayout to global scope so scheduleTask can access it.
 try { $.global.__ShineTools_pal = myPal; } catch (e0) {}
+try { $.global.__ShineToolsClosing__ = false; } catch (e0a) {}
+try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (e0aa) {}
 
 try { $.global.__ShineToolsInitialized = true; } catch (e0b) {}
 try {
     $.global.__ShineToolsKickLayout = function () {
+        try { if ($.global.__ShineToolsClosing__ === true) return; } catch (ePC3) {}
         var p = null;
         try { p = $.global.__ShineTools_pal; } catch (e1) {}
         if (!p) return;
@@ -15144,21 +17254,28 @@ try {
     };
 } catch (e6) {}
 
+try {
+    if (myPal instanceof Window) {
+        myPal.onClose = _stPanelCloseCleanup;
+        myPal.onHide  = _stPanelCloseCleanup;
+    } else {
+        myPal.onClose = function(){};
+        myPal.onHide  = function(){};
+    }
+} catch (ePCOnBind) {}
+
 if (myPal instanceof Window) {
     myPal.center();
     myPal.show();
 
-    // Final layout pass after show (helps ScriptUI settle bounds).
+    // Final layout pass after show.
+    // Close-safety patch: avoid delayed post-show relayout tasks that can outlive panel teardown.
     try { $.global.__ShineToolsKickLayout(); } catch (e7) {}
-    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 30, false); } catch (e8) {}
-    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 120, false); } catch (e9) {}
 } else {
-    // Dockable panels often need an extra layout pass AFTER they are actually drawn.
+    // For docked panels, repeated delayed kick-layout passes can cause the footer to visibly jump.
+    // Do a single synchronous settle pass only.
     try { $.global.__ShineToolsKickLayout(); } catch (e10) {}
-    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 30, false); } catch (e11) {}
-    try { app.scheduleTask("$.global.__ST_withModalSafety__(function(){ __ShineToolsKickLayout(); });", 120, false); } catch (e12) {}
 }
-
 
 // CleanPack9: robust host-panel resolution (prevents "Object is invalid" when stale Panel refs exist)
 })( (function(){
@@ -15171,3 +17288,13 @@ if (myPal instanceof Window) {
     } catch (e) {}
     return this;
 })() );
+
+function _updateWorkspaceManagerLoadedStatus(name) {
+    try {
+        var nm = String(name || "").replace(/^\s+|\s+$/g, "");
+        if (!nm) return;
+        if (pal.__stWorkspaceManagerStatusLabel) {
+            pal.__stWorkspaceManagerStatusLabel.text = "Loaded Workspace: " + nm;
+        }
+    } catch (e) {}
+}
