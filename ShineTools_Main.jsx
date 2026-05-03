@@ -1,13 +1,16 @@
-
 // =================================================================================================
-// ShineTools Final Polish Pass
-// Build: FINAL_POLISH_2026-02-22
+// ShineTools_Main.jsx
+// Clean Base: 2026-05-02
+// Version: v1.1
+// Build marker: CLEAN_BASE_HOVERLIVE_RENAME_REFRESH_2026-05-02
+//
 // Notes:
-//   - Consolidates ST_LABELS + ST_CONST into ST.TEXT / ST.CONST (backwards-compatible aliases kept)
-//   - Adds init guard to prevent double-initialization when loader re-runs
-//   - Keeps behavior identical otherwise
-// Source base: CleanPack9_REAL (loadable)
+// - Conservative cleanup pass from the working HoverLive clean base.
+// - Keeps current UI behavior, tool wiring, workspace loading, and hover polling intact.
+// - Removes stale diagnostic comments and consolidates only obvious redundant namespace setup.
+// - Uses native ScriptUI controls; no custom paint callbacks are installed.
 // =================================================================================================
+
 var ST = ST || {};
 
 ST.TEXT = ST.TEXT || {
@@ -35,7 +38,7 @@ ST.TEXT = ST.TEXT || {
     CUBIC: "CUBIC",
     SQUARE: "SQUARE",
 
-    // CleanPack8 additions (repeated UI labels)
+    // Shared UI labels
     CHECK_FOR_UPDATES: "CHECK FOR UPDATES",
     INSTALL_UPDATE: "INSTALL UPDATE",
     OFFSET_LAYERS: "OFFSET LAYERS",
@@ -64,18 +67,6 @@ ST.CONST = ST.CONST || {
 var ST_LABELS = ST.TEXT;
 var ST_CONST  = ST.CONST;
 
-/*  ShineTools_v1.0.jsx  (Tabbed UI)
-// BUILD: YellowLine merge + Dot removed | FIX PACK b (Animate Stroke hover + Option START Trim Paths) | ORGANIZE BIN primary 01_ folder detection (01_MAIN/01_SEQ) | 2026-02-19T15:36:13.668976ZTabs:
-      - MAIN  (your current full tool)
-      - TEXT  (Break Apart Text tools)
-
-    NOTES:
-      - Favorites live ONLY in MAIN tab.
-      - TEXT tab now includes the same SHINE TOOLS logo header for alignment.
-      - TEXT tab has a collapsible section: "BREAK APART TEXT" with 3 buttons:
-          BY CHARACTER / BY WORD / BY LINE
-*/
-
 // =======================================================
 // SHINE TOOLS – VERSION (EDIT THIS ONLY PER RELEASE)
 // =======================================================
@@ -85,7 +76,7 @@ var ST_CONST  = ST.CONST;
 
 var SHINE_PRODUCT_NAME = "ShineTools";
 var SHINE_VERSION      = "1.1";
-var __ST_PATCH_MARKER__ = "FULL_REFACTOR_PASS_V1 | WORKSPACE_NAMESPACE_CLEANUP | ORGANIZE_DIALOG_CONFIG_UNIFY | DROPDOWN_NAMESPACE_UNIFY | IMPORT_WORKSPACE_SAVE_FIX";
+var __ST_PATCH_MARKER__ = "KNOWN_STABLE_HOVER_BASE_ADDED_FLASH_SYNC_2026-05-02";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
@@ -184,6 +175,7 @@ function _updateWorkspaceStatusLabel(options) {
         var __stDoRelayout = true;
         try { if (options && options.suppressLayout) __stDoRelayout = false; } catch (eOpt0) {}
         if (__stDoRelayout) {
+            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeWS) { return; }
             try { if (pal.layout) pal.layout.layout(true); } catch (e9) {}
             try { if (pal.layout) pal.layout.resize(); } catch (e10) {}
             try { if (pal.update) pal.update(); } catch (e11) {}
@@ -237,255 +229,10 @@ function _syncWorkspaceDropdownToActiveName() {
     return false;
 }
 
-/* ============================================================
-   BUILD NOTES / PASS HISTORY (CONSOLIDATED)
-   Consolidated on: 2026-02-22T04:36:33.356289Z
-   NOTE: These are historical dev notes; code behavior unchanged.
-   ============================================================
-
-   ---- PASS BLOCK 1 ----
-   // ============================================================
-   // ------------------------------------------------------------
-   // TABLE OF CONTENTS (high-level)
-   //   0) Globals / Debug
-   //   1) JSON helpers
-   //   2) UI + Tabs
-   //   3) Accordion Factory
-   //   4) Tools (MAIN)
-   //   5) Tools (TEXT)
-   // ============================================================
-
-    // ------------------------------------------------------------
-    // AUTO INDEX (CP3) — quick reference (generated)
-    //   Total named functions: 497  |  internal helpers (_*): 267  |  public/tool actions: 230
-    //
-    //   Internal helpers (sample):
-    //     - __makeCurveDlgCellBtn  (line ~7428)
-    //     - __makeDialogCellButton__  (line ~8843)
-    //     - __makeDlgCellBtn  (line ~7131)
-    //     - __makeDlgCellBtn__  (line ~13571)
-    //     - __RunFontAuditModal__  (line ~8341)
-    //     - __st_b64IndexOf  (line ~11426)
-    //     - __st_base64DecodeToString  (line ~11430)
-    //     - __ST_confirmSafe__  (line ~7722)
-    //     - __st_extractPayload  (line ~11519)
-    //     - __st_formatComputerDisplay  (line ~11574)
-    //     - __st_getPreviousComputerName  (line ~11529)
-    //     - __st_getReferenceFolderFromProject  (line ~11461)
-    //     - __ST_openDialogSafe__  (line ~7728)
-    //     - __ST_pauseBackgroundTasks__  (line ~7657)
-    //     - __st_pickMetaFile  (line ~11475)
-    //     - __ST_promptSafe__  (line ~7716)
-    //     - __st_readFileText  (line ~11504)
-    //     - __ST_resumeBackgroundTasks__  (line ~7674)
-    //     - __ST_runExclusive__  (line ~7685)
-    //     - __ST_RunOffsetLayersModal__  (line ~7783)
-    //     - __ST_saveDialogSafe__  (line ~7741)
-    //     - __ST_selectDialogSafe__  (line ~7734)
-    //     - __ST_withModalSafety__  (line ~7702)
-    //     - _addHelpLine  (line ~11358)
-    //     - _addTrimLineAndAnimate_30f  (line ~4468)
-    //     - _appendCacheBuster  (line ~10227)
-    //     - _appHaveSetting  (line ~710)
-    //     - _applyDefaultHelpTips  (line ~12239)
-    //     - _applyDropdownLabelClamp  (line ~12000)
-    //
-    //   Public/tool actions (sample):
-    //     - add  (line ~9171)
-    //     - addAccordionSection  (line ~13182)
-    //     - addAdjustmentLayerDefault  (line ~4128)
-    //     - addCameraRig  (line ~3735)
-    //     - addCCAdjustmentRig  (line ~3787)
-    //     - addCheck  (line ~1954)
-    //     - addColor  (line ~1947)
-    //     - addDropdownHeader  (line ~12362)
-    //     - addEffect  (line ~1589)
-    //     - addGrid2  (line ~12728)
-    //     - addItem  (line ~13415)
-    //     - addLightNativePrompt  (line ~4045)
-    //     - addListItem  (line ~8398)
-    //     - addLogoHeader  (line ~12852)
-    //     - addNullDefault  (line ~4103)
-    //     - addPhotoBorder_Util  (line ~5286)
-    //     - addPlusGlyphButton  (line ~12290)
-    //     - addRoot  (line ~8523)
-    //     - addRowUI  (line ~8812)
-    //     - addSlider  (line ~1940)
-    //     - addSolidNativePrompt  (line ~3951)
-    //     - addSwatchUI  (line ~8693)
-    //     - addTrimLineAnimateEnd_30f  (line ~4560)
-    //     - addTrimLineAnimateStart_30f  (line ~4561)
-    //     - addTrimPaths  (line ~4172)
-    //     - addTwirlControl  (line ~12905)
-    //     - addWhiteSolidDefault  (line ~4076)
-    //     - animClear  (line ~3548)
-    //     - animLoad  (line ~3540)
-    //     - animOpenDialogFromDefaultFolder  (line ~3559)
-    //   (Search for "function <name>" for the authoritative location; line numbers shift as we clean.)
-    // ------------------------------------------------------------
-
-   
-   
-   // ============================================================
-   // PASS 6: DOCS + NAMING CLEANUP (COMMENT-ONLY)
-   //  - Normalize section headers and add short doc comments
-   //  - Remove a few duplicate divider lines / stale comments
-   //  - NO behavioral, layout, or persistence changes
-   // ============================================================
-
-   ---- PASS BLOCK 2 ----
-       // ============================================================
-       // PASS 14: DOCKED PANEL HANDOFF (LOADER -> MAIN)
-       // ------------------------------------------------------------
-       // When a ScriptUI Panels "loader" evalFile()s the shared main,
-       // After Effects does NOT automatically pass the docked Panel
-       // instance into the evaluated script. Without this, the main
-       // script thinks it is running standalone and creates a floating
-       // Window("palette"), leaving the docked panel blank.
-       //
-       // Fix:
-       //  - Loader sets $.global.__ST_HOST_PANEL to the docked Panel.
-       //  - Main picks it up here and uses it as thisObj.
-       // ============================================================
-
-   ---- PASS BLOCK 3 ----
-       // ============================================================
-       // PASS 13: AE 2025/2026 SHARED-MAIN BOOTSTRAP (LOADER MODEL)
-       // ------------------------------------------------------------
-       // Goal:
-       //  - Allow one "loader" file to live in each AE version's ScriptUI Panels folder
-       //  - Keep the real ShineTools code in a user-writable shared location
-       //  - Updater writes ONLY to the shared location (avoids /Applications permissions)
-       //
-       // Behavior:
-       //  - If this file is NOT the shared main file AND the shared main file exists,
-       //    we eval the shared main and return early (so this file behaves as a loader).
-       //  - If the shared main file doesn't exist yet, we run normally (self-contained),
-       //    and the updater can create the shared main on first update.
-       // ============================================================
-   
-   
-       // ============================================================
-       // Shared install root (macOS): /Library/Application Support/ShineTools
-       // Centralized so paths stay consistent across loader, presets, logos, etc.
-       // ============================================================
-
-   ---- PASS BLOCK 4 ----
-       // ============================================================
-       // PASS 12: DISTRIBUTION READINESS (ENV + BUILD INFO HANDLES)
-       // ------------------------------------------------------------
-       // Provide stable introspection helpers for packaging/support.
-       // No functional changes to tools.
-       // ============================================================
-
-   ---- PASS BLOCK 5 ----
-       // ============================================================
-       // PASS 9: HARDENING + DIAGNOSTICS (NO BEHAVIOR CHANGES)
-       // ------------------------------------------------------------
-       // Centralized logging helpers. Default is quiet unless ST.DEBUG
-       // or the specific flag is enabled.
-       // ============================================================
-
-   ---- PASS BLOCK 6 ----
-       // ============================================================
-       // PASS 7: FEATURE BOUNDARIES (NO BEHAVIOR CHANGES)
-       //  - Expose stable module-style APIs on the global ST namespace
-       //  - Keep legacy function names in place (buttons/handlers unchanged)
-       // ============================================================
-
-   ---- PASS BLOCK 7 ----
-       // ============================================================
-       // PASS 7.1: UI API SURFACE + LAYOUT UTILITIES (NO BEHAVIOR CHANGES)
-       // ------------------------------------------------------------
-       // Standardize UI helpers under ST.UI so future tweaks don't have to
-       // spelunk for local function names.
-       // ============================================================
-
-   ---- PASS BLOCK 8 ----
-       // ============================================================
-       // PASS 7.2: TOOLS API SURFACE (NO BEHAVIOR CHANGES)
-       // ============================================================
-       // PASS 8: USER POLISH (TOOLTIPS + MINOR UX CONSISTENCY)
-       //  - Add helpful tooltips to key UPDATES controls
-       //  - No behavior/layout changes
-       // ============================================================
-   
-       // ------------------------------------------------------------
-       // Expose commonly-used tool entry points in a stable namespace.
-       // This does NOT change button wiring; it only provides clean handles
-       // for future features / hotkeys / external triggers.
-       // ============================================================
-
-   ---- PASS BLOCK 9 ----
-           // PASS 14: Prefer system-wide shared install path first
-           //   /Library/Application Support/ShineTools/logo
-
-   ---- PASS BLOCK 10 ----
-       // PASS 14: Prefer system-wide shared install path first
-       //   /Library/Application Support/ShineTools/presets/text
-
-   ---- PASS BLOCK 11 ----
-   // ============================================================
-   // PASS A+: Global modal wrappers + re-entrancy guard
-   //  - Prevents "Cannot run a script while a modal dialog is waiting for response"
-   //  - Pauses scheduleTask-based background loops around ANY modal call
-   //  - Adds a simple global "busy" lock to prevent double-fire while running
-   // ============================================================
-
-   ---- PASS BLOCK 12 ----
-           // ============================================================
-           // PASS 3: BUILDUI SPLIT (NO BEHAVIOR CHANGES)
-           //   - Extracted: Top tab header builder
-           //   - Extracted: Tab stack builder
-           // ============================================================
-
-   ---- PASS BLOCK 13 ----
-               // PASS 13.1: CMD-click HELP toggles DEBUG INFO panel at bottom of HELP tab
-
-   ---- PASS BLOCK 14 ----
-           // ============================================================
-           // PASS 3.4: TAB BUILDERS (extracted for readability; NO behavior change)
-           // ============================================================
-
-   ---- PASS BLOCK 15 ----
-               // PASS PC: PREVIOUS COMPUTER (read from *_ShineTools_ProjectTracker.meta in 08_REFERENCE)
-               // Location rule:
-               //   08_REFERENCE is TWO folders up from the current .aep
-               // Displays in HELP just above the Launch ShineTracker row.
-
-   ---- PASS BLOCK 16 ----
-               // PASS TT: SHINETRACKER LAUNCH (always visible under HELP)
-               // (Legacy machine-tracking removed)
-
-   ---- PASS BLOCK 17 ----
-   // ============================================================
-   // PASS 5: PERFORMANCE – Batched relayout requests
-   // ------------------------------------------------------------
-   // ScriptUI can get sluggish if many sections trigger layout() in rapid succession
-   // (accordion toggles, reorder dialog commits, etc.). We batch those requests into a
-   // single scheduled tick that relayouts only the affected scope groups.
-   // ============================================================
-
-   ---- PASS BLOCK 18 ----
-       // ============================================================
-       // PASS 10: UX CONSISTENCY SWEEP (LOW RISK)
-       // ------------------------------------------------------------
-       // Helpers to standardize small UI behaviors (focus ring safety,
-       // helpTips, and lightweight visual consistency) without changing
-       // tool behavior.
-       // ============================================================
-
-   ---- PASS BLOCK 19 ----
-       // PASS 10.1: apply default tooltips to common buttons to common buttons (best-effort)
-
-   ---- PASS BLOCK 20 ----
-           // PASS 4 (lite): consolidate dropdown clamp loop (used in resize tick + live resize)
-*/
-
 (function ShineTool(thisObj) {
 
     // ============================================================
-    // INIT GUARD (Final Polish): prevent double-initialization
+    // INIT GUARD: prevent double-initialization
     // If the loader (or user) runs ShineTools more than once, reuse the existing panel instead of re-building.
     // ============================================================
     try {
@@ -574,6 +321,69 @@ function _syncWorkspaceDropdownToActiveName() {
         }
     } catch (eG) {}
 
+
+    // ============================================================
+    // MODAL/RENDER SAFE UI GATE
+    // ------------------------------------------------------------
+    // Do not remove any features. Instead, any direct ScriptUI touch
+    // (layout/update/dropdown clamp/hover tick) should pass through this
+    // gate so AE is not asked to execute UI code while it is returning
+    // from a native modal dialog, render, save, or focus transition.
+    // ============================================================
+    try {
+        $.global.__ST_MODAL_SAFE_PATCH_VERSION__ = "MODAL_RENDER_SAFE_UI_GATE";
+
+        $.global.__ST_nowMs__ = function(){
+            try { return (new Date()).getTime(); } catch(e) { return 0; }
+        };
+
+        $.global.__ST_SetUICooldown__ = function(ms) {
+            try {
+                var dur = (ms === undefined || ms === null) ? 1800 : ms;
+                dur = Math.max(0, dur);
+                var until = $.global.__ST_nowMs__() + dur;
+                if (!$.global.__ST_UI_COOLDOWN_UNTIL__ || until > $.global.__ST_UI_COOLDOWN_UNTIL__) {
+                    $.global.__ST_UI_COOLDOWN_UNTIL__ = until;
+                }
+            } catch (e) {}
+        };
+
+        $.global.__ST_isSafeToTouchUI__ = function () {
+            try {
+                try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (e0) {}
+                try { if ($.global.__ST_LONGOP__ === true) return false; } catch (e1) {}
+                try { if ($.global.__ST_MODAL_DEPTH__ && $.global.__ST_MODAL_DEPTH__ > 0) return false; } catch (e2) {}
+                try {
+                    if ($.global.__ST_UI_COOLDOWN_UNTIL__) {
+                        var now = $.global.__ST_nowMs__ ? $.global.__ST_nowMs__() : (new Date()).getTime();
+                        if (now < $.global.__ST_UI_COOLDOWN_UNTIL__) return false;
+                    }
+                } catch (e3) {}
+                try { if (app && app.isSaving) { $.global.__ST_SetUICooldown__(1800); return false; } } catch (e4) {}
+                try {
+                    if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) {
+                        $.global.__ST_LONGOP__ = true;
+                        $.global.__ST_SetUICooldown__(3000);
+                        return false;
+                    }
+                } catch (e5) {}
+                try {
+                    if ($.global.__ShineToolsIsPanelSafe__ && !$.global.__ShineToolsIsPanelSafe__()) return false;
+                } catch (e6) {}
+                return true;
+            } catch (e) {}
+            return false;
+        };
+
+        $.global.__ST_SafeUITouch__ = function(fn) {
+            try {
+                if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return null;
+                if (fn && typeof fn === "function") return fn();
+            } catch (e) {}
+            return null;
+        };
+    } catch (eSTSafePatch) {}
+
     try {
         if ($.global.__ST_HOST_PANEL && ($.global.__ST_HOST_PANEL instanceof Panel)) {
             thisObj = $.global.__ST_HOST_PANEL;
@@ -582,7 +392,7 @@ function _syncWorkspaceDropdownToActiveName() {
     try { $.global.__ST_HOST_PANEL = null; } catch (eClr) {}
 
 // =================================================================================================
-// UTILITIES: BOOTSTRAP: Shared-root / self-loader  (CLEANPACK5)
+// UTILITIES: BOOTSTRAP: Shared-root / self-loader
 // =================================================================================================
     function _stGetSharedRootFolder() {
         // Prefer the SYSTEM payload location (installer drops assets here):
@@ -701,7 +511,7 @@ function _stLooksLikeShineToolsMain(raw) {
     // 0a) Dropdown helpers (temporary display then revert to blank)
     // ============================================================
 // =================================================================================================
-// UTILITIES: UI SUPPORT: Dropdown temp state / flash  (CLEANPACK5)
+// UTILITIES: UI SUPPORT: Dropdown temp state / flash
 // =================================================================================================
     function _ensureDDStore() {
         if (!$.global.__ShineToolsDDStore) $.global.__ShineToolsDDStore = {};
@@ -713,7 +523,7 @@ function _stLooksLikeShineToolsMain(raw) {
     // ============================================================
     var ST_DEBUG_LISTS = false; // when true, logs list load/save source to the JavaScript Console
 // =================================================================================================
-// UTILITIES: DEBUG + OS INTEGRATION: debug info / clipboard / safe run  (CLEANPACK5)
+// UTILITIES: DEBUG + OS INTEGRATION: debug info / clipboard / safe run
 // =================================================================================================
     function _dbgList(msg) {
         try { if (ST_DEBUG_LISTS) $.writeln("[ShineTools][LIST] " + msg); } catch (e) {}
@@ -724,7 +534,7 @@ function _stLooksLikeShineToolsMain(raw) {
     // ============================================================
     // Namespace for debug toggles / shared state (kept global so a docked panel reload can reuse it).
     var ST = $.global.__ShineToolsNS || ($.global.__ShineToolsNS = { DEBUG: false });
-    // SAFE MODE: disable app.scheduleTask-based UI ticks to avoid ScriptUI freezes after focus/minimize.
+    // Modal-safe mode: avoid persistent app.scheduleTask UI ticks; allow guarded one-shot dropdown clear.
     // Set false if you want the original deferred UI polish back.
     ST.SAFE_MODE = (ST.SAFE_MODE === false) ? false : true;
     var SHINETOOLS_BUILD_STAMP = "2026-01-18 02:08 UTC";
@@ -768,7 +578,7 @@ function _stLooksLikeShineToolsMain(raw) {
         try {
             var out = String(msg || "Error");
             if (err) { try { out += " :: " + err.toString(); } catch (e2) {} }
-            // store last error for quick diagnostics (no behavior impact)
+            // Store the last error for quick support snapshots.
             try { ST.LastError = { tag: String(tag || "ERR"), message: out, time: (new Date()).toString() }; } catch (eLE) {}
             ST.Log._write(tag || "ERR", out);
         } catch (e) {}
@@ -787,11 +597,7 @@ function _stLooksLikeShineToolsMain(raw) {
     ST.UI = ST.UI || {};
 
     ST.Settings    = ST.Settings    || {};
-
-    ST.Settings    = ST.Settings    || {};
     ST.Core        = ST.Core        || {};
-
-    // Settings (best-effort app.settings + file fallback)
 
     // Core input helpers (macOS modifiers)
     ST.Core.isCmdDown  = ST.Core.isCmdDown  || function() { return _isCmdDown(); };
@@ -799,8 +605,6 @@ function _stLooksLikeShineToolsMain(raw) {
     ST.Core.isShiftDown = ST.Core.isShiftDown || function() { return isShiftDown(); };
 
     try {
-        ST.UI = ST.UI || {};
-
         // Layout / relayout utilities
         ST.UI.relayoutScoped     = ST.UI.relayoutScoped     || function(scopeGroup){ return relayoutScoped(scopeGroup); };
         ST.UI.requestRelayout    = ST.UI.requestRelayout    || function(scopeGroup, delayMs){ return requestRelayoutSoon(scopeGroup, delayMs); };
@@ -898,7 +702,7 @@ function _ddEnsureKey(dd) {
     }
 
 // =================================================================================================
-// UTILITIES: TASKING: scheduleTask safe cancel  (CLEANPACK5)
+// UTILITIES: TASKING: scheduleTask safe cancel
 // =================================================================================================
     function _cancelTaskSafe(taskId) {
         try { if (taskId) app.cancelTask(taskId); } catch (e) {}
@@ -1047,6 +851,8 @@ function _withUndoGroup(name, fn) {
     function _stResetDropdownToBlankSoon(dd, delayMs) {
         try {
             if (!dd) return;
+            // Do not let the normal blank-reset routine erase the temporary "Added" message.
+            try { if (dd.__stShowingAddedFlash === true) return; } catch (eFlashGuard) {}
             try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) {}
 
             dd.__shineProgrammatic = true;
@@ -1054,6 +860,133 @@ function _withUndoGroup(name, fn) {
             try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd) {}
             dd.__shineProgrammatic = false;
             dd.__stBlankResetTaskId = 0;
+        } catch (e) {}
+    }
+
+    // Temporary dropdown feedback used by PLUS buttons.
+    // Shows "Added" directly in the CLOSED dropdown box for a short, real-time flash,
+    // then rebuilds the dropdown back to its normal contents.
+    // Keep the clear step independent from the broader post-dialog UI cooldown.
+    try {
+        if (!$.global.__ST_clearDropdownAddedFlash__) {
+            $.global.__ST_clearDropdownAddedFlash__ = function (ddKey) {
+                try {
+                    var store = $.global.__ShineToolsDDStore || {};
+                    var dd = store[String(ddKey || "")];
+                    if (!dd) return;
+
+                    // Overdue task guard:
+                    // AE native progress windows (Import Project, render finalization, etc.) can hold
+                    // a scheduleTask until AFTER the modal/progress state ends. If this clear task is
+                    // badly overdue, do not touch ScriptUI immediately on that first post-modal tick.
+                    // The next real user interaction / rebuild will normalize the dropdown safely.
+                    try {
+                        var __due = dd.__stAddedFlashDueMs || 0;
+                        var __now = (new Date()).getTime();
+                        if (__due && (__now - __due) > 700) {
+                            try { dd.__stAddedFlashTaskId = 0; } catch (eLateTask) {}
+                            return;
+                        }
+                    } catch (eLateGuard) {}
+
+                    // Do not use the broad modal/render cooldown gate here.
+                    // That gate includes the post-file-dialog cooldown, which was stretching
+                    // the visible "Added" time to several seconds no matter what frame count was passed.
+                    // Only avoid truly unsafe states: panel closing/dead or active render.
+                    try { if ($.global.__ShineToolsClosing__ === true) return; } catch (eCloseGuard) {}
+                    try { if ($.global.__ShineToolsIsPanelSafe__ && !$.global.__ShineToolsIsPanelSafe__()) return; } catch (ePanelGuard) {}
+                    try {
+                        if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) {
+                            // Do not queue a delayed ScriptUI clear during render/progress states.
+                            return;
+                        }
+                    } catch (eRenderGuard) {}
+
+                    dd.__shineProgrammatic = true;
+                    try {
+                        dd.__stShowingAddedFlash = false;
+                        dd.__stFlashBlankText = " ";
+
+                        // Restore the real dropdown contents. This is more reliable than trying
+                        // to edit one item label back in place after ScriptUI has painted the closed box.
+                        if (dd.__stAddedFlashRebuild && typeof dd.__stAddedFlashRebuild === "function") {
+                            dd.__stAddedFlashRebuild();
+                        } else {
+                            try { dd.removeAll(); } catch (eRA) {}
+                            try {
+                                var blank = dd.add("item", " ");
+                                blank._isBlank = true;
+                                dd.selection = blank;
+                            } catch (eBlank) {}
+                        }
+
+                        try { if (dd.items && dd.items.length > 0) dd.selection = dd.items[0]; } catch (eSel) {}
+                        try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd) {}
+                    } catch (eUI) {}
+                    dd.__shineProgrammatic = false;
+                    try { dd.__stSuppressOnChangeUntil = 0; } catch (eSupDone) {}
+                    try { dd.__stAddedFlashTaskId = 0; } catch (eDone) {}
+                } catch (e) {}
+            };
+        }
+    } catch (eAddedGlobal) {}
+
+    function _dropdownResetAfterFrames(dd, frames) {
+        // MODAL DIAGNOSTIC:
+        // Do not queue a post-dialog/post-import scheduleTask that may run as AE returns
+        // from a native progress window. Leave dropdown cleanup to the next normal rebuild.
+        try { if (dd) dd.__stAddedFlashTaskId = 0; } catch (e) {}
+        return;
+    }
+
+    function _ddFlashAddedFrames(dd, frames, rebuildFn) {
+        try {
+            if (!dd) return;
+            var key = _ddEnsureKey(dd);
+            if (!key) return;
+
+            // The PLUS click continues only after the native file dialog has closed.
+            // Do NOT bail because of the general modal/render cooldown here -- that cooldown
+            // was preventing the user-facing "Added" feedback from ever appearing.
+            // The delayed CLEAR task below remains safety-gated.
+
+            try { if (dd.__stAddedFlashTaskId) app.cancelTask(dd.__stAddedFlashTaskId); } catch (eCancel) {}
+            try { if (rebuildFn && typeof rebuildFn === "function") dd.__stAddedFlashRebuild = rebuildFn; } catch (eRebSet) {}
+
+            // IMPORTANT: Do not just rename the existing blank item. In AE ScriptUI, the
+            // closed dropdown box often will not repaint that change. Instead, temporarily
+            // replace the dropdown contents with a single selected "Added" item, then rebuild
+            // the normal list after roughly the requested frame count. This is visibly inside the blue box.
+            var __flashMs = Math.max(120, Math.min(5000, Math.round(((frames == null) ? 30 : frames) * 33.333)));
+            dd.__shineProgrammatic = true;
+            try {
+                dd.__stShowingAddedFlash = true;
+                dd.__stSuppressOnChangeUntil = (new Date()).getTime() + __flashMs + 250;
+                try { dd.removeAll(); } catch (eRemove) {}
+                var addedItem = dd.add("item", "Added");
+                // Do NOT mark this as _isBlank. Some AE builds fire onChange after the
+                // programmatic selection, and the old blank-row logic would immediately
+                // reset the dropdown before the user ever saw the message.
+                try { addedItem._isAddedFlash = true; } catch (eFlag) {}
+                try { addedItem.enabled = true; } catch (eEn) {}
+                try { dd.selection = addedItem; } catch (eSelObj) { try { dd.selection = 0; } catch (eSelIdx) {} }
+                try { dd.active = false; } catch (eAct) {}
+                try { if (dd.parent && dd.parent.layout) dd.parent.layout.layout(true); } catch (eLayLocal) {}
+                try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd) {}
+            } catch (eUI) {}
+            // SAFE SYNC FLASH: keep the user-facing "Added" message visible briefly,
+            // but do NOT use app.scheduleTask. scheduleTask was one of the risky pieces
+            // around AE native progress windows. This blocks only this click handler for
+            // a short moment, then restores the real dropdown contents synchronously.
+            try {
+                try { $.sleep(__flashMs); } catch (eSleep) {}
+                dd.__stShowingAddedFlash = false;
+                if (dd.__stAddedFlashRebuild && typeof dd.__stAddedFlashRebuild === "function") dd.__stAddedFlashRebuild();
+                try { if (dd.items && dd.items.length > 0) dd.selection = dd.items[0]; } catch (eSel0) {}
+                try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd2) {}
+            } catch (eRebNow) {}
+            dd.__shineProgrammatic = false;
+            // Intentionally no delayed reset task here.
         } catch (e) {}
     }
 
@@ -1177,9 +1110,18 @@ function _withUndoGroup(name, fn) {
         cfg.allowDividerDeletion = true;
         cfg.returnObjects = true;
         cfg.indentNonDividerRows = true;
+        cfg.__stOrganizeSharedLayout = true; // Library Elements + Text Animators must stay visually identical.
+        // Wider left/right dialog padding for the Organize dialogs so the list box
+        // sits farther from the window edges.
+        cfg.dialogPadLR = 28;
+        cfg.dialogPadTop = 10;
+        cfg.dialogPadBot = 10;
 
         if (kind === "text_animators") {
-            cfg.infoText = 'Shift / Cmd - Select multiple items to reorder, use "Move To..." to place them under BUNDLED or USER ADDED, Rename selected items, or press Delete / Backspace to remove selected items.';
+            // Keep Organize Text Animators visually matched to Organize Library Elements:
+            // same shared dialog sizing, same list sizing, same bottom button architecture,
+            // and the same one-line info copy so the dialog height/spacing does not shift.
+            cfg.infoText = 'Shift / Cmd - Select multiple items to reorder, use "Move To..." to place them under section dividers, Rename selected items, or press Delete / Backspace to remove selected items.';
             cfg.addFilesHelpTip = "Add .ffx files to Text Animators";
         } else if (kind === "library_elements") {
             cfg.infoText = 'Shift / Cmd - Select multiple items to reorder, use "Move To..." to place them under section dividers, Rename selected items, or press Delete / Backspace to remove selected items.';
@@ -2845,8 +2787,20 @@ try {
         var existing = findFootageByFile(fileObj);
         if (existing) return existing;
 
-        var io = new ImportOptions(fileObj);
-        return app.project.importFile(io);
+        // MODAL DIAGNOSTIC:
+        // Import can show AE's native progress UI for a while. Treat it like a long host op
+        // and make sure ShineTools has no hover/dropdown/UI task waiting to touch ScriptUI
+        // immediately after AE returns.
+        try { if ($.global.__ShineTools_CancelHoverPoll__) $.global.__ShineTools_CancelHoverPoll__(); } catch (eH) {}
+        try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD0) {}
+        try { $.global.__ST_LONGOP__ = true; } catch (eL0) {}
+        try {
+            var io = new ImportOptions(fileObj);
+            return app.project.importFile(io);
+        } finally {
+            try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD1) {}
+            try { $.global.__ST_LONGOP__ = false; } catch (eL1) {}
+        }
     }
 
     var FAV_SETTINGS_SECTION = "ShineTools";
@@ -3342,7 +3296,9 @@ function _listSave(section, key, arr, maxLen) {
 }
 
     var __ST_SESSION_MAIN_FAVORITES__ = [];
+var __ST_SESSION_MAIN_FAVORITES_SHOW_ORIGINAL__ = false;
 var __ST_SESSION_TEXT_FAVORITES__ = [];
+var __ST_SESSION_TEXT_FAVORITES_SHOW_ORIGINAL__ = false;
 var __ST_SESSION_TEXT_BUNDLED_ORDER__ = [];
 var __ST_SESSION_TEXT_UNIFIED_ORDER__ = [];
 var __ST_SESSION_TEXT_LABELS__ = {};
@@ -3521,7 +3477,13 @@ function favLoad() {
             dlg.orientation = "column";
             dlg.alignChildren = ["fill", "top"];
             dlg.spacing = 10;
-            dlg.margins = [18, 10, 18, 10];
+
+            // Unified dialog padding for section reorder, button reorder-style lists,
+            // and Library/Text Animator organize dialogs.
+            var __dlgPadLR = (opts.dialogPadLR != null) ? Number(opts.dialogPadLR) : 18;
+            var __dlgPadTop = (opts.dialogPadTop != null) ? Number(opts.dialogPadTop) : 10;
+            var __dlgPadBot = (opts.dialogPadBot != null) ? Number(opts.dialogPadBot) : 10;
+            dlg.margins = [__dlgPadLR, __dlgPadTop, __dlgPadLR, __dlgPadBot];
 
             if (opts.infoText) {
                 var infoWrap = dlg.add("group");
@@ -3544,7 +3506,7 @@ function favLoad() {
             lb.minimumSize = [listW, listH];
             lb.maximumSize = [listW, 10000];
 
-            var __stShowOriginalNames = false;
+            var __stShowOriginalNames = !!(opts && opts.initialShowOriginalFilename === true);
             var __ST_UNIFIED_INDENT = "    ";
 
             function _stStripLeadingIndent(label) {
@@ -3588,9 +3550,76 @@ function favLoad() {
                         try { dit.helpTip = newText; } catch (eSetTip) {}
                         if (dit._isDivider) __stSeenDivider = true;
                     }
-                    try { lb.notify('onDraw'); } catch (eDraw0) {}
                     try { dlg.update(); } catch (eUpd0) {}
                 } catch (eRefresh) {}
+            }
+
+            function _stRebuildDialogListboxLiveRefresh(selectIds) {
+                try {
+                    if (!lb || !lb.items) return false;
+
+                    var wanted = {};
+                    if (selectIds) {
+                        if (!(selectIds instanceof Array)) selectIds = [selectIds];
+                        for (var ws = 0; ws < selectIds.length; ws++) {
+                            try { wanted[String(selectIds[ws] || "")] = true; } catch (eWant0) {}
+                        }
+                    } else {
+                        try {
+                            var curSel = lb.selection;
+                            if (curSel instanceof Array) {
+                                for (var cs = 0; cs < curSel.length; cs++) {
+                                    try { wanted[String(curSel[cs]._id || "")] = true; } catch (eWant1) {}
+                                }
+                            } else if (curSel) {
+                                wanted[String(curSel._id || "")] = true;
+                            }
+                        } catch (eWant2) {}
+                    }
+
+                    var rows = [];
+                    for (var rb = 0; rb < lb.items.length; rb++) {
+                        try {
+                            var oldIt = lb.items[rb];
+                            if (!oldIt) continue;
+                            rows.push({
+                                id: String(oldIt._id || ""),
+                                label: _stStripLeadingIndent(oldIt._label || oldIt.text || ""),
+                                isDivider: !!oldIt._isDivider,
+                                enabled: (oldIt.enabled !== false)
+                            });
+                        } catch (eRow0) {}
+                    }
+
+                    try { lb.removeAll(); } catch (eRemoveLive) {}
+
+                    var seenDivider = false;
+                    for (var nr = 0; nr < rows.length; nr++) {
+                        var row = rows[nr];
+                        var indentRow = (!row.isDivider && seenDivider);
+                        try {
+                            if (opts && opts.indentNonDividerRows === true) indentRow = !row.isDivider;
+                        } catch (eIndentLive) {}
+                        var shown = _stGetDisplayLabelForDialogItem(row.id, row.label, row.isDivider, indentRow);
+                        var newIt = lb.add("item", shown);
+                        newIt._id = row.id;
+                        newIt._label = row.label;
+                        newIt._isDivider = row.isDivider;
+                        try { newIt.helpTip = shown; } catch (eTipLive) {}
+                        try {
+                            if (newIt._isDivider && !opts.allowDividerSelection) newIt.enabled = false;
+                            else newIt.enabled = row.enabled;
+                        } catch (eEnLive) {}
+                        try { if (wanted[row.id]) newIt.selected = true; } catch (eSelLive) {}
+                        if (row.isDivider) seenDivider = true;
+                    }
+
+                    try { if (lb.window && lb.window.layout) lb.window.layout.layout(true); } catch (eLayLive) {}
+                    try { if (lb.window && lb.window.update) lb.window.update(); } catch (eWinUpdLive) {}
+                    try { dlg.update(); } catch (eDlgUpdLive) {}
+                    return true;
+                } catch (eLiveRefresh) {}
+                return false;
             }
 
             function _addIt(obj) {
@@ -3613,14 +3642,8 @@ function favLoad() {
             for (var ii = 0; ii < items.length; ii++) _addIt(items[ii]);
             try { _stRefreshDialogLabels(); } catch (eInitRefresh) {}
             if (lb.items.length) {
-                try { lb.notify('onDraw'); } catch(ePreDraw) {}
-                var _firstSelectable = -1;
-                for (var sii = 0; sii < lb.items.length; sii++) {
-                    try {
-                        if ((opts.allowDividerSelection || !lb.items[sii]._isDivider) && lb.items[sii].enabled !== false) { _firstSelectable = sii; break; }
-                    } catch (eFS) {}
-                }
-                try { lb.selection = (_firstSelectable >= 0) ? _firstSelectable : 0; } catch (eInitSel) {}
+                // No default preselection in reorder/organize dialogs.
+                try { lb.selection = null; } catch (eInitSel) {}
             }
 
             var controls = dlg.add("group");
@@ -3629,64 +3652,46 @@ function favLoad() {
             controls.spacing = 8;
             controls.margins = 0;
 
-            function _styleDlgTriangle(btn, glyph, tip) {
-                btn.minimumSize = [32, 28];
-                btn.maximumSize = [32, 28];
-                btn.alignment   = ['left','center'];
-                btn.margins     = 0;
-                try { btn.helpTip = tip; } catch (eTip2) {}
+            function _makeDlgMiniArrowButton(parent, glyph, tip) {
+                var w = 24, h = 24;
+                var wrap = parent.add('group');
+                wrap.orientation   = 'stack';
+                wrap.alignChildren = ['fill', 'fill'];
+                wrap.alignment     = ['left', 'center'];
+                wrap.margins       = 0;
+                wrap.spacing       = 0;
+                try { wrap.minimumSize = [w, h]; } catch (eW0) {}
+                try { wrap.maximumSize = [w, h]; } catch (eW1) {}
+                try { wrap.preferredSize = [w, h]; } catch (eW2) {}
 
-                btn._glyph = glyph;
-                btn.text = "";
-                btn._isHover = false;
-                btn._isDown  = false;
-
-                function _inv(){
-                    try { btn.notify('onDraw'); } catch(e0) {}
-                    try { btn.parent.update(); } catch(e1) {}
-                    try { if (btn.window) btn.window.update(); } catch(e2) {}
+                var btn = wrap.add('button', undefined, glyph);
+                btn.alignment = ['fill','fill'];
+                try { btn.minimumSize = [w, h]; } catch (eB0) {}
+                try { btn.maximumSize = [w, h]; } catch (eB1) {}
+                try { btn.preferredSize = [w, h]; } catch (eB2) {}
+                try { btn.helpTip = tip || ''; } catch (eTip2) {}
+                try { btn.justify = 'center'; } catch (eJ) {}
+                try { btn.graphics.font = ScriptUI.newFont('Helvetica', 'BOLD', 13); } catch (eF) {
+                    try { btn.graphics.font = ScriptUI.newFont(btn.graphics.font.name, 'Bold', 13); } catch (eF2) {}
                 }
-
-                btn.addEventListener('mouseover', function(){ btn._isHover = true; _inv(); });
-                btn.addEventListener('mouseout',  function(){ btn._isHover = false; btn._isDown = false; _inv(); });
-                btn.addEventListener('mousedown', function(){ btn._isDown = true; _inv(); });
-                btn.addEventListener('mouseup',   function(){ btn._isDown = false; _inv(); });
-                btn.onMouseEnter = function(){ btn._isHover = true; _inv(); };
-                btn.onMouseExit  = function(){ btn._isHover = false; btn._isDown = false; _inv(); };
-
-                btn.onDraw = function(){
-                    var g = this.graphics;
-                    var idleCol  = [0.62,0.62,0.62,1];
-                    var hoverCol = [1.00, 0.82, 0.00, 1];
-                    var col = (this._isHover || this._isDown) ? hoverCol : idleCol;
-                    try {
-                        if (!this._glyphFont) {
-                            this._glyphFont = ScriptUI.newFont(g.font.name, 'Regular', Math.max(13, g.font.size + 5));
-                        }
-                        g.font = this._glyphFont;
-                    } catch(eF) {}
-                    var w = this.size[0], h = this.size[1];
-                    var x = Math.round(w/2 - 4);
-                    var y = Math.round(h/2 - (g.font.size/2) - 4);
-                    try {
-                        var pen = g.newPen(g.PenType.SOLID_COLOR, col, 1);
-                        g.drawString(this._glyph || glyph, pen, x, y);
-                    } catch(eD) {}
-                };
-
                 try { defocusButtonBestEffort(btn); } catch (eDF) {}
+                btn.onClick = function () {
+                    try { btn.active = false; } catch (eA0) {}
+                    try { if (typeof wrap.__onActivate === 'function') wrap.__onActivate(); } catch (eAct) {}
+                    try { btn.active = false; } catch (eA1) {}
+                };
+                try { wrap.__button = btn; } catch (eWB) {}
+                return wrap;
             }
 
             var arrowGrp = controls.add('group');
             arrowGrp.orientation = 'row';
             arrowGrp.alignChildren = ['left','center'];
-            arrowGrp.spacing = 0;
+            arrowGrp.spacing = 2;
             arrowGrp.margins = [0,0,0,0];
 
-            var btnUp = arrowGrp.add("button", undefined, "▲");
-            var btnDn = arrowGrp.add("button", undefined, "▼");
-            _styleDlgTriangle(btnUp, '▲', 'Move up');
-            _styleDlgTriangle(btnDn, '▼', 'Move down');
+            var btnUp = _makeDlgMiniArrowButton(arrowGrp, '▲', 'Move up');
+            var btnDn = _makeDlgMiniArrowButton(arrowGrp, '▼', 'Move down');
 
             function __makeDlgCellBtn__(parent, label, minW){
                 var cell = parent.add('group');
@@ -3706,7 +3711,7 @@ function favLoad() {
                 return { cell: cell, btn: b };
             }
 
-            controls.add('statictext', undefined, '   ');
+            var __controlsLeadSpacer = controls.add('statictext', undefined, '   ');
 
             var btnAddFiles = null;
             if (typeof opts.onAddFiles === "function") {
@@ -3816,46 +3821,121 @@ function favLoad() {
             var __cancelPack = __makeDlgCellBtn__(controls, 'Cancel', 90);
             var btnCancel    = __cancelPack.btn;
 
-            var __bottomToggleRow = dlg.add('group');
-                        __bottomToggleRow.orientation = 'row';
-            __bottomToggleRow.alignChildren = ['left', 'center'];
-            __bottomToggleRow.alignment = ['fill', 'top'];
-            __bottomToggleRow.spacing = 8;
-            __bottomToggleRow.margins = [0, 0, 0, 0];
+            // For the simple section reorder dialogs, keep the bottom controls contained
+            // within the list-box width: arrows shift slightly right, OK/Cancel slightly left,
+            // and the divider line stays visually centered.
+            var __stSimpleSectionReorder = (!!opts
+                && opts.hideOriginalToggle === true
+                && !(typeof opts.onAddFiles === "function")
+                && !opts.allowNewDivider
+                && !(opts.sectionChoices && opts.sectionChoices.length)
+                && !opts.allowRename
+                && !opts.allowDelete);
+            if (__stSimpleSectionReorder) {
+                // For the simple section-reorder dialogs, use the SAME four bottom controls
+                // as the Reorder Buttons dialog: Up, Down, OK, Cancel.
+                // Keep the same button architecture/style and remove the divider/gap treatment.
+                var __stOkW = 70;      // same as Reorder Buttons dialog
+                var __stCancelW = 90;  // same as Reorder Buttons dialog
 
-            // Custom toggle button (matches ShineTools style)
-            var __toggleTextMax = '✓ Show Original Filename';
-            var __toggleCharW = 7;
-            var __toggleBtnW = (__toggleTextMax.length * __toggleCharW) + 24;
-
-            var __toggleBtnPack = __makeDlgCellBtn__(__bottomToggleRow, 'Show Original Filename', __toggleBtnW);
-            var __showOriginalToggle = __toggleBtnPack.btn;
-            var __toggleState = false;
-
-            function __updateToggleVisual() {
+                try { controls.alignment = ['center', 'top']; } catch (eSC0) {}
+                try { controls.spacing = 8; } catch (eSC1) {}
+                try { arrowGrp.spacing = 2; } catch (eSC2) {}
                 try {
-                    if (__toggleState) {
-                        __showOriginalToggle.text = '✓ Show Original Filename';
-                    } else {
-                        __showOriginalToggle.text = 'Show Original Filename';
+                    if (__controlsLeadSpacer) {
+                        __controlsLeadSpacer.text = '   ';
+                        __controlsLeadSpacer.minimumSize = undefined;
+                        __controlsLeadSpacer.preferredSize = undefined;
+                        __controlsLeadSpacer.maximumSize = undefined;
                     }
+                } catch (eSC3) {}
 
-                    var __t = String(__showOriginalToggle.text || __toggleTextMax);
-                    var __btnW2 = Math.max(__toggleBtnW, (__t.length * __toggleCharW) + 24);
-                    try { __showOriginalToggle.minimumSize.width = __btnW2; } catch(eW0){}
-                    try { __showOriginalToggle.maximumSize.width = __btnW2; } catch(eW1){}
-                    try { __showOriginalToggle.preferredSize.width = __btnW2; } catch(eW2){}
-                } catch(eTxt){}
+                // Hide the section-dialog divider and its side gaps so the row matches Reorder Buttons.
+                try { __actionsToConfirmGap.visible = false; __actionsToConfirmGap.minimumSize = [0,0]; __actionsToConfirmGap.preferredSize = [0,0]; __actionsToConfirmGap.maximumSize = [0,0]; } catch (eSC4) {}
+                try { __actionsToConfirmLineWrap.visible = false; __actionsToConfirmLineWrap.minimumSize = [0,0]; __actionsToConfirmLineWrap.preferredSize = [0,0]; __actionsToConfirmLineWrap.maximumSize = [0,0]; } catch (eSC5) {}
+                try { __actionsToConfirmGap2.visible = false; __actionsToConfirmGap2.minimumSize = [0,0]; __actionsToConfirmGap2.preferredSize = [0,0]; __actionsToConfirmGap2.maximumSize = [0,0]; } catch (eSC6) {}
+                try { if (__actionsToConfirmLine) __actionsToConfirmLine.visible = false; } catch (eSC7) {}
+
+                // Match OK / Cancel sizing to Reorder Buttons dialog exactly.
+                try { __okPack.cell.minimumSize = [__stOkW,24]; __okPack.cell.preferredSize = [__stOkW,24]; __okPack.cell.maximumSize = [__stOkW,24]; } catch (eSC8) {}
+                try { btnOk.minimumSize.width = __stOkW; btnOk.preferredSize.width = __stOkW; btnOk.maximumSize.width = __stOkW; } catch (eSC9) {}
+
+                try { __cancelPack.cell.margins = [0,0,0,0]; } catch (eSC10) {}
+                try { __cancelPack.cell.minimumSize = [__stCancelW,24]; __cancelPack.cell.preferredSize = [__stCancelW,24]; __cancelPack.cell.maximumSize = [__stCancelW,24]; } catch (eSC11) {}
+                try { btnCancel.minimumSize.width = __stCancelW; btnCancel.preferredSize.width = __stCancelW; btnCancel.maximumSize.width = __stCancelW; } catch (eSC12) {}
+
+                // Keep focus on the listbox so the buttons do not pick up a native focus ring.
+                try { btnOk.active = false; } catch (eSC13) {}
+                try { btnCancel.active = false; } catch (eSC14) {}
+                try {
+                    var __stPrevOnShow = dlg.onShow;
+                    dlg.onShow = function(){
+                        try { if (typeof __stPrevOnShow === 'function') __stPrevOnShow(); } catch (eSh0) {}
+                        try { btnOk.active = false; } catch (eSh1) {}
+                        try { btnCancel.active = false; } catch (eSh2) {}
+                        try { lb.active = true; } catch (eSh3) {}
+                    };
+                } catch (eSC15) {}
+                try { lb.active = true; } catch (eSC16) {}
             }
 
-            __showOriginalToggle.onClick = function() {
-                __toggleState = !__toggleState;
-                try { __stShowOriginalNames = __toggleState; } catch(eSet){}
-                __updateToggleVisual();
-                _stRefreshDialogLabels();
-            };
+            var __showOriginalToggle = null;
+            if (!(opts && opts.hideOriginalToggle === true)) {
+                var __bottomToggleRow = dlg.add('group');
+                __bottomToggleRow.orientation = 'row';
+                __bottomToggleRow.alignChildren = ['left', 'center'];
+                __bottomToggleRow.alignment = ['fill', 'top'];
+                __bottomToggleRow.spacing = 8;
+                __bottomToggleRow.margins = [0, 0, 0, 0];
 
-            __updateToggleVisual();
+                // Custom toggle button (matches ShineTools style)
+                var __toggleTextMax = '✓ Show Original Filename';
+                var __toggleCharW = 7;
+                var __toggleBtnW = (__toggleTextMax.length * __toggleCharW) + 24;
+
+                var __toggleBtnPack = __makeDlgCellBtn__(__bottomToggleRow, 'Show Original Filename', __toggleBtnW);
+                __showOriginalToggle = __toggleBtnPack.btn;
+                var __toggleState = !!__stShowOriginalNames;
+
+                function __updateToggleVisual() {
+                    try {
+                        if (__toggleState) {
+                            __showOriginalToggle.text = '✓ Show Original Filename';
+                        } else {
+                            __showOriginalToggle.text = 'Show Original Filename';
+                        }
+
+                        var __t = String(__showOriginalToggle.text || __toggleTextMax);
+                        var __btnW2 = Math.max(__toggleBtnW, (__t.length * __toggleCharW) + 24);
+                        try { __showOriginalToggle.minimumSize.width = __btnW2; } catch(eW0){}
+                        try { __showOriginalToggle.maximumSize.width = __btnW2; } catch(eW1){}
+                        try { __showOriginalToggle.preferredSize.width = __btnW2; } catch(eW2){}
+                    } catch(eTxt){}
+                }
+
+                __showOriginalToggle.onClick = function() {
+                    __toggleState = !__toggleState;
+                    try { __stShowOriginalNames = __toggleState; } catch(eSet){}
+                    __updateToggleVisual();
+
+                    // Force the listbox rows to repaint immediately when flipping
+                    // between renamed labels and original filenames.  In some AE
+                    // ScriptUI builds, changing item.text alone does not visually
+                    // refresh until the user clicks back into the list.
+                    try {
+                        if (!_stRebuildDialogListboxLiveRefresh()) {
+                            try { _stRefreshDialogLabels(); } catch (eFallbackRefresh) {}
+                        }
+                    } catch (eToggleRefresh) {
+                        try { _stRefreshDialogLabels(); } catch (eToggleRefresh2) {}
+                    }
+
+                    try { lb.active = true; } catch(eToggleActive){}
+                    try { dlg.update(); } catch(eToggleUpdate){}
+                };
+
+                __updateToggleVisual();
+            }
 
             try { lb.active = true; } catch(eAF){}
 
@@ -4188,7 +4268,6 @@ function favLoad() {
                     }
 
                     try { _stRefreshDialogLabels(); } catch (eLiveDelIndent) {}
-                    try { lb.notify("onDraw"); } catch (eRDDel) {}
                     try { dlg.update(); } catch (eUDDel) {}
                     return true;
                 } catch (eDeleteSel) {
@@ -4258,7 +4337,6 @@ function favLoad() {
                         try { itn.selected = (String(itn._id || "") === token); } catch (eSelN) {}
                     }
                     try { _stRefreshDialogLabels(); } catch (eLiveNewIndent) {}
-                    try { lb.notify("onDraw"); } catch (eRDNew) {}
                     try { dlg.update(); } catch (eUDNew) {}
                     return true;
                 } catch (eAddDiv) {
@@ -4272,7 +4350,6 @@ function favLoad() {
                     if (typeof opts.onAddFiles !== "function") return false;
                     var added = opts.onAddFiles(lb, dlg, opts);
                     try { _stRefreshDialogLabels(); } catch (eLiveAddFilesIndent) {}
-                    try { lb.notify("onDraw"); } catch (eRDAddFiles) {}
                     try { dlg.update(); } catch (eUDAddFiles) {}
                     return (added === undefined) ? true : !!added;
                 } catch (eAddFiles) {
@@ -4329,7 +4406,8 @@ function favLoad() {
                         try { sel.text = _stGetDisplayLabelForDialogItem(newDividerId, newDividerLabel, true, false); } catch (eDivSet2) {}
                         try { sel.helpTip = String(sel.text || newDividerLabel); } catch (eDivSet3) {}
 
-                        try { lb.notify('onDraw'); } catch (eDivDraw) {}
+                        try { _stRebuildDialogListboxLiveRefresh([newDividerId]); } catch (eDivLive0) {}
+                        try { lb.active = true; } catch (eDivActive0) {}
                         try { dlg.update(); } catch (eDivUpd) {}
                         return true;
                     }
@@ -4361,7 +4439,8 @@ function favLoad() {
                     try { sel.text = _stGetDisplayLabelForDialogItem(id, finalLabel, false); } catch (eTxt0) {}
                     try { sel.helpTip = String(sel.text || finalLabel); } catch (eTip0) {}
 
-                    try { lb.notify('onDraw'); } catch (eRD0) {}
+                    try { _stRebuildDialogListboxLiveRefresh([id]); } catch (eItemLive0) {}
+                    try { lb.active = true; } catch (eItemActive0) {}
                     try { dlg.update(); } catch (eUD0) {}
                     return true;
                 } catch (eRename) {
@@ -4370,11 +4449,11 @@ function favLoad() {
                 return false;
             }
 
-            btnUp.onClick = function(){ moveSel(-1); try { lb.notify("onDraw"); } catch(eRD1) {} try { dlg.update(); } catch(eUD1) {} };
-            btnDn.onClick = function(){ moveSel(1); try { lb.notify("onDraw"); } catch(eRD2) {} try { dlg.update(); } catch(eUD2) {} };
+            btnUp.__onActivate = function(){ moveSel(-1); try { dlg.update(); } catch(eUD1) {} try { lb.active = true; } catch(eAFU) {} };
+            btnDn.__onActivate = function(){ moveSel(1); try { dlg.update(); } catch(eUD2) {} try { lb.active = true; } catch(eAFD) {} };
             if (btnAddFiles) btnAddFiles.onClick = function(){ addFilesToDialogList(); };
             if (btnNewDivider) btnNewDivider.onClick = function(){ addNewDivider(); };
-            if (btnMoveTo) btnMoveTo.onClick = function(){ moveSelectedToSection(); try { lb.notify("onDraw"); } catch(eRD3) {} try { dlg.update(); } catch(eUD3) {} };
+            if (btnMoveTo) btnMoveTo.onClick = function(){ moveSelectedToSection(); try { dlg.update(); } catch(eUD3) {} };
             if (btnRename) btnRename.onClick = function(){ renameSelectedItem(); };
             if (btnDelete) btnDelete.onClick = function(){ deleteSelectedItems(); };
 
@@ -4456,19 +4535,28 @@ function favLoad() {
                         var __targetLeft = -1;
                         var __targetRight = -1;
 
-                        try { if (__showOriginalToggle) __targetLeft = __stAbsLeft(__showOriginalToggle); } catch (eListTargetL) {}
-                        try { if (__cancelPack && __cancelPack.cell) __targetRight = __stAbsRight(__cancelPack.cell); } catch (eListTargetR) {}
+                        if (!(opts && opts.hideOriginalToggle === true)) {
+                            try { if (__showOriginalToggle) __targetLeft = __stAbsLeft(__showOriginalToggle); } catch (eListTargetL) {}
+                            try { if (__cancelPack && __cancelPack.cell) __targetRight = __stAbsRight(__cancelPack.cell); } catch (eListTargetR) {}
 
-                        if (__targetLeft >= 0 && __targetRight > __targetLeft) {
-                            var __targetW = Math.max(260, __targetRight - __targetLeft);
-                            try { lb.alignment = ['left', 'top']; } catch (eLbAlign0) {}
-                            try { lb.minimumSize = [__targetW, listH]; } catch (eLbMin0) {}
-                            try { lb.maximumSize = [__targetW, 10000]; } catch (eLbMax0) {}
-                            try { lb.preferredSize = [__targetW, listH]; } catch (eLbPref0) {}
-                            try { lb.bounds = [__targetLeft, lb.bounds.y, __targetRight, lb.bounds.y + Math.max(listH, Number(lb.bounds.height || listH))]; } catch (eLbBounds0) {}
-                            try { dlg.layout.layout(true); } catch (eLS2) {}
+                            if (__targetLeft >= 0 && __targetRight > __targetLeft) {
+                                var __targetW = Math.max(260, __targetRight - __targetLeft);
+                                try { lb.alignment = ['left', 'top']; } catch (eLbAlign0) {}
+                                try { lb.minimumSize = [__targetW, listH]; } catch (eLbMin0) {}
+                                try { lb.maximumSize = [__targetW, 10000]; } catch (eLbMax0) {}
+                                try { lb.preferredSize = [__targetW, listH]; } catch (eLbPref0) {}
+                                try { lb.bounds = [__targetLeft, lb.bounds.y, __targetRight, lb.bounds.y + Math.max(listH, Number(lb.bounds.height || listH))]; } catch (eLbBounds0) {}
+                                try { dlg.layout.layout(true); } catch (eLS2) {}
+                            }
                         }
                     } catch (eListFit) {}
+                    try {
+                        if (opts && opts.compactSectionDialog === true) {
+                            var __tightW = Math.max(300, Number(opts.dialogW || 0) || ((Number(listW) || 300) + 36));
+                            var __b = dlg.bounds;
+                            if (__b) dlg.bounds = [__b.x, __b.y, __b.x + __tightW, __b.y + Number(__b.height || 520)];
+                        }
+                    } catch (eTight) {}
                     try { dlg.update(); } catch(eUS) {}
                 };
             } catch (eOnShow) {}
@@ -4482,11 +4570,11 @@ function favLoad() {
                     var __outIsDivider = !!lb.items[li]._isDivider;
                     var __outLabel = String(lb.items[li]._label || lb.items[li].text || "");
                     if (!__outIsDivider) {
-                        if (__stShowOriginalNames && typeof opts.displayLabelForId === "function") {
-                            try { __outLabel = _stStripLeadingIndent(String(opts.displayLabelForId(__outId, __outLabel, { _isDivider: false }, true) || __outLabel || "")); } catch (eOutOrig) {}
-                        } else {
-                            __outLabel = _stStripLeadingIndent(__outLabel);
-                        }
+                        // IMPORTANT: SHOW ORIGINAL FILENAME is display-only.
+                        // Do not save the temporary original-filename view back into the label map.
+                        // Otherwise, closing/reopening the Organize dialog overwrites renamed labels,
+                        // and the toggle appears to stop working because both states become identical.
+                        __outLabel = _stStripLeadingIndent(__outLabel);
                     }
                     out.push({
                         id: __outId,
@@ -4497,6 +4585,7 @@ function favLoad() {
                     out.push(String(lb.items[li]._id || ""));
                 }
             }
+            try { out.__stShowOriginalFilename = !!__stShowOriginalNames; } catch (eOutShowOriginal) {}
             return out;
         } catch (eDlg) {
             alert("Reorder failed: " + String(eDlg));
@@ -6689,21 +6778,21 @@ var rsTemplate = "Best Settings"; // Always Best Settings
 
                             try { $.global.__ST_LONGOP__ = true; } catch (eL0) {}
                             try {
-                                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD0) {}
+                                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD0) {}
                 try { $.global.__ST_LONGOP__ = true; } catch (eL0b) {}
                 try {
                     app.project.renderQueue.render();
                 } finally {
                     // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
-                    try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD1) {}
+                    try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD1) {}
                     try { $.global.__ST_LONGOP__ = false; } catch (eL1b) {}
                 }
                             } finally {
                                 // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
-                                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD) {}
+                                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD) {}
                                 try { $.global.__ST_LONGOP__ = false; } catch (eL1) {}
-                                // After a blocking render, force a deferred relayout so custom-drawn glyphs restore
-                                try { if ($.global && $.global.__ShineTools_RequestFullRelayoutSoon__) $.global.__ShineTools_RequestFullRelayoutSoon__(); } catch (eRL) {}
+                                // MODAL DIAGNOSTIC: do not touch ScriptUI immediately after renderQueue.render() returns.
+                                // try { if ($.global && $.global.__ShineTools_RequestFullRelayoutSoon__) $.global.__ShineTools_RequestFullRelayoutSoon__(); } catch (eRL) {}
                             }
 
                             if (rev && f) {
@@ -6718,13 +6807,13 @@ var rsTemplate = "Best Settings"; // Always Best Settings
                 try { $.global.__ST_RQRenderAndReveal__(); } catch (eRunNow) {}
             } catch (eSched) {
                 // Fallback: render immediately if scheduling fails
-                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD0) {}
+                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD0) {}
                 try { $.global.__ST_LONGOP__ = true; } catch (eL0b) {}
                 try {
                     app.project.renderQueue.render();
                 } finally {
                     // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
-                    try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(600); } catch (eCD1) {}
+                    try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD1) {}
                     try { $.global.__ST_LONGOP__ = false; } catch (eL1b) {}
                 }
                 _revealIfRequested(outFile);
@@ -8554,64 +8643,6 @@ function _stFrameOffset_showCurveDialog(comp){
             pts.push([x01,y01]);
         }
 
-        preview.onDraw = function () {
-                    var g = preview.graphics;
-                    var b = preview.bounds;
-
-                    // background fill
-                    g.newPath();
-                    g.rectPath(0, 0, b.width, b.height);
-                    g.fillPath(g.newBrush(g.BrushType.SOLID_COLOR, [0.12, 0.12, 0.12, 1]));
-
-                    var pad = 14;
-                    var x0 = pad, y0 = pad;
-                    var w  = b.width  - pad * 2;
-                    var h  = b.height - pad * 2;
-
-                    // inner frame
-                    g.newPath();
-                    g.rectPath(x0, y0, w, h);
-                    g.strokePath(g.newPen(g.PenType.SOLID_COLOR, [0.30, 0.30, 0.30, 1], 1));
-
-                    // curve styling (varies by type)
-                    function _curveColorForType(t){
-                        switch(String(t||"").toUpperCase()){
-                            case "EXPONENTIAL": return [1.00, 0.85, 0.00, 1]; // yellow
-                            case "SQUARE":      return [0.15, 0.85, 1.00, 1]; // cyan
-                            case "CUBIC":       return [0.95, 0.30, 1.00, 1]; // magenta
-                            case "EASE OUT":    return [1.00, 0.55, 0.15, 1]; // orange
-                            case "EASE IN":     return [0.30, 1.00, 0.45, 1]; // green
-                            default:            return [1.00, 0.85, 0.00, 1];
-                        }
-                    }
-                    var curveCol = _curveColorForType(dd.selection ? dd.selection.text : "EXPONENTIAL");
-                    var pen      = g.newPen(g.PenType.SOLID_COLOR, curveCol, 2);
-                    var dotBrush = g.newBrush(g.BrushType.SOLID_COLOR, curveCol);
-
-                    var lastX = null, lastY = null;
-                    for (var i = 0; i < pts.length; i++) {
-                        var x01 = pts[i][0];
-                        var y01 = pts[i][1];
-
-                        var px = x0 + x01 * w;
-                        var py = y0 + (1 - y01) * h;
-
-                        if (lastX !== null) {
-                            g.newPath();
-                            g.moveTo(lastX, lastY);
-                            g.lineTo(px, py);
-                            g.strokePath(pen);
-                        }
-
-                        var r = 4;
-                        g.newPath();
-                        g.ellipsePath(px - r, py - r, r * 2, r * 2);
-                        g.fillPath(dotBrush);
-
-                        lastX = px;
-                        lastY = py;
-                    }
-                };
 
         // force redraw
         try { previewBox.layout.layout(true); } catch (e1) {}
@@ -8737,7 +8768,7 @@ function __ST_withModalSafety__(fn){
         } finally {
             __ST_resumeBackgroundTasks__();
             try { $.global.__ST_MODAL_DEPTH__ = 0; } catch (eDepth2) {}
-            try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(250); } catch (eCool) {}
+            try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(2500); } catch (eCool) {}
             try { if (typeof _stRecoverAfterHostModal === "function") _stRecoverAfterHostModal(); } catch (eRecover) {}
         }
     });
@@ -8884,24 +8915,20 @@ function buildUI(thisObj) {
             ? thisObj
             : new Window("palette", "ShineTools_v" + SHINE_VERSION, undefined, { resizeable: true });
 
-        // Install mousemove-driven hover label updates (no polling)
+        // Install hover label hooks; modifier flips are also handled by hover-only polling
         try { _stHoverInstallMouseHook(pal); } catch(eHook) {}
 
-        // Also try key hooks for instant modifier flips (best-effort; SAFE_MODE uses hooks instead of polling).
+        // Also try key hooks for instant modifier flips (best-effort fallback).
         try { _stHoverInstallKeyHook(pal); } catch(eKey) {}
-        // Failsafe: if the panel loses focus/deactivates, stop any hover tick so it can't stick running.
-        try {
-            if (!(pal instanceof Panel)) {
-                pal.onDeactivate = function(){
-                    try { _hoverClearInternal(); } catch(e0) {}
-                    try { _stHoverSetRunning(false); } catch(e1) {}
-                    try { _stHoverCancelTask(); } catch(e2) {}
-                };
-                pal.onActivate = function(){
-                    try { _stRecoverAfterHostModal(); } catch(e3) {}
-                };
-            }
-        } catch(e) {}
+        // Do not attach blank-panel click/focus handlers.
+        // Do not attach root mousedown/focus/activate handlers to the palette/panel;
+        // the user's lockup is triggered by clicking empty panel space after render.
+        // Button-level hover/click features remain intact.
+        // NO-EVENT-HOOK DIAGNOSTIC:
+        // Do not attach root activate/deactivate handlers. The freeze still happened after
+        // scheduleTask removal, so this build avoids touching ScriptUI/app state merely
+        // because the user clicks back into the panel after a render/import.
+        try { pal.onDeactivate = null; pal.onActivate = null; } catch(e) {}
 
         // Focus sink (used to kill blue focus ring on buttons after click)
         function ensureFocusSink() {
@@ -8934,7 +8961,6 @@ function buildUI(thisObj) {
             // -------------------------
             // TOP TAB LABELS + ACTIVE UNDERLINE
             //   (implemented as a stacked header so we can draw an underline
-            //    without hijacking tabBar.onDraw — which can suppress child text)
             // -------------------------
             var tabHeader = pal.add("group");
             tabHeader.orientation   = "column";
@@ -8981,7 +9007,6 @@ function buildUI(thisObj) {
             tabUnderlineLayer.spacing       = 0;
 
             // A ScriptUI group with no children can collapse to 0px height, which
-            // prevents onDraw from displaying anything. Give this layer a fixed height.
             tabUnderlineLayer.minimumSize   = [10, 6];
             tabUnderlineLayer.preferredSize = [10, 6];
             tabUnderlineLayer.maximumSize   = [10000, 6];
@@ -9034,10 +9059,70 @@ function buildUI(thisObj) {
             var tabLblUpdates  = _makeTopTabLabel("UPDATES", tabBarRight);
             var tabLblHelp     = _makeTopTabLabel("HELP", tabBarRight);
 
+            // Mirrors the tab row structure: MAIN/TEXT on left, flexible gap, right tabs pinned.
+            var __stTabUnderline = {};
+            try {
+                tabUnderlineLayer.orientation = "row";
+                tabUnderlineLayer.alignChildren = ["fill", "center"];
+                tabUnderlineLayer.alignment = ["fill", "top"];
+                tabUnderlineLayer.spacing = 14;
+
+                var ulLeft = tabUnderlineLayer.add("group");
+                ulLeft.orientation = "row";
+                ulLeft.alignChildren = ["left", "center"];
+                ulLeft.alignment = ["left", "center"];
+                ulLeft.margins = 0;
+                ulLeft.spacing = 14;
+
+                function __makeNativeTabUnderline(host, tabLabel) {
+                    var w = 44;
+                    try { w = Math.max(24, tabLabel.preferredSize[0]); } catch (eW) {}
+                    var u = host.add("statictext", undefined, "");
+                    u.justify = "center";
+                    u.minimumSize = [w, 6];
+                    u.preferredSize = [w, 6];
+                    u.maximumSize = [w, 6];
+                    try { u.graphics.font = ScriptUI.newFont(u.graphics.font.name, "Bold", 8); } catch (eF) {}
+                    try { u.graphics.foregroundColor = u.graphics.newPen(u.graphics.PenType.SOLID_COLOR, [1.0, 0.82, 0.0, 1], 1); } catch (eC) {}
+                    return u;
+                }
+
+                __stTabUnderline.MAIN = __makeNativeTabUnderline(ulLeft, tabLblMain);
+                __stTabUnderline.TEXT = __makeNativeTabUnderline(ulLeft, tabLblText);
+
+                var ulGap = tabUnderlineLayer.add("group");
+                ulGap.minimumSize = [0, 0];
+                ulGap.maximumSize = [10000, 10000];
+                ulGap.alignment = ["fill", "fill"];
+
+                var ulRight = tabUnderlineLayer.add("group");
+                ulRight.orientation = "row";
+                ulRight.alignChildren = ["right", "center"];
+                ulRight.alignment = ["right", "center"];
+                ulRight.margins = 0;
+                ulRight.spacing = 14;
+
+                __stTabUnderline.REQUESTS = __makeNativeTabUnderline(ulRight, tabLblRequests);
+                __stTabUnderline.UPDATES  = __makeNativeTabUnderline(ulRight, tabLblUpdates);
+                __stTabUnderline.HELP     = __makeNativeTabUnderline(ulRight, tabLblHelp);
+            } catch (eULBuild) {}
+
             try {
                 } catch (e) {}
             var TAB_LABEL_ACTIVE = [1.0, 0.82, 0.0, 1];  // Shine yellow
             var TAB_LABEL_IDLE   = [0.85, 0.85, 0.85, 1];
+
+            function __stSetNativeTabUnderline(activeName) {
+                try {
+                    var keys = ["MAIN", "TEXT", "REQUESTS", "UPDATES", "HELP"];
+                    for (var i = 0; i < keys.length; i++) {
+                        var k = keys[i];
+                        if (__stTabUnderline && __stTabUnderline[k]) {
+                            __stTabUnderline[k].text = (k === activeName) ? "━━━━" : "";
+                        }
+                    }
+                } catch (e) {}
+            }
 
             function _setTopTabLabelColor(st, rgbaArr) {
                 try {
@@ -9045,73 +9130,10 @@ function buildUI(thisObj) {
                 } catch (e) {}
             }
 
-            function _drawTopTabUnderline(g, st, underlineEl) {
-                try {
-                    if (!g || !st || !underlineEl) return;
+            // Tab underlines use native statictext characters via __stSetNativeTabUnderline().
+            function _drawTopTabUnderline(g, st, underlineEl) { return; }
 
-                    // Compute tab label bounds relative to tabBar (works even if labels live inside nested groups)
-                    function _leftInTabBar(ctrl) {
-                        var x = 0;
-                        try { x = ctrl.bounds[0]; } catch (e) { x = 0; }
-                        var p = ctrl.parent;
-                        while (p && p !== tabBar) {
-                            try { x += p.bounds[0]; } catch (e2) {}
-                            p = p.parent;
-                        }
-                        return x;
-                    }
-
-                    // Convert label bounds into underlineEl local coordinates (underlineEl bounds are in tabHeader coords)
-                    var leftTB = _leftInTabBar(st);
-                    var ub = underlineEl.bounds; // [l,t,r,b] in tabHeader coords
-                    var labelL = (tabBar.bounds[0] + leftTB) - ub[0];
-
-                    var labelW = 0;
-                    try { labelW = st.bounds[2] - st.bounds[0]; } catch (eW) { labelW = 0; }
-                    if (labelW <= 0) labelW = underlineEl.size[0];
-
-                    // Measure the actual rendered text width so the underline fits the word (not the control box)
-                    var txt = (st && st.text) ? String(st.text) : "";
-                    var textW = 0;
-                    try { textW = st.graphics.measureString(txt).width; } catch (eM) { textW = labelW; }
-
-                    var pad = 10; // total padding added to the measured text width
-                    var underlineW = Math.max(12, textW + pad);
-
-                    // Center underline under the text, clamped to the label box
-                    var cx = labelL + (labelW / 2);
-                    var x1 = cx - (underlineW / 2);
-                    var x2 = cx + (underlineW / 2);
-
-                    // Small optical tweak so MAIN/TEXT look consistent with longer words
-                    if (txt === "MAIN") { x1 -= 1; x2 -= 1; }
-                    if (txt === "UPDATES") { x1 += 1; x2 += 1; }
-
-                    var y = underlineEl.size[1] - 1;
-
-                    // Clamp inside underline layer
-                    if (x2 < x1) { var tmp = x1; x1 = x2; x2 = tmp; }
-                    x1 = Math.max(0, x1);
-                    x2 = Math.min(underlineEl.size[0], x2);
-
-                    var pen = g.newPen(g.PenType.SOLID_COLOR, TAB_LABEL_ACTIVE, 2);
-                    g.newPath();
-                    g.moveTo(x1, y);
-                    g.lineTo(x2, y);
-                    g.strokePath(pen);
-                } catch (e) {}
-            }
-
-            tabUnderlineLayer.onDraw = function () {
-                try {
-                    var which = pal.__activeTopTab || "MAIN";
-                    var st = (which === "TEXT") ? tabLblText :
-                             ((which === "UPDATES") ? tabLblUpdates :
-                             ((which === "REQUESTS") ? tabLblRequests :
-                             ((which === "HELP") ? tabLblHelp : tabLblMain)));
-                    _drawTopTabUnderline(tabUnderlineLayer.graphics, st, tabUnderlineLayer);
-                } catch (e) {}
-            };
+try { __stSetNativeTabUnderline("MAIN"); } catch (eNativeUL0) {}
 
             return {
                 tabHeader: tabHeader,
@@ -9127,7 +9149,8 @@ function buildUI(thisObj) {
                 tabLblHelp: tabLblHelp,
                 TAB_LABEL_ACTIVE: TAB_LABEL_ACTIVE,
                 TAB_LABEL_IDLE: TAB_LABEL_IDLE,
-                setTopTabLabelColor: _setTopTabLabelColor
+                setTopTabLabelColor: _setTopTabLabelColor,
+                setNativeTabUnderline: __stSetNativeTabUnderline
             };
         }
 
@@ -9243,24 +9266,14 @@ function _stAddPinnedTabFooter(tabRoot, tabKey) {
         topRow.margins       = [0, 0, 0, 0];
         topRow.spacing       = 0;
 
-        var line = topRow.add("group");
+        var line = topRow.add("statictext", undefined, "█");
         line.margins = 0;
-        line.minimumSize = [4, 16];
-        line.preferredSize = [4, 16];
-        line.maximumSize = [4, 16];
-        line.onDraw = function () {
-            try {
-                var g = this.graphics;
-                var H = this.size[1];
-                var pen = g.newPen(g.PenType.SOLID_COLOR, [1, 0.82, 0.20, 1], 3);
-                var x = 1;
-                g.newPath();
-                g.moveTo(x, 3);
-                g.lineTo(x, H - 1);
-                g.strokePath(pen);
-            } catch (e) {}
-        };
-        try { line.notify("onDraw"); } catch (e0) {}
+        line.minimumSize = [14, 18];
+        line.preferredSize = [14, 18];
+        line.maximumSize = [14, 18];
+        line.justify = "center";
+        try { line.graphics.font = ScriptUI.newFont(line.graphics.font.name, "Bold", 18); } catch (eF) {}
+        try { line.graphics.foregroundColor = line.graphics.newPen(line.graphics.PenType.SOLID_COLOR, [1, 0.82, 0.20, 1], 1); } catch (eC) {}
 
         var legend = topRow.add("statictext", undefined, "= Multiple options |");
         legend.justify = "left";
@@ -9341,24 +9354,16 @@ gfTopRow.margins       = [10, 0, 0, 0];
 gfTopRow.spacing       = 6;
 
 // Yellow option indicator (vertical Shine-yellow line)
-var gfLine = gfTopRow.add("group");
-gfLine.margins = 0;
-gfLine.minimumSize = [8, 16];
-gfLine.preferredSize = [8, 16];
-gfLine.maximumSize = [8, 16];
-gfLine.onDraw = function () {
-    try {
-        var g = this.graphics;
-        var W = this.size[0], H = this.size[1];
-        var pen = g.newPen(g.PenType.SOLID_COLOR, [1, 0.82, 0.20, 1], 3);
-        var x = Math.round(W - 3);
-        g.newPath();
-        g.moveTo(x, 3);
-        g.lineTo(x, H - 1);
-        g.strokePath(pen);
-    } catch (e) {}
-};
-try { gfLine.notify("onDraw"); } catch (e0) {}
+var gfLine = gfTopRow.add("statictext", undefined, "▐");
+gfLine.margins = [0, 0, 1, 0];
+gfLine.alignment = ["left", "center"];
+gfLine.minimumSize = [10, 20];
+gfLine.preferredSize = [10, 20];
+gfLine.maximumSize = [10, 20];
+gfLine.justify = "center";
+try { gfLine.graphics.font = ScriptUI.newFont(gfLine.graphics.font.name, "Bold", 20); } catch (eF) {}
+try { gfLine.graphics.foregroundColor = gfLine.graphics.newPen(gfLine.graphics.PenType.SOLID_COLOR, [1.0, 0.82, 0.0, 1], 1); } catch (eC) {}
+try { gfLine.graphics.disabledForegroundColor = gfLine.graphics.newPen(gfLine.graphics.PenType.SOLID_COLOR, [1.0, 0.82, 0.0, 1], 1); } catch (eD) {}
 
 // Legend text (exact format requested)
 var gfLegend = gfTopRow.add("statictext", undefined, "= Multiple options |");
@@ -9874,16 +9879,6 @@ var home = getHomeDir();
                 p.preferredSize = [size, size];
                 p.maximumSize = [size, size];
                 p.minimumSize = [size, size];
-                p.onDraw = function(){
-                  try{
-                    var g=p.graphics;
-                    var b=g.newBrush(g.BrushType.SOLID_COLOR, rgba);
-                    g.rectPath(0,0,p.size[0],p.size[1]);
-                    g.fillPath(b);
-                    var pen=g.newPen(g.PenType.SOLID_COLOR,[0.2,0.2,0.2,1],1);
-                    g.strokePath(pen);
-                  }catch(e){}
-                };
                 return p;
               }
 
@@ -10519,7 +10514,7 @@ try {
                         try { _setLabelColor(animLbl, [0.65, 0.65, 0.65, 1]); } catch(eC) {}
 
                         var animAddBtn = addPlusGlyphButton(animRow, TOPROW_PLUS_W, TOPROW_PLUS_H, "Add animation file", function () {});
-                        try { animAddBtn.alignment = ["left","bottom"]; } catch(eA) {}
+                        try { animAddBtn.alignment = ["left","bottom"]; animAddBtn.margins = [-10, 0, 0, 0]; } catch(eA) {}
 
                         var animDDCol = animRow.add("group");
                         animDDCol.orientation = "column";
@@ -10559,7 +10554,7 @@ try {
                                 function animRebuildDropdown() {
                                     try { animDD.removeAll(); } catch (e0) {}
 
-                                    var blank0 = animDD.add("item", " ");
+                                    var blank0 = animDD.add("item", String(animDD.__stFlashBlankText || " "));
                                     blank0._isBlank = true;
                                     var __animIndent = "    ";
 
@@ -10614,7 +10609,8 @@ try {
                                             var bp = String(uv.substring(3) || "");
                                             if (!bp || bundledSeen[bp]) continue;
                                             bundledSeen[bp] = true;
-                                            var __bLabel = String(_animLabelGet("B::" + bp) || _stPrettyFileLabel(bp) || "").replace(/^[\s\u00A0]+/, "");
+                                            var __bShowOrig = false; try { __bShowOrig = (__ST_SESSION_TEXT_FAVORITES_SHOW_ORIGINAL__ === true); } catch (eBShowOrig) {}
+                                            var __bLabel = String((__bShowOrig ? _stPrettyFileLabel(bp) : (_animLabelGet("B::" + bp) || _stPrettyFileLabel(bp))) || "").replace(/^[\s\u00A0]+/, "");
                                             var bItem = animDD.add("item", __animIndent + __bLabel);
                                             bItem._fullText = __animIndent + __bLabel;
                                             bItem.__path = bp;
@@ -10627,7 +10623,8 @@ try {
                                         if (uv.indexOf("U::") === 0) p = String(uv.substring(3) || "");
                                         if (!p || addedSeen[p] || !/\.ffx$/i.test(p)) continue;
                                         addedSeen[p] = true;
-                                        var label = String(_animLabelGet("U::" + p) || _stPrettyFileLabel(p) || "").replace(/^[\s\u00A0]+/, "");
+                                        var __uShowOrig = false; try { __uShowOrig = (__ST_SESSION_TEXT_FAVORITES_SHOW_ORIGINAL__ === true); } catch (eUShowOrig) {}
+                                        var label = String((__uShowOrig ? _stPrettyFileLabel(p) : (_animLabelGet("U::" + p) || _stPrettyFileLabel(p))) || "").replace(/^[\s\u00A0]+/, "");
                                         var it = animDD.add("item", __animIndent + label);
                                         it._fullText = __animIndent + label;
                                         it.__path = p;
@@ -10773,10 +10770,12 @@ try {
                                                 sectionChoices: ANIM_SECTION_CHOICES,
                                                 sectionTokenForChoice: function(choice) { return _animDividerToken(choice); },
                                                 newDividerTokenForLabel: function(label) { return _animDividerToken(label); },
-                                                newDividerDisplayForLabel: function(label) { return _animDividerDisplay(label); }
+                                                newDividerDisplayForLabel: function(label) { return _animDividerDisplay(label); },
+                                                initialShowOriginalFilename: (__ST_SESSION_TEXT_FAVORITES_SHOW_ORIGINAL__ === true)
                                             })
                                         );
                                         if (!outAnim || !outAnim.length) return;
+                                        try { __ST_SESSION_TEXT_FAVORITES_SHOW_ORIGINAL__ = (outAnim.__stShowOriginalFilename === true); } catch (eAnimShowSave) {}
 
                                         var outBundled = [];
                                         var outAdded = [];
@@ -10826,7 +10825,7 @@ try {
                                     animLbl.addEventListener("mousedown", _animReorderMouse);
                                 } catch (eAnimReorder) {}
 
-                                animAddBtn.onClick = function () {
+                                (animAddBtn.__button || animAddBtn).onClick = function () {
                                     // TEXT tab (+): NORMAL click ONLY adds .ffx preset(s) to the dropdown list.
                                     // (No applying to layers and no layer creation on click.)
                                     var picked = animOpenDialogFromDefaultFolder(); // multi-select enabled
@@ -10850,11 +10849,15 @@ try {
                                     animSave(arr);
                                     try { animUnifiedOrderSave([]); } catch (eAnimAddU) {}
                                     animRebuildDropdown();
-                                try { _ddFlashAddedFrames(animDD, 20); } catch(eMsg) {}
+                                try { _ddFlashAddedFrames(animDD, 26, animRebuildDropdown); } catch(eMsg) {}
                                 };
 
                                                                 animDD.onChange = function () {
                                     try {
+                                        try {
+                                            if (animDD.__stShowingAddedFlash === true) return;
+                                            if (animDD.__stSuppressOnChangeUntil && (new Date()).getTime() < animDD.__stSuppressOnChangeUntil) return;
+                                        } catch (eAnimFlashGuard) {}
                                         if (animDD.__shineProgrammatic) {
                                             animDD.__shineProgrammatic = false;
                                             return;
@@ -11126,26 +11129,6 @@ function _stShowModernExpressionWarningDialog() {
         warnIcon.minimumSize   = [iconW, iconH];
         warnIcon.maximumSize   = [iconW, iconH];
         try { warnIcon.alignment = ["left", "center"]; } catch (eAI2) {}
-        warnIcon.onDraw = function () {
-            try {
-                var gr = this.graphics;
-                var w = this.size[0], h = this.size[1];
-                var pad = 1;
-                var topX = Math.round(w * 0.5);
-                var topY = pad;
-                var leftX = pad;
-                var leftY = h - pad;
-                var rightX = w - pad;
-                var rightY = h - pad;
-                var fillBrush = gr.newBrush(gr.BrushType.SOLID_COLOR, shineYellow);
-                gr.newPath();
-                gr.moveTo(topX, topY);
-                gr.lineTo(rightX, rightY);
-                gr.lineTo(leftX, leftY);
-                gr.closePath();
-                gr.fillPath(fillBrush);
-            } catch (eDraw) {}
-        };
 
         var titleTxt = titleRow.add("statictext", undefined, "Modern JavaScript Expressions Required");
         titleTxt.alignment = ["fill", "center"];
@@ -11547,8 +11530,12 @@ function _buildTextTabIfNeeded() {
             _setTopTabLabelColor(tabLblUpdates, isUpdates ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
             _setTopTabLabelColor(tabLblRequests, isRequests ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
             _setTopTabLabelColor(tabLblHelp, isHelp ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
-// Force underline redraw without full relayout
-            try { tabUnderlineLayer.visible = false; tabUnderlineLayer.visible = true; } catch (eU) {}
+            try {
+                if (_topTabs && _topTabs.setNativeTabUnderline) {
+                    _topTabs.setNativeTabUnderline(isText ? "TEXT" : (isUpdates ? "UPDATES" : (isRequests ? "REQUESTS" : (isHelp ? "HELP" : "MAIN"))));
+                }
+            } catch (eNU) {}
+// Native underline is text-based.
 
             // Keep logo headers centered during tab changes too,
             // not just after deferred resize settles.
@@ -14299,7 +14286,7 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
         // Top-row alignment constants (keep identical across tabs)
                 // Top-row alignment constants (keep identical across tabs)
         var TOPROW_LABEL_W    = 105; // LIB. ELEMENTS / TEXT ANIMATORS label width
-        var TOPROW_PLUS_W     = 38;  // plus icon button width (slightly larger / easier hit)
+        var TOPROW_PLUS_W     = 62;  // ADD button width in true section-button style
         var TOPROW_PLUS_H     = UI.btnH; // match dropdown height for perfect vertical centering
         var TOPROW_HDR_INSET  = 7;   // px: nudge header text right to align with dropdown text inset
         var TOPROW_ROW_GAP    = 2;   // spacing between items on the top row (brings dropdown closer to +)
@@ -14333,6 +14320,9 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
         // Force dropdown popup list width to match the closed control width (ScriptUI quirk fix).
         // Safe: does not change selection behavior; only clamps the popup list width.
         function _lockDropdownPopupWidth(dd, maxVisibleItems) {
+            // NO-EVENT-HOOK DIAGNOSTIC: avoid dropdown activate/mouseover/focus handlers and list-size mutation.
+            // This may allow wider/taller native dropdown popups, but it removes another post-modal ScriptUI touch path.
+            return;
             if (!dd) return;
 
             if (dd.__shineNoTruncate === true) return;
@@ -14345,8 +14335,6 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
                 if (!exists) list.push(dd);
             } catch (eReg) {}
 
-            // IMPORTANT: Do NOT override onDraw for dropdowns.
-            // In some ScriptUI builds (incl. AE 2025), overriding onDraw can suppress
             // the native control rendering, making the dropdown "box" disappear.
             // Instead, clamp the popup list width/height right when the menu is about to open.
 
@@ -14596,36 +14584,51 @@ if (w && dd.list) {
 // (We still do a full relayout once at the end of buildUI.)
 // --------------------------------------------------
 
+function __stNoForceRelayoutDiagnosticActive() {
+    try { return ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true); } catch (e) {}
+    return false;
+}
+
 function relayoutScoped(scopeGroup) {
+    // Optional emergency bypass for forced relayout.
+    try { if (__stNoForceRelayoutDiagnosticActive()) return; } catch (eDiag) { return; }
+    try {
+        if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return;
+    } catch (eSafe0) { return; }
     try {
         if ($.global.__ShineToolsIsLiveResizing__ === true) {
-            try { pal.layout.resize(); } catch (e0) {}
+            try { if (!$.global.__ST_isSafeToTouchUI__ || $.global.__ST_isSafeToTouchUI__()) pal.layout.resize(); } catch (e0) {}
             return;
         }
     } catch (eLive0) {}
     try { (scopeGroup || pal).layout.layout(true); } catch (e1) {}
     try { (scopeGroup || pal).layout.resize(); } catch (e2) {}
-    // A window resize pass helps redraw without forcing a full tree relayout.
     try { pal.layout.resize(); } catch (e3) {}
 }
 
 function relayout() {
-    // Full relayout (use sparingly)
+    try { if (__stNoForceRelayoutDiagnosticActive()) return; } catch (eDiag) { return; }
     relayoutScoped(pal);
 }
 
-// ---- Render-safe helpers (avoid ScriptUI layout during Render Queue) ----
+// ---- Render/modal-safe helpers (avoid ScriptUI layout during Render Queue or native modal transitions) ----
 function _stIsRendering() {
     try { return !!(app && app.project && app.project.renderQueue && app.project.renderQueue.rendering); } catch (e) { return false; }
 }
 
-// Immediate relayout request. The old batched scheduleTask debounce was removed,
-// so this helper now keeps the call sites but performs the relayout directly.
+function _stCanTouchUI() {
+    try { return !($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()); } catch(e) {}
+    return false;
+}
+
 function requestRelayoutSoon(scopeGroup, delayMs) {
+    try { if (__stNoForceRelayoutDiagnosticActive()) return; } catch (eDiag) { return; }
+    try { if (!_stCanTouchUI()) return; } catch (eSafe) { return; }
     try {
         relayoutScoped(scopeGroup || pal);
     } catch (e) {
         try {
+            if (!_stCanTouchUI()) return;
             if (scopeGroup && scopeGroup.layout) {
                 scopeGroup.layout.layout(true);
                 scopeGroup.layout.resize();
@@ -14711,88 +14714,42 @@ function requestRelayoutSoon(scopeGroup, delayMs) {
     }
 
 function defocusButtonBestEffort(btn) {
-            btn.addEventListener("mousedown", function () {
-                try { btn.active = false; } catch (e) {}
-            });
-            btn.addEventListener("mouseup", function () {
-                try { btn.active = false; } catch (e) {}
-            });
-            btn.addEventListener("mouseout", function () {
-                try { btn.active = false; } catch (e) {}
-            });
+            // NO-EVENT-HOOK DIAGNOSTIC: do not add extra mouse handlers just to clear focus rings.
+            // Keep button behavior native for this freeze test.
+            return;
         }
 
 // -------------------------
-// PLUS glyph button (no box, hover turns PLUS yellow)
-// Uses a lightweight group with onDraw so there is no native button chrome.
+// - Keeps the visual idea of a floating PLUS sign.
 // -------------------------
 function addPlusGlyphButton(parent, w, h, helpTip, handler) {
-    // Use an iconbutton (toolbutton) so it behaves like a real button (onClick works),
-    // but we draw the PLUS ourselves to avoid native button chrome.
-    var b = parent.add("iconbutton", undefined, undefined, { style: "toolbutton" });
-    b.alignment     = ["left","bottom"];
-    b.minimumSize   = [w, h];
-    b.preferredSize = [w, h];
-    b.maximumSize   = [w, h];
-    b.helpTip       = helpTip || "Add";
+    var __btnW = Math.max(w, 62);
+    var __btnH = Math.max(h, UI.btnH);
 
-    b._hover = false;
-    b._down  = false;
+    // Use the same straightforward stack-cell button architecture as the section buttons.
+    var cell = parent.add("group");
+    cell.orientation   = "stack";
+    cell.alignChildren = ["fill", "fill"];
+    cell.alignment     = ["left", "bottom"];
+    cell.margins       = [0, 0, 0, 0];
+    cell.spacing       = 0;
+    cell.minimumSize   = [__btnW, __btnH];
+    cell.preferredSize = [__btnW, __btnH];
+    cell.maximumSize   = [__btnW, __btnH];
 
-    function redraw() { try { b.notify("onDraw"); } catch (e) {} }
-
-    // Hover tracking (drives yellow highlight)
-    try {
-        b.addEventListener("mouseover", function () { b._hover = true; redraw(); });
-        b.addEventListener("mouseout",  function () { b._hover = false; b._down = false; redraw(); });
-        b.addEventListener("mousedown", function () { b._down  = true; redraw(); });
-        b.addEventListener("mouseup",   function () { b._down  = false; redraw(); });
-    } catch (eEvt) {
-        b.onMouseEnter = function () { b._hover = true; redraw(); };
-        b.onMouseExit  = function () { b._hover = false; b._down = false; redraw(); };
-        b.onMouseDown  = function () { b._down  = true; redraw(); };
-        b.onMouseUp    = function () { b._down  = false; redraw(); };
-    }
-
-    // Click handler (external code can override b.onClick later if needed)
+    var b = cell.add("button", undefined, "Add...");
+    b.alignment     = ["fill", "center"];
+    b.minimumSize   = [__btnW, __btnH];
+    b.preferredSize = [__btnW, __btnH];
+    b.maximumSize   = [__btnW, __btnH];
+    try { b.helpTip = helpTip || "Add"; } catch (eTip) {}
+    try { b.justify = "center"; } catch (eJ) {}
+    try { defocusButtonBestEffort(b); } catch (eDF) {}
+    try { b.graphics.font = ScriptUI.newFont("Helvetica", "BOLD", 11); } catch (eF) { try { b.graphics.font = ScriptUI.newFont(b.graphics.font.name, "Bold", 11); } catch (eF2) {} }
     if (typeof handler === "function") b.onClick = handler;
 
-    b.onDraw = function () {
-        var gr = this.graphics;
-        var W = this.size[0], H = this.size[1];
-
-        var colIdle  = [0.82, 0.82, 0.82, 1];
-        var colHover = [1.00, 0.82, 0.20, 1]; // Shine yellow
-        var col = (this._hover || this._down) ? colHover : colIdle;
-
-        // slightly thicker PLUS (requested)
-        var pen = gr.newPen(gr.PenType.SOLID_COLOR, col, 3);
-
-        var cx = Math.round(W / 2);
-        var cy = Math.round(H / 2);
-
-        // Slightly larger PLUS for easier targeting
-        var len = Math.round(Math.min(W, H) * 0.23) + 1;
-
-        try {
-            gr.newPath();
-            gr.moveTo(cx - len, cy);
-            gr.lineTo(cx + len, cy);
-            gr.moveTo(cx, cy - len);
-            gr.lineTo(cx, cy + len);
-            gr.strokePath(pen);
-        } catch (e) {
-            try {
-                gr.drawLine(pen, cx - len, cy, cx + len, cy);
-                gr.drawLine(pen, cx, cy - len, cx, cy + len);
-            } catch (e2) {}
-        }
-    };
-
-    // First paint
-    try { b.notify("onDraw"); } catch (e0) {}
-
-    return b;
+    try { cell.__button = b; } catch (eB) {}
+    return cell;
 }
 
 // -------------------------
@@ -14824,19 +14781,11 @@ function addDropdownHeader(col, text, insetPx) {
 
         // Hover + Option label engine (3-state)
         // ==========================================================
-        // Hover label helpers (Modifier-aware) — NO scheduleTask polling
+        // Hover label helpers (Modifier-aware) — tiny hover-only tick
         // ----------------------------------------------------------
-        // NOTE:
-        // Older builds used a repeating app.scheduleTask() loop (50ms) to
-        // live-update hover labels when Option/Shift were pressed while
-        // hovering a button. ScriptUI polling can keep the UI "active"
-        // even when the cursor is elsewhere (e.g. Comp Viewer), which can
-        // cause AE cursor-state flicker (resize / camera orbit icons).
-        //
-        // This implementation updates hover labels only on:
-        //   - mouseover (initial)
-        //   - mousemove while still over the button (if modifiers changed)
-        // …and restores on mouseout. No background timers.
+        // While a button is actively hovered, run a lightweight scheduleTask
+        // so Option/Shift label changes update immediately without requiring
+        // mouse movement. The tick stops on mouseout / modal cancel.
         // ==========================================================
 
         var _hoverBtn = null;
@@ -14847,7 +14796,7 @@ function addDropdownHeader(col, text, insetPx) {
         var _hoverLastShift = null;
 
 // =================================================================================================
-// UTILITIES: HOVER SYSTEM: mousemove-driven hover labels  (CLEANPACK5)
+// UTILITIES: HOVER SYSTEM: instant modifier hover labels
 // =================================================================================================
         function _hoverClearInternal() {
             _hoverBtn = null;
@@ -14882,6 +14831,7 @@ function addDropdownHeader(col, text, insetPx) {
         }
 
         function _hoverStart(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
+            _stHoverStartedMs = _stHoverNowMs();
             _hoverBtn = btn;
             _hoverText = hoverText;
             _hoverOptionText = optionHoverText;
@@ -14890,7 +14840,7 @@ function addDropdownHeader(col, text, insetPx) {
             _hoverLastShift = null;
 
             _hoverUpdateIfChanged(); // initial set (uses current modifiers)
-            _stHoverEnsureTick(); // disabled in SAFE_MODE; mouse/key hooks still update labels
+            _stHoverEnsureTick(); // instant modifier flips while hovered
         }
 
         function _hoverStop(btn, baseText) {
@@ -14899,17 +14849,21 @@ function addDropdownHeader(col, text, insetPx) {
             _stHoverStopTickIfIdle();
 }
         // ------------------------------------------------------------
-        // Modifier-hover label update via MOUSE MOVE (no scheduleTask polling)
+        // Modifier-hover label update via tiny hover-only tick
         // ------------------------------------------------------------
         // ScriptUI doesn't reliably emit events for modifier key changes.
-        // Previously we used a tiny scheduleTask tick while hovered to flip labels instantly.
-        // To avoid ANY background tasks (and reduce panel lockups), we now refresh hover labels
-        // ONLY when the mouse moves while a button is hovered (or on mouseover/mouseout).
-
-        // Optional backwards-compat tick. SAFE_MODE disables it because AE can run scheduleTask
-        // while a host/native modal dialog is open, which can wedge docked ScriptUI panels.
+        // This tick runs ONLY while a button is hovered, so pressing/releasing
+        // Option or Shift flips the visible button label without mouse movement.
+        // It is intentionally allowed even when ST.SAFE_MODE is true; SAFE_MODE
+        // still disables heavier/background UI polish elsewhere.
 var _stHoverRunning = false;
 var _stHoverTaskId  = null;
+var _stHoverTaskDueMs = 0;
+var _stHoverStartedMs = 0;
+var _stHoverIntervalMs = 90; // Poll only while a button is actively hovered; allows modifier-only label flips.
+var _stHoverMaxOverdueMs = 260; // If AE holds a hover tick through an Import/Render modal, cancel it before it touches UI.
+
+function _stHoverNowMs(){ try { return (new Date()).getTime(); } catch(e) { return 0; } }
 
 // Expose a callable for scheduleTask (string-based) to invoke our closure safely.
 $.global.__ST_HoverTick__ = function () {
@@ -14926,19 +14880,47 @@ function _stHoverCancelTask(){
         }
     } catch (e) {}
     _stHoverTaskId = null;
+    _stHoverTaskDueMs = 0;
 }
 
 function _stHoverEnsureTick(){
+    // HOVER-LABEL RESTORE TEST:
+    // Restore only button-level hover polling so Option/Shift label flips update
+    // while the pointer is over a button. Root panel mouse/key hooks remain disabled.
+    try { _hoverUpdateIfChanged(); } catch (e) {}
+    if (!_hoverBtn) {
+        _stHoverRunning = false;
+        _stHoverCancelTask();
+        return;
+    }
     try {
-        if (ST && ST.SAFE_MODE === true) {
+        if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) {
+            _hoverClearInternal();
             _stHoverRunning = false;
             _stHoverCancelTask();
             return;
         }
     } catch (eSafe) {}
-    if (_stHoverRunning) return;
+    if (_stHoverRunning && _stHoverTaskId !== null) return;
     _stHoverRunning = true;
-    _stHoverTickInternal();
+    _stHoverScheduleNext();
+}
+
+function _stHoverScheduleNext(){
+    try {
+        if (!_hoverBtn) {
+            _stHoverRunning = false;
+            _stHoverCancelTask();
+            return;
+        }
+        _stHoverCancelTask();
+        _stHoverTaskDueMs = _stHoverNowMs() + _stHoverIntervalMs;
+        _stHoverTaskId = app.scheduleTask("try{if($.global.__ST_HoverTick__){$.global.__ST_HoverTick__();}}catch(e){}", _stHoverIntervalMs, false);
+    } catch (e) {
+        _stHoverRunning = false;
+        _stHoverTaskId = null;
+        _stHoverTaskDueMs = 0;
+    }
 }
 
 function _stHoverStopTickIfIdle(){
@@ -14950,47 +14932,56 @@ function _stHoverStopTickIfIdle(){
 
 function _stHoverTickInternal(){
     if (!_stHoverRunning) return;
+
+    // Overdue task guard:
+    // If AE held this scheduleTask while a native Import/Render progress window was open,
+    // it may execute immediately after the modal closes. That exact post-modal tick is
+    // where ScriptUI glyphs/arrow controls have been freezing. Cancel before touching UI.
     try {
-        if (ST && ST.SAFE_MODE === true) {
+        var __tickNow = _stHoverNowMs();
+        if (_stHoverTaskDueMs && (__tickNow - _stHoverTaskDueMs) > _stHoverMaxOverdueMs) {
+            _hoverClearInternal();
             _stHoverRunning = false;
             _stHoverCancelTask();
+            try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(1800); } catch (eCoolLate) {}
             return;
         }
-    } catch (eSafe) {}
+    } catch (eLateHover) {}
+
+    // If nothing is hovered, stop immediately. No idle/background polling.
+    if (!_hoverBtn) {
+        _stHoverStopTickIfIdle();
+        return;
+    }
+
     try {
         if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) {
+            // Do not requeue during unsafe UI states. A pending scheduleTask during AE native modals
+            // is the line-0 lockup trigger. Mouse/key hooks will restart polling on the next real hover.
+            _hoverClearInternal();
             _stHoverRunning = false;
             _stHoverCancelTask();
             return;
         }
     } catch (eTouch) {}
 
-    try { if (_hoverBtn) _hoverUpdateIfChanged(); } catch(e0) {}
+    try { _hoverUpdateIfChanged(); } catch(e0) {}
 
-    // If nothing is hovered, stop quickly (no repeating background work).
     if (!_hoverBtn) {
         _stHoverStopTickIfIdle();
         return;
     }
 
-    // Re-schedule a single short tick.
     try {
-        _stHoverCancelTask();
-        _stHoverTaskId = app.scheduleTask("try{$.global.__ST_HoverTick__();}catch(e){}", 80, false);
+        // Continue polling only while the same button remains hovered.
+        _stHoverScheduleNext();
     } catch (e1) {
-        // If scheduleTask fails, just stop (mousemove hook will still work).
         _stHoverRunning = false;
         _stHoverCancelTask();
     }
 }
 
 function _stRecoverAfterHostModal(){
-    try {
-        if (ST && ST.SAFE_MODE === true) {
-            _stHoverCancelTask();
-            _stHoverRunning = false;
-        }
-    } catch(e0) {}
     try {
         if ($.global && $.global.__ST_BUSY__ === true) {
             var started = 0;
@@ -15016,56 +15007,42 @@ function _stRecoverAfterHostModal(){
 
 // Install a single mousemove listener on the palette/panel to refresh hovered button label.
 function _stHoverInstallMouseHook(root){
-    try {
-        if (!root) return;
-        if (root.__ST_hoverMouseHooked) return;
-        root.__ST_hoverMouseHooked = true;
-
-        root.addEventListener("mousemove", function(){
-            try {
-                _stRecoverAfterHostModal();
-                if (_hoverBtn) _hoverUpdateIfChanged();
-            } catch(e0) {}
-        });
-
-        // Also refresh once on mouseover anywhere in the panel (helps first enter)
-        root.addEventListener("mouseover", function(){
-            try {
-                _stRecoverAfterHostModal();
-                if (_hoverBtn) _hoverUpdateIfChanged();
-            } catch(e1) {}
-        });
-
-        root.addEventListener("mousedown", function(){
-            try { _stRecoverAfterHostModal(); } catch(e2) {}
-        });
-    } catch(e) {}
+    // NO-EVENT-HOOK DIAGNOSTIC: do not install root mousemove/mouseover/mousedown hooks.
+    return;
 }
 
 // Best-effort: key hooks (not reliable in all AE ScriptUI builds), but when they fire they give instant updates.
 function _stHoverInstallKeyHook(root){
-    try {
-        if (!root) return;
-        if (root.__ST_hoverKeyHooked) return;
-        root.__ST_hoverKeyHooked = true;
-
-        function _k(){
-            try { if (_hoverBtn) _hoverUpdateIfChanged(); } catch(e0) {}
-        }
-
-        try { root.addEventListener("keydown", _k); } catch(e1) {}
-        try { root.addEventListener("keyup",   _k); } catch(e2) {}
-    } catch(e3) {}
+    // NO-EVENT-HOOK DIAGNOSTIC: do not install root keydown/keyup hooks.
+    return;
 }
 
 function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
-            btn.addEventListener("mouseover", function () { _hoverStart(btn, baseText, hoverText, optionHoverText, ""); });
-            btn.addEventListener("mouseout",  function () { _hoverStop(btn, baseText); });
+            // Button-level hooks only. Do not restore root panel mouse/key listeners yet.
+            try {
+                btn.addEventListener("mouseover", function () {
+                    try { _hoverStart(btn, baseText, hoverText, optionHoverText, ""); } catch (eIn) {}
+                });
+            } catch (eMO) {}
+            try {
+                btn.addEventListener("mouseout", function () {
+                    try { _hoverStop(btn, baseText); } catch (eOut) {}
+                });
+            } catch (eMT) {}
         }
 
         function enableHoverModifierLabel(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            btn.addEventListener("mouseover", function () { _hoverStart(btn, baseText, hoverText, optionHoverText, shiftHoverText); });
-            btn.addEventListener("mouseout",  function () { _hoverStop(btn, baseText); });
+            // Button-level hooks only. Do not restore root panel mouse/key listeners yet.
+            try {
+                btn.addEventListener("mouseover", function () {
+                    try { _hoverStart(btn, baseText, hoverText, optionHoverText, shiftHoverText); } catch (eIn) {}
+                });
+            } catch (eMO) {}
+            try {
+                btn.addEventListener("mouseout", function () {
+                    try { _hoverStop(btn, baseText); } catch (eOut) {}
+                });
+            } catch (eMT) {}
         }
 
 // -------------------------
@@ -15252,29 +15229,27 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
                 }
 
                 if (item.badgeDot) {
-                    // Right-edge indicator line (draw-only, disabled; sits ON the button edge)
-                    var LINE_W = 3;
-                    var line = cell.add("group");
+                    // Use a live statictext overlay on the right edge of the button.
+                    // It is NOT disabled, because disabled statictext can disappear in AE ScriptUI.
+                    var line = cell.add("statictext", undefined, "▐");
                     line.alignment     = ["right", "top"];
-                    line.minimumSize   = [LINE_W, h];
-                    line.preferredSize = [LINE_W, h];
-                    line.maximumSize   = [LINE_W, h];
-                    // Disabled so it cannot intercept clicks; still draws via onDraw.
-                    try { line.enabled = false; } catch (eEn) {}
+                    line.margins       = [0, 0, -2, 0];
+                    line.minimumSize   = [10, 20];
+                    line.preferredSize = [10, 20];
+                    line.maximumSize   = [10, 20];
+                    line.justify       = "center";
+                    line.helpTip       = item.helpTip || "";
+                    try { line.graphics.font = ScriptUI.newFont(line.graphics.font.name, "Bold", 20); } catch (eF) {}
+                    try { line.graphics.foregroundColor = line.graphics.newPen(line.graphics.PenType.SOLID_COLOR, [1, 0.82, 0.20, 1], 1); } catch (eC) {}
 
-                    line.onDraw = function () {
-                        try {
-                            var g = this.graphics;
-                            var W = this.size[0];
-                            var H = this.size[1];
-                            if (!W || !H) return;
-                            var brush = g.newBrush(g.BrushType.SOLID_COLOR, ST_CONST.COLORS.SHINE_YELLOW_RGBA);
-                            // Slight top/bottom inset so it looks centered on the button face
-                            g.rectPath(0, 3, W, Math.max(0, H - 6));
-                            g.fillPath(brush);
-                        } catch (e) {}
-                    };
-                    try { line.notify('onDraw'); } catch (eN) {}
+                    // If the user clicks directly on the marker, pass it through to the button behavior.
+                    try {
+                        line.addEventListener("click", function () {
+                            try { if (btn && typeof btn.onClick === "function") btn.onClick(); } catch (eLineClick) {}
+                        });
+                    } catch (eEvt) {
+                        try { line.onClick = function () { try { if (btn && typeof btn.onClick === "function") btn.onClick(); } catch (eLineClick2) {} }; } catch (eOC) {}
+                    }
                 }
 
                 defocusButtonBestEffort(btn);
@@ -15383,28 +15358,44 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
         // Custom twirl control
         // -------------------------
         function addTwirlControl(parent) {
-            var twirlBox = parent.add("panel", undefined, "");
-            twirlBox.minimumSize = [UI.twirlW, UI.headerH];
-            twirlBox.maximumSize = [UI.twirlW, UI.headerH];
+            // Native text arrows with baseline compensation.
+            // This keeps the original-style look, but uses a wrapper to lift the glyph
+            // slightly so its optical center lines up with the section title text.
+            var twirlWrap = parent.add("group");
+            twirlWrap.orientation = "column";
+            twirlWrap.alignChildren = ["left", "top"];
+            twirlWrap.alignment = ["left", "center"];
+            twirlWrap.spacing = 0;
+            twirlWrap.margins = 0;
+            twirlWrap.minimumSize = [UI.twirlW, UI.headerH];
+            twirlWrap.maximumSize = [UI.twirlW, UI.headerH];
+            twirlWrap.preferredSize = [UI.twirlW, UI.headerH];
+
+            var twirlBox = twirlWrap.add("statictext", undefined, "▶");
+            twirlBox.minimumSize = [UI.twirlW, Math.max(0, UI.headerH - 3)];
+            twirlBox.maximumSize = [UI.twirlW, Math.max(0, UI.headerH - 3)];
+            twirlBox.preferredSize = [UI.twirlW, Math.max(0, UI.headerH - 3)];
+            twirlBox.justify = "center";
+            twirlBox.alignment = ["left", "top"];
             twirlBox.margins = 0;
             twirlBox._collapsed = true;
+            try { twirlBox.graphics.font = ScriptUI.newFont(twirlBox.graphics.font.name, "Bold", Math.max(13, twirlBox.graphics.font.size + 2)); } catch (eFont) {}
 
-            twirlBox.onDraw = function () {
-                var g = this.graphics;
-                try { g.font = ScriptUI.newFont(g.font.name, "Regular", g.font.size); } catch (e) {}
+            // Bottom spacer physically lifts the native glyph inside the fixed-height header.
+            var twirlBottomPad = twirlWrap.add("group");
+            twirlBottomPad.minimumSize = [0, 3];
+            twirlBottomPad.maximumSize = [10000, 3];
+            twirlBottomPad.preferredSize = [0, 3];
+            twirlBottomPad.margins = 0;
 
-                var ch = this._collapsed ? "▶" : "▼";
-                var w  = this.size[0];
-                var h  = this.size[1];
-
-                var x = Math.round((w / 2) - 4);
-                var y = Math.round((h / 2) - (g.font.size / 2) + UI.twirlNudgeY);
-
-                var col = this._collapsed ? [0.7, 0.7, 0.7, 1] : ST_CONST.COLORS.SHINE_YELLOW_RGBA;
-                var pen = g.newPen(g.PenType.SOLID_COLOR, col, 1);
-                g.drawString(ch, pen, x, y);
+            function _twirlSetColor(rgba) {
+                try { twirlBox.graphics.foregroundColor = twirlBox.graphics.newPen(twirlBox.graphics.PenType.SOLID_COLOR, rgba, 1); } catch (e) {}
+            }
+            twirlBox._stUpdateText = function () {
+                try { twirlBox.text = twirlBox._collapsed ? "▶" : "▼"; } catch (eT) {}
+                try { _twirlSetColor(twirlBox._collapsed ? SECTION_LABEL_COLOR_IDLE : SECTION_LABEL_COLOR_EXPANDED); } catch (eC) {}
             };
-
+            try { twirlBox._stUpdateText(); } catch (eInit) {}
             return twirlBox;
         }
 
@@ -15556,6 +15547,7 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, acco
             function setCollapsed(v, silent) {
                 state.collapsed = v;
                 twirlBox._collapsed = v;
+                try { if (twirlBox._stUpdateText) twirlBox._stUpdateText(); } catch (eTwirlUpdate) {}
 
                 // Build UI only when opening
                 if (!v) _ensureBuilt();
@@ -15589,15 +15581,36 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     dlg.spacing = 10;
 
-                    dlg.margins = [10, 10, 10, 10];
+                    // Match the same left/right/top/bottom padding used by the section reorder
+                    // and Library/Text Animator organize dialogs.
+                    dlg.margins = [18, 10, 18, 10];
 
-                    var info = dlg.add("statictext", undefined, "Reorder buttons for this section (affects the grid order).");
+                    // Align this description's first letter with the visible left edge of the list box.
+                    var infoWrap = dlg.add("group");
+                    infoWrap.orientation = "row";
+                    infoWrap.alignChildren = ["left", "top"];
+                    infoWrap.alignment = ["fill", "top"];
+                    infoWrap.spacing = 0;
+                    infoWrap.margins = [0, 0, 0, 0];
+
+                    var infoPad = infoWrap.add("statictext", undefined, "");
+                    try { infoPad.minimumSize = [5, 1]; } catch (eInfoPad) {}
+                    try { infoPad.maximumSize = [8, 1]; } catch (eInfoPad2) {}
+
+                    var info = infoWrap.add("statictext", undefined, "Reorder buttons (affects grid order).");
 
                     info.alignment = ["fill", "top"];
 
                     var lb = dlg.add("listbox", undefined, [], { multiselect: false });
 
-                    lb.preferredSize = [220, 220];
+                    // Match the effective width of the shared Reorder Sections dialog.
+                    // Sections request 220, but _shineShowReorderListDialog clamps listW to 260,
+                    // which also lines up with the bottom ▲ ▼ OK Cancel row.
+                    // Keep the current width/edge-aligned button row, but make this dialog
+                    // roughly half as tall by shortening only the list box height.
+                    lb.preferredSize = [260, 200];
+                    lb.minimumSize = [260, 200];
+                    lb.maximumSize = [260, 10000];
 
                     function addItem(labelText){
 
@@ -15615,7 +15628,7 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     }
 
-                    if (lb.items.length) lb.selection = 0;
+// No default preselection in reorder dialogs.
 
                     var controls = dlg.add("group");
 
@@ -15625,79 +15638,40 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     controls.spacing = 8;
 
-                    // Arrow-only buttons using the SAME custom chevron architecture as section reordering
+                    // Arrow-only native buttons matching the section reordering controls.
 
-                    // (draw-only glyph, no blue focus ring look)
+                    function _makeDlgMiniArrowButton(parent, glyph, tip) {
 
-                    function _styleDlgChevron(btn, glyph, tip) {
+                        var w = 24, h = 24;
 
-                        btn.minimumSize = [32, 28];
+                        var wrap = parent.add('group');
+                        wrap.orientation   = 'stack';
+                        wrap.alignChildren = ['fill','fill'];
+                        wrap.alignment     = ['left','center'];
+                        wrap.margins       = 0;
+                        wrap.spacing       = 0;
+                        try { wrap.minimumSize = [w, h]; } catch (eW0) {}
+                        try { wrap.maximumSize = [w, h]; } catch (eW1) {}
+                        try { wrap.preferredSize = [w, h]; } catch (eW2) {}
 
-                        btn.maximumSize = [32, 28];
-
-                        btn.alignment   = ['left','center'];
-
-                        btn.margins     = 0;
-
-                        try { btn.helpTip = tip; } catch (eTip2) {}
-
-                        btn._glyph = glyph;
-
-                        btn.text = "";
-
-                        btn._isHover = false;
-
-                        btn._isDown  = false;
-
-                        function _inv(){ try { btn.notify('onDraw'); } catch(e0) {} try { btn.parent.update(); } catch(e1) {} }
-
-                        btn.addEventListener('mouseover', function(){ btn._isHover = true; _inv(); });
-
-                        btn.addEventListener('mouseout',  function(){ btn._isHover = false; btn._isDown = false; _inv(); });
-
-                        btn.addEventListener('mousedown', function(){ btn._isDown = true; _inv(); });
-
-                        btn.addEventListener('mouseup',   function(){ btn._isDown = false; _inv(); });
-                        btn.onMouseEnter = function(){ btn._isHover = true; _inv(); };
-                        btn.onMouseExit  = function(){ btn._isHover = false; btn._isDown = false; _inv(); };
-
-                        btn.onDraw = function(){
-
-                            var g = this.graphics;
-
-                            // Always visible in dialog: idle gray, hover/pressed yellow
-
-                            var col = (this._isHover || this._isDown) ? ARROW_COLOR_HOVER : [0.62,0.62,0.62,1];
-
-                            try {
-
-                                if (!this._glyphFont) {
-
-                                    this._glyphFont = ScriptUI.newFont(g.font.name, 'Regular', Math.max(13, g.font.size + 5));
-
-                                }
-
-                                g.font = this._glyphFont;
-
-                            } catch(eF) {}
-
-                            var w = this.size[0], h = this.size[1];
-
-                            var x = Math.round(w/2 - 4);
-
-                            var y = Math.round(h/2 - (g.font.size/2) - 4);
-
-                            try {
-
-                                var pen = g.newPen(g.PenType.SOLID_COLOR, col, 1);
-
-                                g.drawString(this._glyph || glyph, pen, x, y);
-
-                            } catch(eD) {}
-
+                        var btn = wrap.add('button', undefined, glyph);
+                        btn.alignment = ['fill','fill'];
+                        try { btn.minimumSize = [w, h]; } catch (eB0) {}
+                        try { btn.maximumSize = [w, h]; } catch (eB1) {}
+                        try { btn.preferredSize = [w, h]; } catch (eB2) {}
+                        try { btn.helpTip = tip || ''; } catch (eTip2) {}
+                        try { btn.justify = 'center'; } catch (eJ) {}
+                        try { btn.graphics.font = ScriptUI.newFont('Helvetica', 'BOLD', 13); } catch (eF) {
+                            try { btn.graphics.font = ScriptUI.newFont(btn.graphics.font.name, 'Bold', 13); } catch (eF2) {}
+                        }
+                        try { defocusButtonBestEffort(btn); } catch (eDF) {}
+                        btn.onClick = function(){
+                            try { btn.active = false; } catch (eA0) {}
+                            try { if (typeof wrap.__onActivate === 'function') wrap.__onActivate(); } catch (eAct) {}
+                            try { btn.active = false; } catch (eA1) {}
                         };
-
-                        defocusButtonBestEffort(btn);
+                        try { wrap.__button = btn; } catch (eWB) {}
+                        return wrap;
 
                     }
 
@@ -15709,17 +15683,13 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     arrowGrp.alignChildren = ['left','center'];
 
-                    arrowGrp.spacing = 0;
+                    arrowGrp.spacing = 2;
 
                     arrowGrp.margins = 0;
 
-                    var btnUp = arrowGrp.add("button", undefined, "▲");
+                    var btnUp = _makeDlgMiniArrowButton(arrowGrp, '▲', 'Move up');
 
-                    var btnDn = arrowGrp.add("button", undefined, "▼");
-
-                    _styleDlgChevron(btnUp, '▲', 'Move up');
-
-                    _styleDlgChevron(btnDn, '▼', 'Move down');
+                    var btnDn = _makeDlgMiniArrowButton(arrowGrp, '▼', 'Move down');
 
                     // Dialog action buttons using the SAME stack-cell architecture used elsewhere (e.g. Font Audit CLOSE)
 
@@ -15757,7 +15727,7 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     }
 
-                    controls.add('statictext', undefined, '   ');
+                    var __controlsLeadSpacer = controls.add('statictext', undefined, '   ');
 
                     var __okPack     = __makeDlgCellBtn__(controls, 'OK', 70);
 
@@ -15766,6 +15736,28 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                     var __cancelPack = __makeDlgCellBtn__(controls, 'Cancel', 90);
 
                     var btnCancel    = __cancelPack.btn;
+
+                    // Keep this row exactly as wide as the list box, with the arrows
+                    // pinned to the left edge and OK / Cancel pinned to the right edge.
+                    try { controls.alignment = ['center', 'top']; } catch (eRC0) {}
+                    try { controls.spacing = 8; } catch (eRC1) {}
+                    try { controls.minimumSize = [260, 24]; controls.preferredSize = [260, 24]; controls.maximumSize = [260, 24]; } catch (eRC1b) {}
+                    try { arrowGrp.spacing = 2; } catch (eRC2) {}
+                    try { arrowGrp.minimumSize = [50,24]; arrowGrp.preferredSize = [50,24]; arrowGrp.maximumSize = [50,24]; } catch (eRC2b) {}
+                    try {
+                        if (__controlsLeadSpacer) {
+                            // 260 list width - 50 arrows - 70 OK - 90 Cancel - 3 row gaps of 8 = 26.
+                            __controlsLeadSpacer.text = '';
+                            __controlsLeadSpacer.minimumSize = [26, 1];
+                            __controlsLeadSpacer.preferredSize = [26, 1];
+                            __controlsLeadSpacer.maximumSize = [26, 1];
+                        }
+                    } catch (eRC3) {}
+                    try { __okPack.cell.minimumSize = [70,24]; __okPack.cell.preferredSize = [70,24]; __okPack.cell.maximumSize = [70,24]; } catch (eRC4a) {}
+                    try { btnOk.minimumSize.width = 70; btnOk.preferredSize.width = 70; btnOk.maximumSize.width = 70; } catch (eRC4) {}
+                    try { __cancelPack.cell.margins = [0,0,0,0]; } catch (eRC5a) {}
+                    try { __cancelPack.cell.minimumSize = [90,24]; __cancelPack.cell.preferredSize = [90,24]; __cancelPack.cell.maximumSize = [90,24]; } catch (eRC5b) {}
+                    try { btnCancel.minimumSize.width = 90; btnCancel.preferredSize.width = 90; btnCancel.maximumSize.width = 90; } catch (eRC5) {}
 
                     // Do NOT force focus to OK (causes highlight ring). Keep focus on listbox.
 
@@ -15799,9 +15791,9 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
 
                     }
 
-                    btnUp.onClick = function(){ moveSel(-1); };
+                    btnUp.__onActivate = function(){ moveSel(-1); try { lb.active = true; } catch(eAFU) {} };
 
-                    btnDn.onClick = function(){ moveSel(1); };
+                    btnDn.__onActivate = function(){ moveSel(1); try { lb.active = true; } catch(eAFD) {} };
 
                     btnCancel.onClick = function(){ dlg.close(0); };
 
@@ -16013,10 +16005,15 @@ state.setCollapsed = setCollapsed;
                     dialogTitle || "Reorder Sections",
                     items,
                     {
-                        infoText: "Reorder sections for the MAIN tab.",
-                        dialogW: 360,
-                        listW: 324,
-                        listH: 400
+                        infoText: (String(dialogTitle || "").indexOf("Text") >= 0) ? "Reorder sections for the TEXT tab." : "Reorder sections for the MAIN tab.",
+                        dialogW: 0,
+                        listW: 220,
+                        listH: 300,
+                        dialogPadLR: 18,
+                        dialogPadTop: 10,
+                        dialogPadBot: 10,
+                        hideOriginalToggle: true,
+                        compactSectionDialog: false
                     }
                 );
                 if (!outIds || !outIds.length) return;
@@ -16131,7 +16128,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
 
         // Plus button (kept as ScriptUI button for reliability)
         var favAddBtn = addPlusGlyphButton(favRow, TOPROW_PLUS_W, TOPROW_PLUS_H, "Add file to Library Elements", function () {});
-        try { favAddBtn.alignment = ["left","bottom"]; } catch(eA) {}
+        try { favAddBtn.alignment = ["left","bottom"]; favAddBtn.margins = [-10, 0, 0, 0]; } catch(eA) {}
 
         // Label above dropdown
         var favDDCol = favRow.add("group");
@@ -16176,7 +16173,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                 function favRebuildDropdown() {
 
                     try { favDD.removeAll(); } catch (e0) {}
-                    var blank = favDD.add("item", " ");
+                    var blank = favDD.add("item", String(favDD.__stFlashBlankText || " "));
                     blank._isBlank = true;
                     var __favIndent = "    ";
                     var favs = favLoad();
@@ -16198,7 +16195,8 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                                 continue;
                             }
 
-                            var displayName = String(_favEntryLabel(favEntry) || _stPrettyFileLabel(rawFav) || "").replace(/^[\s\u00A0]+/, "");
+                            var __favShowOrig = false; try { __favShowOrig = (__ST_SESSION_MAIN_FAVORITES_SHOW_ORIGINAL__ === true); } catch (eFavShowOrig) {}
+                            var displayName = String((__favShowOrig ? _stPrettyFileLabel(rawFav) : (_favEntryLabel(favEntry) || _stPrettyFileLabel(rawFav))) || "").replace(/^[\s\u00A0]+/, "");
                             var it = favDD.add("item", __favIndent + displayName);
                             it._fullText = __favIndent + displayName;
                             it._path = rawFav;
@@ -16292,10 +16290,12 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                                 sectionChoices: FAV_DEFAULT_DIVIDERS,
                                 sectionTokenForChoice: function(choice) { return _favDividerToken(choice); },
                                 newDividerTokenForLabel: function(label) { return _favDividerToken(label); },
-                                newDividerDisplayForLabel: function(label) { return _favDividerDisplay(label); }
+                                newDividerDisplayForLabel: function(label) { return _favDividerDisplay(label); },
+                                initialShowOriginalFilename: (__ST_SESSION_MAIN_FAVORITES_SHOW_ORIGINAL__ === true)
                             })
                         );
                         if (!outFav || !outFav.length) return;
+                        try { __ST_SESSION_MAIN_FAVORITES_SHOW_ORIGINAL__ = (outFav.__stShowOriginalFilename === true); } catch (eFavShowSave) {}
 
                         var outEntries = [];
                         for (var iFO = 0; iFO < outFav.length; iFO++) {
@@ -16337,7 +16337,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                     favDD.onMouseDown = favDD.onActivate; // some builds fire mouse down earlier than activate
                 } catch (ePop) {}
 
-                favAddBtn.onClick = function () {
+                (favAddBtn.__button || favAddBtn).onClick = function () {
                     if (!requireProject()) return;
 
                     var ks = null;
@@ -16358,7 +16358,8 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                         favAddPath(f.fsName);
                     }
                     favRebuildDropdown();
-                    try { _ddFlashAddedFrames(favDD, 20); } catch(eMsg) {}
+                    try { relayout(); } catch (eRLAdded0) {}
+                    try { _ddFlashAddedFrames(favDD, 26, favRebuildDropdown); } catch(eMsg) {}
                     // Cmd+click = add to list AND import into bin + active comp timeline.
                     if (doImport) {
                         for (var j = 0; j < picked.length; j++) {
@@ -16369,12 +16370,16 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                     }
 
                     try { favAddBtn.visible = true; favAddBtn.enabled = true; } catch (eV) {}
-                    try { favAddBtn.notify("onDraw"); } catch (eD) {}
-                    relayout();
+                    // Do not relayout after the flash is shown; a layout pass here can repaint
+                    // the closed dropdown back to blank before the 30-frame message is visible.
                 };
 
                 favDD.onChange = function () {
                     try {
+                        try {
+                            if (favDD.__stShowingAddedFlash === true) return;
+                            if (favDD.__stSuppressOnChangeUntil && (new Date()).getTime() < favDD.__stSuppressOnChangeUntil) return;
+                        } catch (eFavFlashGuard) {}
                         if (favDD.__shineProgrammatic) {
                             favDD.__shineProgrammatic = false;
                             return;
@@ -16624,6 +16629,7 @@ var collapseGap = content.add("group");
         }
 
         function _clampAllDropdowns() {
+            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeDD0) { return; }
             try {
                 var dds = $.global.__ShineToolsAllDropdowns;
                 if (dds && dds.length) {
@@ -16644,18 +16650,21 @@ var collapseGap = content.add("group");
 
         $.global[__RESIZE_TICK_FN] = function () {
             __resizeTask = 0;
+            try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagResize) { return; }
             try { if ($.global.__ShineToolsClosing__ === true) return; } catch (ePC5) {}
+            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeResize) { return; }
             try { pal.layout.layout(true); } catch (e1) {}
             try { __stCenterLogoHeaders(); } catch (e1a) {}
             try { pal.layout.resize(); } catch (e2) {}
             try { __stCenterLogoHeaders(); } catch (e2a) {}
-            // Only do the expensive dropdown text clamp once after resize settles.
             _clampAllDropdowns();
             try { if (pal && pal.update) pal.update(); } catch (e3) {}
         };
 
         function requestFullRelayoutSoon() {
+            try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagFull) { return; }
             try { if ($.global.__ShineToolsClosing__ === true) return; } catch (e0) {}
+            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeFull) { return; }
             try { if (pal && pal.layout) pal.layout.resize(); } catch (e5) {}
             try { __stCenterLogoHeaders(); } catch (e6) {}
             try { _clampAllDropdowns(); } catch (e7) {}
@@ -16759,6 +16768,7 @@ var collapseGap = content.add("group");
         pal.onResizing = function () {
             _cancelResizeTask();
             try { $.global.__ShineToolsIsLiveResizing__ = true; } catch (eFlag0) {}
+            try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagResizeA) { return; }
             try { if (pal && pal.layout) pal.layout.resize(); } catch (e0) {}
             try { __stCenterLogoHeaders(); } catch (e0a) {}
             try { if (pal && pal.update) pal.update(); } catch (e1) {}
@@ -16769,6 +16779,7 @@ var collapseGap = content.add("group");
             __lastLiveResizeW = -1;
             __lastLiveResizeH = -1;
             __lastLiveResizeMs = 0;
+            try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagResizeB) { return; }
 
             try { if (pal && pal.layout) pal.layout.resize(); } catch (e0) {}
             try { __stCenterLogoHeaders(); } catch (e1) {}
@@ -17018,37 +17029,6 @@ try {
             warnIcon.maximumSize   = [iconW, iconH];
             try { warnIcon.alignment = ["left", "center"]; } catch (eAI2) {}
 
-            warnIcon.onDraw = function () {
-                try {
-                    var gr = this.graphics;
-                    var w = this.size[0], h = this.size[1];
-                    var pad = 2;
-
-                    var topX = Math.round(w * 0.5);
-                    var topY = pad;
-                    var leftX = pad;
-                    var leftY = h - pad;
-                    var rightX = w - pad;
-                    var rightY = h - pad;
-
-                    var yellow = [1.0, 0.82, 0.0, 1.0]; // Shine yellow
-                    var fillBrush = gr.newBrush(gr.BrushType.SOLID_COLOR, yellow);
-
-                    var black = [0.08, 0.08, 0.08, 1];
-                    var strokePen = gr.newPen(gr.PenType.SOLID_COLOR, black, 1);
-
-                    gr.newPath();
-                    gr.moveTo(topX, topY);
-                    gr.lineTo(rightX, rightY);
-                    gr.lineTo(leftX, leftY);
-                    gr.closePath();
-
-                    gr.fillPath(fillBrush);
-
-                    try { gr.strokePath(strokePen); } catch(eS) {}
-                } catch (eD) {}
-            };
-            try { warnIcon.notify('onDraw'); } catch (eND) {}
 
             __stWarnHeader = headerRow.add("statictext", undefined, "ShineTools needs these settings enabled:");
             __stWarnHeader.alignment = ["fill", "center"];
@@ -17243,7 +17223,9 @@ try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (e0aa) {}
 try { $.global.__ShineToolsInitialized = true; } catch (e0b) {}
 try {
     $.global.__ShineToolsKickLayout = function () {
+        try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagKick) { return; }
         try { if ($.global.__ShineToolsClosing__ === true) return; } catch (ePC3) {}
+        try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeKick) { return; }
         var p = null;
         try { p = $.global.__ShineTools_pal; } catch (e1) {}
         if (!p) return;
@@ -17269,7 +17251,7 @@ if (myPal instanceof Window) {
     myPal.show();
 
     // Final layout pass after show.
-    // Close-safety patch: avoid delayed post-show relayout tasks that can outlive panel teardown.
+    // Close-safety guard: avoid delayed post-show relayout tasks that can outlive panel teardown.
     try { $.global.__ShineToolsKickLayout(); } catch (e7) {}
 } else {
     // For docked panels, repeated delayed kick-layout passes can cause the footer to visibly jump.
@@ -17277,7 +17259,9 @@ if (myPal instanceof Window) {
     try { $.global.__ShineToolsKickLayout(); } catch (e10) {}
 }
 
-// CleanPack9: robust host-panel resolution (prevents "Object is invalid" when stale Panel refs exist)
+try { $.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ = false; } catch (eRelayoutBypass) {}
+
+// Robust host-panel resolution (prevents "Object is invalid" when stale Panel refs exist)
 })( (function(){
     try {
         var __h = $.global.__ST_HOST_PANEL__;
