@@ -2,19 +2,15 @@
   "latest": "1.1",
   "jsxUrl": "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/ShineTools_Main.jsx",
 
-  "notes": [
-    "Added new Save Workspace/Favorites Manager.",
-    "Added new Organize Library Elements dialog with custom section dividers, custom filenames, and reordering.",
-    "Changed section reordering to use Option-click on the MAIN and TEXT tabs.",
-    "Bug fixes."
-  ],
-
-  "history": [
-    {
-      "version": "1.0",
-      "notes": [
-        "Initial Release."
-      ]
-    }
-  ]
+  "changelog": {
+    "1.1": [
+      "Added new Save Workspace/Favorites Manager.",
+      "Added new Organize Library Elements dialog with custom section dividers, custom filenames, and reordering.",
+      "Changed section reordering to use Option-click on the MAIN and TEXT tabs.",
+      "Bug fixes."
+    ],
+    "1.0": [
+      "Initial Release."
+    ]
+  }
 }
