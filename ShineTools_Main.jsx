@@ -13068,72 +13068,80 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 try { kvLatest.val.text = ver || "—"; } catch (e) {}
             }
 
-            function _setUpdatesChangelogStructured(latestVer, currentNotes, historyArr) {
-                // Visual separation:
-                //   CURRENT VERSION (bold-ish notes)
-                //   PREVIOUS RELEASES (history list)
+            function _setUpdatesChangelogStructured(latestVer, currentNotes, historyArr, updateAvailable) {
+                // version.json is the single source of truth for release notes.
+                // Top section reflects the newest available release when an update exists,
+                // then switches to Current Version once the installed JSX version matches latest.
                 try {
-                    var s = "";
-
-                    var vLatest = String(latestVer || "").replace(/^v\s*/i, "");
-                    var today = _formatStamp(new Date());
-
-                    // Current section
-                    if (vLatest) {
-                        s += "CURRENT VERSION (" + vLatest + ") — " + today + "\n";
-                    } else {
-                        s += "CURRENT VERSION — " + today + "\n";
+                    function _cleanVersion(v) {
+                        try { return String(v || "").replace(/^v\s*/i, "").replace(/^\s+|\s+$/g, ""); } catch (e) {}
+                        return "";
                     }
 
-                    var cn = currentNotes || [];
-                    if (typeof cn === "string") cn = [cn];
+                    function _asArray(x) {
+                        if (x === null || x === undefined) return [];
+                        if (typeof x === "string") return [x];
+                        try {
+                            if (x && x.length !== undefined) {
+                                var a = [];
+                                for (var i = 0; i < x.length; i++) a.push(x[i]);
+                                return a;
+                            }
+                        } catch (e) {}
+                        return [String(x)];
+                    }
 
-                    if (cn && cn.length) {
-                        for (var i=0; i<cn.length; i++) {
-                            s += "• " + String(cn[i]) + "\n";
+                    function _appendNotes(out, notesArr) {
+                        var notes = _asArray(notesArr);
+                        if (notes && notes.length) {
+                            for (var i = 0; i < notes.length; i++) {
+                                if (notes[i] === null || notes[i] === undefined) continue;
+                                out.push("- " + String(notes[i]).replace(/^\s+|\s+$/g, ""));
+                            }
                         }
-                    } else {
-                        s += "• (NO RELEASE NOTES)\n";
+                        if (out.length && /^v\d/i.test(out[out.length - 1])) out.push("- (no notes)");
                     }
 
-                    s += "\n";
-                    s += "----------------------------------------\n";
-                    s += "\n";
-                    s += "PREVIOUS RELEASES\n";
+                    var out = [];
+                    var vLatest = _cleanVersion(latestVer);
+                    var title = updateAvailable ? "UPDATE AVAILABLE" : "Current Version";
 
-                    // History section
-                    if (historyArr && historyArr.length) {
-                        s += "\n";
-                        for (var h = 0; h < historyArr.length; h++) {
-                            var it = historyArr[h];
-                            if (!it) continue;
+                    out.push(title + (vLatest ? (" v" + vLatest) : ""));
+                    _appendNotes(out, currentNotes || []);
 
-                            var v = it.version || it.ver || it.v || "";
-                            v = String(v || "").replace(/^v\s*/i, "");
-                            if (!v) continue;
+                    var history = _asArray(historyArr || []);
+                    for (var h = 0; h < history.length; h++) {
+                        var it = history[h];
+                        if (!it) continue;
 
-                            var d = it.date || it.when || it.timestamp || "";
-                            if (d) s += v + " — " + d + "\n";
-                            else   s += v + "\n";
+                        var v = "";
+                        var notes = [];
 
-                            var notes = it.notes || it.changes || it.items || [];
-                            if (typeof notes === "string") notes = [notes];
-
-                            if (notes && notes.length) {
-                                for (var n = 0; n < notes.length; n++) {
-                                    s += "• " + notes[n] + "\n";
+                        // Preferred version.json shape:
+                        // { "version": "1.0", "notes": ["Initial Release."] }
+                        try {
+                            if (typeof it === "string") {
+                                // Also tolerate older string history entries like "v1.0 - Initial Release."
+                                var m = String(it).match(/^\s*v?([0-9][^\s\-–—]*)\s*(?:[-–—]\s*)?(.*)$/i);
+                                if (m) {
+                                    v = _cleanVersion(m[1]);
+                                    if (m[2]) notes = [m[2]];
                                 }
                             } else {
-                                s += "• (no notes)\n";
+                                v = _cleanVersion(it.version || it.ver || it.v || "");
+                                notes = it.notes || it.changes || it.items || [];
                             }
-                            s += "\n";
-                        }
-                    } else {
-                        s += "• (no previous releases)\n";
+                        } catch (eHist) {}
+
+                        if (!v) continue;
+                        if (vLatest && _compareVersions(v, vLatest) === 0) continue; // avoid duplicating top release
+
+                        out.push("");
+                        out.push("v" + v);
+                        _appendNotes(out, notes);
                     }
 
-                    s = s.replace(/\n+$/, "");
-                    chBox.text = s || "—";
+                    chBox.text = out.join("\n").replace(/\n+$/, "") || "—";
                     _cacheChangelogTextSafe(chBox.text);
                 } catch (e) {
                     try { chBox.text = "—"; } catch(_e) {}
@@ -13268,11 +13276,11 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
                 // New: prefer continuous JSON history when present
                 var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
-                _setUpdatesChangelogStructured(data.latest, notes, historyArr);
+                var cmp = _compareVersions(String(data.latest), String(currentVer));
+                _setUpdatesChangelogStructured(data.latest, notes, historyArr, (cmp > 0));
                 _cacheUpdatesPayloadSafe(data);
                 _cacheChangelogTextSafe(chBox.text);
 
-                var cmp = _compareVersions(String(data.latest), String(currentVer));
                 if (cmp <= 0) {
                     // Checked and up-to-date
                     __UPDATE_STATE.checked = true;
@@ -13561,7 +13569,9 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     if (typeof notes === "string") notes = [notes];
 
                     var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
-                    _setUpdatesChangelogStructured(data.latest, notes, historyArr);
+                    var currentVer = _getCurrentVersionString();
+                    var cmp = _compareVersions(String(data.latest), String(currentVer));
+                    _setUpdatesChangelogStructured(data.latest, notes, historyArr, (cmp > 0));
                 } catch (e) {}
             }
 
