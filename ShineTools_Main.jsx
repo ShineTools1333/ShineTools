@@ -75,8 +75,8 @@ var ST_CONST  = ST.CONST;
 // Other UI: vX.Y
 
 var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.1";
-var __ST_PATCH_MARKER__ = "KNOWN_STABLE_HOVER_BASE_ADDED_FLASH_SYNC_2026-05-02";
+var SHINE_VERSION      = "1.0";
+var __ST_PATCH_MARKER__ = "HOVER_LABEL_FLIPPING_DISABLED_2026-05-04";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
@@ -4114,8 +4114,16 @@ function favLoad() {
                     row.alignment = ["right", "top"];
                     row.spacing = 8;
 
-                    var ok = row.add("button", undefined, "Move", {name:"ok"});
-                    var cancel = row.add("button", undefined, "Cancel", {name:"cancel"});
+                    // Use the same no-blue-focus dialog button architecture as the other
+                    // Organize/Reorder dialog controls. Do NOT use {name:"ok"}/{name:"cancel"}
+                    // here because AE/ScriptUI promotes those to native default/cancel buttons
+                    // and brings back the blue focus ring style.
+                    var __moveOkPack = __makeDlgCellBtn__(row, "Move", 76);
+                    var ok = __moveOkPack.btn;
+                    var __moveCancelPack = __makeDlgCellBtn__(row, "Cancel", 90);
+                    var cancel = __moveCancelPack.btn;
+                    try { defocusButtonBestEffort(ok); } catch (eMoveOkDF) {}
+                    try { defocusButtonBestEffort(cancel); } catch (eMoveCancelDF) {}
 
                     var chosenIndex = -1;
                     ok.onClick = function () {
@@ -5809,7 +5817,7 @@ _stPlaceLayerSourceInSolidsFolder(adj);
         } finally { app.endUndoGroup(); }
     }
 
-    function trimLayerToNeighbor() {
+    function trimLayerToNeighbor(trimToAboveOverride) {
         var c = requireComp();
         if (!c) return;
 
@@ -5819,8 +5827,8 @@ _stPlaceLayerSourceInSolidsFolder(adj);
             return;
         }
 
-        // OPTION = ABOVE, default = BELOW
-        var trimToAbove = isOptionDown();
+        // Explicit buttons can force the mode; legacy modifier-click still works if no override is passed.
+        var trimToAbove = (trimToAboveOverride === true) ? true : ((trimToAboveOverride === false) ? false : isOptionDown());
 
         // Build a quick lookup so we can skip over selected layers
         var selectedIndex = {};
@@ -6379,11 +6387,18 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
         return didAny;
     }
 
-    function addPhotoBorder_Util() {
+    function addPhotoBorder_Util(forceRefit) {
         var comp = requireComp();
         if (!comp) return;
 
-        if (isOptionDown()) {
+        var __stDoRefit = false;
+        try {
+            if (forceRefit === true) __stDoRefit = true;
+            else if (forceRefit === false) __stDoRefit = false;
+            else __stDoRefit = isOptionDown();
+        } catch (eRefitOpt) { __stDoRefit = false; }
+
+        if (__stDoRefit) {
             app.beginUndoGroup("Refit Photo Border");
             try {
                 _stRefreshSelectedPhotoBorders_Util();
@@ -6657,7 +6672,7 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
         } catch (e) {}
     }
 
-    function renderPRORES422WithSaveDialog() {
+    function renderPRORES422WithSaveDialog(use4444Override, queueOnlyOverride) {
         var undoOpen = false;
 
         try {
@@ -6666,10 +6681,10 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
             var c = requireComp();
             if (!c) return;
 
-            // Detect Option/Alt key (Option on Mac maps to altKey)
+            // Explicit buttons can force the mode; legacy modifier-click still works if no override is passed.
             var ks = ScriptUI.environment.keyboardState;
-            var use4444 = (ks && ks.altKey === true);
-            var queueOnly = (ks && ks.shiftKey === true);
+            var use4444 = (use4444Override === true) ? true : ((use4444Override === false) ? false : (ks && ks.altKey === true));
+            var queueOnly = (queueOnlyOverride === true) ? true : ((queueOnlyOverride === false) ? false : (ks && ks.shiftKey === true));
 
 var rsTemplate = "Best Settings"; // Always Best Settings
             var omTemplateCandidates = use4444
@@ -6826,9 +6841,11 @@ var rsTemplate = "Best Settings"; // Always Best Settings
         }
     }
 
-    function saveCurrentFramePSDOrJPG() {
-        // Click: JPG still. Option/Alt-click: PSD still.
+    function saveCurrentFramePSDOrJPG(usePSDOverride) {
+        // Explicit buttons can force JPG/PSD; legacy modifier-click still works if no override is passed.
         try {
+            if (usePSDOverride === true) return saveCurrentFramePSDStill();
+            if (usePSDOverride === false) return saveCurrentFrameJPGStill();
             if (typeof _isOptDown === "function" && _isOptDown()) {
                 return saveCurrentFramePSDStill();
             }
@@ -8885,7 +8902,7 @@ function __ST_RunOffsetLayersModal__(){
 // Expose modal runner for app.scheduleTask (runs in global scope)
 try { $.global.__ST_RunOffsetLayersModal__ = __ST_RunOffsetLayersModal__; } catch(e) {}
 
-function offsetSelectedLayers_ShineTools(){
+function offsetSelectedLayers_ShineTools(useCurveOverride){
     var comp = _stFrameOffset_getComp();
     if (!comp) return alert("No active comp.");
 
@@ -8902,7 +8919,7 @@ function offsetSelectedLayers_ShineTools(){
     $.global.__ST_PendingOffsetLayers__ = {
         compId: comp.id,
         layerIdxs: idxs,
-        useCurve: isOptionDown() ? true : false
+        useCurve: (useCurveOverride === true) ? true : ((useCurveOverride === false) ? false : (isOptionDown() ? true : false))
     };
 
     // Open directly (scheduleTask removed by request).
@@ -9266,24 +9283,6 @@ function _stAddPinnedTabFooter(tabRoot, tabKey) {
         topRow.margins       = [0, 0, 0, 0];
         topRow.spacing       = 0;
 
-        var line = topRow.add("statictext", undefined, "█");
-        line.margins = 0;
-        line.minimumSize = [14, 18];
-        line.preferredSize = [14, 18];
-        line.maximumSize = [14, 18];
-        line.justify = "center";
-        try { line.graphics.font = ScriptUI.newFont(line.graphics.font.name, "Bold", 18); } catch (eF) {}
-        try { line.graphics.foregroundColor = line.graphics.newPen(line.graphics.PenType.SOLID_COLOR, [1, 0.82, 0.20, 1], 1); } catch (eC) {}
-
-        var legend = topRow.add("statictext", undefined, "= Multiple options |");
-        legend.justify = "left";
-        legend.margins = 0;
-        legend.alignment = ["left", "center"];
-        try {
-            var __legendG = legend.graphics;
-            __legendG.foregroundColor = __legendG.newPen(__legendG.PenType.SOLID_COLOR, [0.78, 0.78, 0.78, 1], 1);
-        } catch (eLegendColor) {}
-
         var statusLabel = topRow.add("statictext", undefined, "Update available.");
         statusLabel.margins = 0;
         statusLabel.alignment = ["left","center"];
@@ -9345,37 +9344,15 @@ globalFooter.minimumSize  = [0, 34];
 globalFooter.spacing       = 2;
 try { pal.__stFooterGroup = globalFooter; } catch(eFGStore) {}
 
-// Row 1: Legend + Update Status (LEFT pinned)
+// Row 1: Update Status (LEFT pinned)
 var gfTopRow = globalFooter.add("group");
 gfTopRow.orientation   = "row";
 gfTopRow.alignChildren = ["left", "center"];
 gfTopRow.alignment     = ["left", "center"];
 gfTopRow.margins       = [10, 0, 0, 0];
-gfTopRow.spacing       = 6;
+gfTopRow.spacing       = 0;
 
-// Yellow option indicator (vertical Shine-yellow line)
-var gfLine = gfTopRow.add("statictext", undefined, "▐");
-gfLine.margins = [0, 0, 1, 0];
-gfLine.alignment = ["left", "center"];
-gfLine.minimumSize = [10, 20];
-gfLine.preferredSize = [10, 20];
-gfLine.maximumSize = [10, 20];
-gfLine.justify = "center";
-try { gfLine.graphics.font = ScriptUI.newFont(gfLine.graphics.font.name, "Bold", 20); } catch (eF) {}
-try { gfLine.graphics.foregroundColor = gfLine.graphics.newPen(gfLine.graphics.PenType.SOLID_COLOR, [1.0, 0.82, 0.0, 1], 1); } catch (eC) {}
-try { gfLine.graphics.disabledForegroundColor = gfLine.graphics.newPen(gfLine.graphics.PenType.SOLID_COLOR, [1.0, 0.82, 0.0, 1], 1); } catch (eD) {}
-
-// Legend text (exact format requested)
-var gfLegend = gfTopRow.add("statictext", undefined, "= Multiple options |");
-gfLegend.justify = "left";
-gfLegend.margins = 0;
-gfLegend.alignment = ["left", "center"];
-try {
-    var __gfLegendG = gfLegend.graphics;
-    __gfLegendG.foregroundColor = __gfLegendG.newPen(__gfLegendG.PenType.SOLID_COLOR, [0.78, 0.78, 0.78, 1], 1);
-} catch (eGfLegendColor) {}
-
-// Update status label (immediately to the right of legend)
+// Update status label
 // NOTE: ScriptUI statictext created with empty string can get "stuck" at ~0 width.
 // We create it with a sizing template, then clear the text.
 var gfStatusLabel = gfTopRow.add("statictext", undefined, "Update available.");
@@ -9446,6 +9423,7 @@ try { _stAddPinnedTabFooter(pal.__stMainTabRoot, "MAIN"); } catch (eFootMain) {}
 try {
     __footerGlue.visible = false;
     __footerGlue.enabled = false;
+    __footerGlue.alignment = ["fill", "top"];
     __footerGlue.minimumSize = [0,0];
     __footerGlue.maximumSize = [0,0];
     __footerGlue.preferredSize = [0,0];
@@ -9454,6 +9432,7 @@ try {
 try {
     globalFooter.visible = false;
     globalFooter.enabled = false;
+    globalFooter.alignment = ["fill", "top"];
     globalFooter.minimumSize = [0,0];
     globalFooter.maximumSize = [0,0];
     globalFooter.preferredSize = [0,0];
@@ -11333,21 +11312,9 @@ addGrid2(body, [
                     addGrid2(body, [
                         {
                             text: "TEXT BOX",
-                            badgeDot: true,
-                            helpTip: "Creates a Text Box (text + auto-sizing shape)\n\nSHIFT-click (with the TEXT BOX shape layer selected): Toggle Animate % keyframes (0→100 over 30f).",
-                            hoverLabels: { base: "TEXT BOX", hover: "TEXT BOX", optionHover: "TEXT BOX", shiftHover: "ANIMATE" },
+                            helpTip: "Creates a Text Box (text + auto-sizing shape).",
                             onClick: function(){
                                 try {
-                                    var ks = ScriptUI.environment.keyboardState;
-                                    if (ks && ks.shiftKey) {
-                                        if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.toggleAnimateKeys) {
-                                            $.global.ShineTools.TextBox.toggleAnimateKeys(30);
-                                        } else {
-                                            alert("TEXT BOX module not initialized.");
-                                        }
-                                        return;
-                                    }
-
                                     if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.makeTextBox) {
                                         $.global.ShineTools.TextBox.makeTextBox();
                                     } else {
@@ -11362,6 +11329,21 @@ addGrid2(body, [
                             text: "CREATE SHAPE",
                             onClick: createShapesFromText_Util,
                             helpTip: "Runs: Layer > Create > Create Shapes from Text\n\nSelect one or more TEXT layers, then click."
+                        },
+                        {
+                            text: "ANIMATE TEXT BOX",
+                            helpTip: "With the TEXT BOX shape layer selected: Toggle Animate % keyframes (0→100 over 30f).",
+                            onClick: function(){
+                                try {
+                                    if ($.global && $.global.ShineTools && $.global.ShineTools.TextBox && $.global.ShineTools.TextBox.toggleAnimateKeys) {
+                                        $.global.ShineTools.TextBox.toggleAnimateKeys(30);
+                                    } else {
+                                        alert("TEXT BOX module not initialized.");
+                                    }
+                                } catch (eTB2) {
+                                    alert("TEXT BOX ANIMATE error:\n" + eTB2.toString());
+                                }
+                            }
                         }
 
                     ]);
@@ -11651,6 +11633,48 @@ function _buildTextTabIfNeeded() {
             return false;
         }
 
+        function _stApplyFactoryDefaultButtonOrder(data) {
+            try {
+                if (!data || typeof data !== "object") data = {};
+                if (!data.buttonOrderMain || typeof data.buttonOrderMain !== "object") data.buttonOrderMain = {};
+
+                // Default workspace factory order for the split-button layout.
+                // This is applied only to the protected Default workspace so older
+                // Default.json files do not keep stale button ordering.
+                data.mainSectionOrder = [
+                    "ADD LAYER",
+                    "ADD RIG",
+                    "ADD EXPRESSION",
+                    ST_LABELS.UTILITIES,
+                    "STROKE",
+                    "TIMELINE",
+                    "CLEAN UP",
+                    "RENDER"
+                ];
+
+                data.buttonOrderMain["ADD EXPRESSION"] = [
+                    "WIGGLE",
+                    "INERTIAL BOUNCE",
+                    "HARD BOUNCE"
+                ];
+
+                data.buttonOrderMain["STROKE"] = [
+                    "ANIMATED STROKE",
+                    "ANIMATE STROKE START",
+                    "TRIM PATHS"
+                ];
+
+                data.buttonOrderMain["TIMELINE"] = [
+                    "EXTEND PRECOMP",
+                    "TRIM LAYER ABOVE",
+                    "FRAME OFFSET",
+                    "TRIM LAYER BELOW",
+                    "CURVE OFFSET"
+                ];
+            } catch (e) {}
+            return data;
+        }
+
         function _stRevealWorkspaceInFinder(name) {
             try {
                 var target = null;
@@ -11797,6 +11821,7 @@ function _buildTextTabIfNeeded() {
                 try { if (!payload.format) payload.format = "ShineToolsWorkspace"; } catch (e3) {}
                 try { if (!payload.version) payload.version = 1; } catch (e4) {}
                 try { payload.savedAt = (new Date()).toString(); } catch (e5) {}
+                try { payload = _stApplyFactoryDefaultButtonOrder(payload); } catch (e6) {}
 
                 return _stSaveWorkspaceByName(name, payload, { silent: true, skipActiveState: true, allowProtectedOverwrite: true });
             } catch (e) {}
@@ -11960,6 +11985,7 @@ function _stLoadWorkspaceByName(name, options) {
                 try { _stSetActiveWorkspaceNameState(wanted); } catch (e2a) {}
                 try { _stApplyWorkspaceStatusText(wanted); } catch (e2b) {}
 
+                try { if (_stIsProtectedWorkspaceName(wanted)) data = _stApplyFactoryDefaultButtonOrder(data); } catch (eDefaultOrder) {}
                 try { _stApplyWorkspaceState(data); } catch (e3) {}
 
                 // Reassert active-name state in case the apply path touched any workspace/status variables.
@@ -11983,6 +12009,9 @@ function _stLoadWorkspaceByName(name, options) {
                 // Refresh the manager surface only; avoid a second footer/apply-surface settle here.
                 try { _stRefreshWorkspaceManagerSurface(); } catch (e8a) {}
                 try { if (pal.update) pal.update(); } catch (e10) {}
+                // Docked AE panels sometimes report their final bounds one tick after a workspace loads.
+                // Queue a one-shot settle pass so Default/workspace accordions do not clip until the user resizes.
+                try { if ($.global.__ShineToolsQueueLayoutSettle__) $.global.__ShineToolsQueueLayoutSettle__(120); } catch (eSettleWS) {}
                 return true;
             } catch (e11) {}
             return false;
@@ -12042,6 +12071,7 @@ function _stLoadWorkspaceByName(name, options) {
                 if (!pal.__stWorkspaceManagerBuilt) _buildWorkspaceManagerShell();
             } catch (e1) { try { alert("Workspace Manager build error:\n" + String(e1)); } catch (e1a) {} return; }
             try { _syncWorkspaceDropdownToActiveName(); } catch (e1b) {}
+            try { if (pal.__stWorkspaceManagerUpdateActionStates) pal.__stWorkspaceManagerUpdateActionStates(); } catch (e1c) {}
             try { _selectTopTab("WORKSPACE_MANAGER"); } catch (e2) {}
             try { _stCommitWorkspaceSelectionUI(pal.__stCurrentWorkspaceName || pal.__stPendingWorkspaceName || "", { skipUpdate: true }); } catch (e2a) {}
             try { _stSettleWorkspaceManagerInitialWidths(); } catch (e3) {}
@@ -12179,7 +12209,7 @@ function _stLoadWorkspaceByName(name, options) {
             wmRoot.orientation   = "column";
             wmRoot.alignChildren = ["fill", "top"];
             wmRoot.alignment     = ["fill", "fill"];
-            wmRoot.margins       = [10, 34, 10, 10];
+            wmRoot.margins       = [10, 18, 10, 10];
             wmRoot.spacing       = 8;
 
             var wmHeader = wmRoot.add("group");
@@ -12399,6 +12429,26 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
                 }
             });
 
+            function _wmGetSelectedWorkspaceName() {
+                var name = "";
+                try { name = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) { name = ""; }
+                try { name = String(name || "").replace(/^\s+|\s+$/g, ""); } catch (e1) { name = ""; }
+                return name;
+            }
+
+            function _wmUpdateActionButtonStates() {
+                try {
+                    var selName = _wmGetSelectedWorkspaceName();
+                    var canEdit = (!!selName && !_stIsProtectedWorkspaceName(selName));
+                    try { if (btnSaveCurrent) btnSaveCurrent.enabled = canEdit; } catch (eSaveState) {}
+                    try { if (btnDelete) btnDelete.enabled = canEdit; } catch (eDelState) {}
+                    return canEdit;
+                } catch (e) {}
+                return false;
+            }
+
+            try { pal.__stWorkspaceManagerUpdateActionStates = _wmUpdateActionButtonStates; } catch (eWMStatePub) {}
+
             function _wmRefreshDropdown(selectName) {
                 var names = _stListWorkspaceNames();
                 try { wmDropdown.removeAll(); } catch (e0) {}
@@ -12455,20 +12505,14 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
                     try { _updateWorkspaceStatusLabel(); } catch (eClr2) {}
                 }
 
-                try {
-                    var __selNameBtn = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : "";
-                    btnSaveCurrent.enabled = (!!wmDropdown.selection && !_stIsProtectedWorkspaceName(__selNameBtn));
-                } catch (e4) {}
-                try {
-                    var __selNameDel = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : "";
-                    btnDelete.enabled = (!!wmDropdown.selection && !_stIsProtectedWorkspaceName(__selNameDel));
-                } catch (e5) {}
+                try { _wmUpdateActionButtonStates(); } catch (e4) {}
             }
 
             wmDropdown.onChange = function () {
                 try { if (pal.__stWorkspaceDropdownSyncing) return; } catch (eSyncGuard) {}
                 var name = "";
                 try { name = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) {}
+                try { _wmUpdateActionButtonStates(); } catch (eState0) {}
                 if (!name) return;
 
                 // Update the status line immediately so the UI feels responsive.
@@ -12573,7 +12617,7 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
                 vst.alignment = ["fill", "center"];
                 return {row:r, key:kst, val:vst};
             }
-            _makeKVRow("Current version:", SHINE_VERSION);
+            var kvCurrent = _makeKVRow("Current version:", ((typeof SHINETOOLS_VERSION !== "undefined" && SHINETOOLS_VERSION) ? String(SHINETOOLS_VERSION) : ("v" + SHINE_VERSION)));
 var kvLatest = _makeKVRow("Latest version:", "—");
     var kvLast   = _makeKVRow("Last checked:", "—");
     var kvStatus = _makeKVRow("Status:", "Not checked yet");
@@ -12679,9 +12723,15 @@ var kvLatest = _makeKVRow("Latest version:", "—");
     // --- version.json format (single source of truth) ---
     // Required:
     //   "latest": "1.5"
-    //   "jsxUrl": "https://raw.githubusercontent.com/.../ShineTools.jsx"
-    //   "notes": ["Current release note 1", "Current release note 2"]
-    // Optional:
+    //   "jsxUrl": "https://raw.githubusercontent.com/.../ShineTools_Main.jsx"
+    // Preferred simplified changelog format:
+    //   "changelog": {
+    //      "1.5": ["Current release note 1", "Current release note 2"],
+    //      "1.4": ["Older release note"],
+    //      "1.0": ["Initial Release."]
+    //   }
+    // Legacy supported:
+    //   "notes": ["Current release note"]
     //   "history": [ { "version": "1.4", "notes": ["Older note"] }, ... ]
     // Notes:
     //   - Do NOT prefix versions with "v" (UI formatting handles labels).
@@ -13064,84 +13114,98 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 try { kvStatus.val.text = msg || ""; } catch (e) {}
             }
 
-            function _setUpdatesVersion(ver) {
-                try { kvLatest.val.text = ver || "—"; } catch (e) {}
+            function _stFormatVersionLabel(ver) {
+                try {
+                    var s = String(ver || "").replace(/^\s+|\s+$/g, "");
+                    if (!s || s === "—") return "—";
+                    return (/^v/i.test(s)) ? s : ("v" + s);
+                } catch (e) {}
+                return "—";
             }
 
-            function _setUpdatesChangelogStructured(latestVer, currentNotes, historyArr, updateAvailable) {
-                // version.json is the single source of truth for release notes.
-                // Top section reflects the newest available release when an update exists,
-                // then switches to Current Version once the installed JSX version matches latest.
+            function _setUpdatesVersion(ver) {
+                try { kvLatest.val.text = _stFormatVersionLabel(ver); } catch (e) {}
+            }
+
+            function _setUpdatesChangelogStructured(latestVer, currentNotes, historyArr, labelMode) {
+                // Running changelog list:
+                //   LATEST VERSION first when an update is available.
+                //   CURRENT VERSION first when installed version is current.
+                //   Older versions continue directly below.
                 try {
-                    function _cleanVersion(v) {
-                        try { return String(v || "").replace(/^v\s*/i, "").replace(/^\s+|\s+$/g, ""); } catch (e) {}
-                        return "";
-                    }
-
-                    function _asArray(x) {
-                        if (x === null || x === undefined) return [];
-                        if (typeof x === "string") return [x];
+                    function _notesToCleanArray(v) {
+                        var out = [];
                         try {
-                            if (x && x.length !== undefined) {
-                                var a = [];
-                                for (var i = 0; i < x.length; i++) a.push(x[i]);
-                                return a;
+                            if (v === null || v === undefined) return out;
+                            if (typeof v === "string") return [v];
+                            if (v.length !== undefined && typeof v !== "string") {
+                                for (var ai = 0; ai < v.length; ai++) {
+                                    var item = v[ai];
+                                    if (item === null || item === undefined) continue;
+                                    if (typeof item === "string") out.push(item);
+                                    else if (item.text !== undefined) out.push(String(item.text));
+                                    else if (item.note !== undefined) out.push(String(item.note));
+                                    else if (item.title !== undefined) out.push(String(item.title));
+                                }
+                                return out;
                             }
-                        } catch (e) {}
-                        return [String(x)];
+                            if (v.notes !== undefined) return _notesToCleanArray(v.notes);
+                            if (v.changes !== undefined) return _notesToCleanArray(v.changes);
+                            if (v.items !== undefined) return _notesToCleanArray(v.items);
+                        } catch (eA) {}
+                        return out;
                     }
 
-                    function _appendNotes(out, notesArr) {
-                        var notes = _asArray(notesArr);
-                        if (notes && notes.length) {
-                            for (var i = 0; i < notes.length; i++) {
-                                if (notes[i] === null || notes[i] === undefined) continue;
-                                out.push("- " + String(notes[i]).replace(/^\s+|\s+$/g, ""));
-                            }
+                    var s = "";
+                    var vLatest = String(latestVer || "").replace(/^v\s*/i, "");
+                    var today = _formatStamp(new Date());
+                    var topLabel = (String(labelMode || "").toLowerCase() === "latest") ? "LATEST VERSION" : "CURRENT VERSION";
+
+                    if (vLatest) {
+                        s += topLabel + " " + _stFormatVersionLabel(vLatest) + " — " + today + "\n";
+                    } else {
+                        s += topLabel + " — " + today + "\n";
+                    }
+
+                    var cn = _notesToCleanArray(currentNotes);
+
+                    if (cn && cn.length) {
+                        for (var i=0; i<cn.length; i++) {
+                            s += "• " + String(cn[i]) + "\n";
                         }
-                        if (out.length && /^v\d/i.test(out[out.length - 1])) out.push("- (no notes)");
+                    } else {
+                        s += "• (No release notes.)\n";
                     }
 
-                    var out = [];
-                    var vLatest = _cleanVersion(latestVer);
-                    var title = updateAvailable ? "UPDATE AVAILABLE" : "Current Version";
+                    if (historyArr && historyArr.length) {
+                        s += "\n";
+                        for (var h = 0; h < historyArr.length; h++) {
+                            var it = historyArr[h];
+                            if (!it) continue;
 
-                    out.push(title + (vLatest ? (" v" + vLatest) : ""));
-                    _appendNotes(out, currentNotes || []);
+                            var v = it.version || it.ver || it.v || "";
+                            v = String(v || "").replace(/^v\s*/i, "");
+                            if (!v) continue;
 
-                    var history = _asArray(historyArr || []);
-                    for (var h = 0; h < history.length; h++) {
-                        var it = history[h];
-                        if (!it) continue;
+                            var d = it.date || it.when || it.timestamp || "";
+                            if (d) s += _stFormatVersionLabel(v) + " — " + d + "\n";
+                            else   s += _stFormatVersionLabel(v) + "\n";
 
-                        var v = "";
-                        var notes = [];
+                            var notes = _notesToCleanArray(it.notes || it.changes || it.items || []);
 
-                        // Preferred version.json shape:
-                        // { "version": "1.0", "notes": ["Initial Release."] }
-                        try {
-                            if (typeof it === "string") {
-                                // Also tolerate older string history entries like "v1.0 - Initial Release."
-                                var m = String(it).match(/^\s*v?([0-9][^\s\-–—]*)\s*(?:[-–—]\s*)?(.*)$/i);
-                                if (m) {
-                                    v = _cleanVersion(m[1]);
-                                    if (m[2]) notes = [m[2]];
+                            if (notes && notes.length) {
+                                for (var n = 0; n < notes.length; n++) {
+                                    s += "• " + String(notes[n]) + "\n";
                                 }
                             } else {
-                                v = _cleanVersion(it.version || it.ver || it.v || "");
-                                notes = it.notes || it.changes || it.items || [];
+                                s += "• (No notes.)\n";
                             }
-                        } catch (eHist) {}
-
-                        if (!v) continue;
-                        if (vLatest && _compareVersions(v, vLatest) === 0) continue; // avoid duplicating top release
-
-                        out.push("");
-                        out.push("v" + v);
-                        _appendNotes(out, notes);
+                            s += "\n";
+                        }
                     }
 
-                    chBox.text = out.join("\n").replace(/\n+$/, "") || "—";
+                    s = s.replace(/\n+$/, "");
+                    chBox.text = s || "—";
                     _cacheChangelogTextSafe(chBox.text);
                 } catch (e) {
                     try { chBox.text = "—"; } catch(_e) {}
@@ -13176,6 +13240,121 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 return 0;
             }
 
+            function _stIsArrayLikeForUpdates(v) {
+                try {
+                    if (!v || typeof v === "string") return false;
+                    if (v.constructor === Array) return true;
+                    if (Object.prototype.toString.call(v) === "[object Array]") return true;
+                    return (typeof v.length === "number" && v.length >= 0);
+                } catch (e) {}
+                return false;
+            }
+
+            function _stNotesArrayForUpdates(v) {
+                var out = [];
+                try {
+                    if (v === null || v === undefined) return out;
+                    if (typeof v === "string") return [v];
+
+                    if (_stIsArrayLikeForUpdates(v)) {
+                        for (var i = 0; i < v.length; i++) {
+                            try {
+                                var item = v[i];
+                                if (item === null || item === undefined) continue;
+                                if (typeof item === "string") out.push(item);
+                                else if (item.text !== undefined) out.push(String(item.text));
+                                else if (item.note !== undefined) out.push(String(item.note));
+                                else if (item.title !== undefined) out.push(String(item.title));
+                            } catch (eI) {}
+                        }
+                        return out;
+                    }
+
+                    // Allow expanded per-version objects too:
+                    // "1.2": { "date":"05/04/2026", "notes":["..."] }
+                    if (v.notes !== undefined) return _stNotesArrayForUpdates(v.notes);
+                    if (v.changes !== undefined) return _stNotesArrayForUpdates(v.changes);
+                    if (v.items !== undefined) return _stNotesArrayForUpdates(v.items);
+                } catch (e) {}
+                return out;
+            }
+
+            function _stIsChangelogMapForUpdates(ch) {
+                try {
+                    if (!ch || typeof ch === "string") return false;
+                    if (_stIsArrayLikeForUpdates(ch)) return false;
+                    for (var k in ch) {
+                        try {
+                            if (!ch.hasOwnProperty || ch.hasOwnProperty(k)) return true;
+                        } catch (eK) { return true; }
+                    }
+                } catch (e) {}
+                return false;
+            }
+
+            function _normalizeUpdateChangelogPayload(data) {
+                // Supports the easier version.json format:
+                //   "changelog": {
+                //      "1.2": ["..."],
+                //      "1.1": ["..."],
+                //      "1.0": ["Initial Release."]
+                //   }
+                // Also preserves the older notes/history format.
+                var result = { notes: [], history: null };
+                try {
+                    if (!data) return result;
+
+                    var latest = String(data.latest || data.version || "").replace(/^v\s*/i, "");
+                    var ch = data.changelog;
+
+                    // New simplified object/map format.
+                    if (_stIsChangelogMapForUpdates(ch)) {
+                        try {
+                            if (latest && ch[latest] !== undefined) {
+                                result.notes = _stNotesArrayForUpdates(ch[latest]);
+                            } else if (latest && ch["v" + latest] !== undefined) {
+                                result.notes = _stNotesArrayForUpdates(ch["v" + latest]);
+                            }
+                        } catch (eLatest) {}
+
+                        var versions = [];
+                        for (var k in ch) {
+                            try {
+                                if (ch.hasOwnProperty && !ch.hasOwnProperty(k)) continue;
+                                var cleanK = String(k || "").replace(/^v\s*/i, "");
+                                if (!cleanK) continue;
+                                if (latest && cleanK === latest) continue;
+                                versions.push(cleanK);
+                            } catch (eK) {}
+                        }
+                        try {
+                            versions.sort(function(a,b){ return _compareVersions(b, a); });
+                        } catch (eSort) {}
+
+                        result.history = [];
+                        for (var i = 0; i < versions.length; i++) {
+                            try {
+                                var vk = versions[i];
+                                var val = (ch[vk] !== undefined) ? ch[vk] : ch["v" + vk];
+                                var entry = { version: vk, notes: _stNotesArrayForUpdates(val) };
+                                try { if (val && val.date) entry.date = val.date; } catch (eD) {}
+                                result.history.push(entry);
+                            } catch (eV) {}
+                        }
+
+                        if (!result.notes || !result.notes.length) {
+                            result.notes = _stNotesArrayForUpdates(data.notes);
+                        }
+                        return result;
+                    }
+
+                    // Legacy format.
+                    result.notes = _stNotesArrayForUpdates(data.notes || data.changelog || []);
+                    result.history = data.history || data.changelogHistory || data.releaseHistory || null;
+                } catch (e) {}
+                return result;
+            }
+
             function _getCurrentVersionString() {
                 // Single source of truth: prefer SHINETOOLS_VERSION when available.
                 try { if (typeof SHINETOOLS_VERSION !== "undefined" && SHINETOOLS_VERSION) return String(SHINETOOLS_VERSION); } catch (eV) {}
@@ -13186,6 +13365,42 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     if (m && m[1]) return m[1];
                 } catch (e) {}
                 return "1.0";
+            }
+
+            
+            function _setInitialUpdatesChangelogFromBundledNotes() {
+                // No network check is needed just to show the built-in release notes on launch.
+                // CHECK FOR UPDATES still refreshes this from version.json.
+                try {
+                    var bundled = {
+                        "1.1": [
+                            "Added new Save Workspace/Favorites Manager.",
+                            "Added new Organize Library Elements dialog with custom section dividers, custom filenames, and reordering.",
+                            "Changed section reordering to use Option-click on the MAIN and TEXT tabs.",
+                            "Bug fixes."
+                        ],
+                        "1.0": [
+                            "Initial Release."
+                        ]
+                    };
+
+                    var current = String(_getCurrentVersionString() || "").replace(/^v\s*/i, "");
+                    var notes = bundled[current] || [];
+                    var hist = [];
+
+                    for (var k in bundled) {
+                        try {
+                            if (bundled.hasOwnProperty && !bundled.hasOwnProperty(k)) continue;
+                            var ck = String(k || "").replace(/^v\s*/i, "");
+                            if (!ck || ck === current) continue;
+                            if (_compareVersions(ck, current) > 0) continue; // do not show future notes before checking
+                            hist.push({ version: ck, notes: bundled[k] });
+                        } catch (eK) {}
+                    }
+
+                    try { hist.sort(function(a,b){ return _compareVersions(b.version, a.version); }); } catch (eSort) {}
+                    _setUpdatesChangelogStructured(current, notes, hist, "current");
+                } catch (e) {}
             }
 
             function _doCheckForUpdates() {
@@ -13271,16 +13486,13 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 var currentVer = _getCurrentVersionString();
                 _setUpdatesVersion(String(data.latest));
 
-                var notes = data.notes || data.changelog || [];
-                if (typeof notes === "string") notes = [notes];
-
-                // New: prefer continuous JSON history when present
-                var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
+                var changelogPayload = _normalizeUpdateChangelogPayload(data);
+                var notes = changelogPayload.notes || [];
+                var historyArr = changelogPayload.history || null;
                 var cmp = _compareVersions(String(data.latest), String(currentVer));
-                _setUpdatesChangelogStructured(data.latest, notes, historyArr, (cmp > 0));
+                _setUpdatesChangelogStructured(data.latest, notes, historyArr, (cmp > 0 ? "latest" : "current"));
                 _cacheUpdatesPayloadSafe(data);
                 _cacheChangelogTextSafe(chBox.text);
-
                 if (cmp <= 0) {
                     // Checked and up-to-date
                     __UPDATE_STATE.checked = true;
@@ -13565,15 +13777,15 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
                     if (data.latest) _setUpdatesVersion(String(data.latest));
 
-                    var notes = data.notes || data.changelog || [];
-                    if (typeof notes === "string") notes = [notes];
-
-                    var historyArr = data.history || data.changelogHistory || data.releaseHistory || null;
-                    var currentVer = _getCurrentVersionString();
-                    var cmp = _compareVersions(String(data.latest), String(currentVer));
-                    _setUpdatesChangelogStructured(data.latest, notes, historyArr, (cmp > 0));
+                    var changelogPayload = _normalizeUpdateChangelogPayload(data);
+                    var notes = changelogPayload.notes || [];
+                    var historyArr = changelogPayload.history || null;
+                    _setUpdatesChangelogStructured(data.latest, notes, historyArr);
                 } catch (e) {}
             }
+
+            
+            try { _setInitialUpdatesChangelogFromBundledNotes(); } catch (eInitChangelog) {}
 
             btnCheckUpdates.onClick = function () {
                 _safeRun("updates", "Check for updates", function () {
@@ -13796,7 +14008,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             helpWrap.orientation = "column";
             helpWrap.alignChildren = ["fill", "top"];
             helpWrap.alignment = ["fill", "top"];
-            helpWrap.margins = [12, 16, 12, 10];
+            helpWrap.margins = [12, 18, 12, 10];
             helpWrap.spacing = 0; // ultra-tight (per Jim)
 
             var SHINE_YELLOW_RGB = [1.0, 0.82, 0.0]; // Shine yellow
@@ -13829,9 +14041,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 } catch (e) {}
                 return null;
             }
-            _spacer(2);
-            _spacer(20);
-
             // Title
             var helpTitleTop = helpWrap.add("statictext", undefined, "NAVIGATING THE SHINETOOLS INTERFACE:");
             try { helpTitleTop.alignment = ["fill","top"]; } catch(e) {}
@@ -13865,7 +14074,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             var hdrButtons = helpWrap.add("statictext", undefined, "BUTTONS & MODIFIERS");
             _setShineYellowBold(hdrButtons);
 
-            _addHelpLine("• Buttons with a yellow indicator support modifier keys.");
             _addHelpLine("  (CMD, OPTION, or SHIFT for alternate actions)");
             var line1 = helpWrap.add("statictext", undefined,
     "• OPTION-click a section name to reorder the buttons\n   in that section.",
@@ -13891,11 +14099,11 @@ line1.alignment = ["fill", "top"];
             _setShineYellowBold(hdrRender);
 
             var line2 = helpWrap.add("statictext", undefined,
-    "• Must set up a render template labeled PRORES 422\n   and PRORES 4444",
+    "• Must set up a render template labeled PRORES 422",
     { multiline: true }
 );
 line2.alignment = ["fill", "top"];
-            _addHelpLine("  to use Render button.");
+            _addHelpLine("  to use the PRORES 422 render button.");
 
             _spacer(24);
             // --- REQUIRED SETTINGS ---
@@ -14841,22 +15049,22 @@ function addDropdownHeader(col, text, insetPx) {
         }
 
         function _hoverStart(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            _stHoverStartedMs = _stHoverNowMs();
-            _hoverBtn = btn;
-            _hoverText = hoverText;
-            _hoverOptionText = optionHoverText;
-            _hoverShiftText = shiftHoverText || "";
-            _hoverLastAlt = null;
-            _hoverLastShift = null;
-
-            _hoverUpdateIfChanged(); // initial set (uses current modifiers)
-            _stHoverEnsureTick(); // instant modifier flips while hovered
+            // DISABLED FOR AE STABILITY:
+            // Do not change ScriptUI button labels on hover, and do not start hover polling.
+            // Real-world testing showed multi-label hover buttons can freeze AE after render/project modal states.
+            try { _hoverClearInternal(); } catch (e0) {}
+            try { _stHoverSetRunning(false); } catch (e1) {}
+            try { _stHoverCancelTask(); } catch (e2) {}
+            return;
         }
 
         function _hoverStop(btn, baseText) {
-            if (_hoverBtn === btn) _hoverClearInternal();
-            _hoverSafeSetText(btn, baseText);
-            _stHoverStopTickIfIdle();
+            // DISABLED FOR AE STABILITY:
+            // Do not reset/touch button text on mouseout. Buttons keep their static base label.
+            try { if (_hoverBtn === btn) _hoverClearInternal(); } catch (e0) {}
+            try { _stHoverSetRunning(false); } catch (e1) {}
+            try { _stHoverCancelTask(); } catch (e2) {}
+            return;
 }
         // ------------------------------------------------------------
         // Modifier-hover label update via tiny hover-only tick
@@ -14877,7 +15085,8 @@ function _stHoverNowMs(){ try { return (new Date()).getTime(); } catch(e) { retu
 
 // Expose a callable for scheduleTask (string-based) to invoke our closure safely.
 $.global.__ST_HoverTick__ = function () {
-    try { _stHoverTickInternal(); } catch (e) {}
+    // Hover label flipping is disabled; no scheduled hover UI work should run.
+    return;
 };
 
 function _stHoverIsRunning(){ return _stHoverRunning; }
@@ -14894,43 +15103,18 @@ function _stHoverCancelTask(){
 }
 
 function _stHoverEnsureTick(){
-    // HOVER-LABEL RESTORE TEST:
-    // Restore only button-level hover polling so Option/Shift label flips update
-    // while the pointer is over a button. Root panel mouse/key hooks remain disabled.
-    try { _hoverUpdateIfChanged(); } catch (e) {}
-    if (!_hoverBtn) {
-        _stHoverRunning = false;
-        _stHoverCancelTask();
-        return;
-    }
-    try {
-        if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) {
-            _hoverClearInternal();
-            _stHoverRunning = false;
-            _stHoverCancelTask();
-            return;
-        }
-    } catch (eSafe) {}
-    if (_stHoverRunning && _stHoverTaskId !== null) return;
-    _stHoverRunning = true;
-    _stHoverScheduleNext();
+    // DISABLED FOR AE STABILITY: never schedule hover polling for label flipping.
+    try { _hoverClearInternal(); } catch (e0) {}
+    try { _stHoverSetRunning(false); } catch (e1) {}
+    try { _stHoverCancelTask(); } catch (e2) {}
+    return;
 }
 
 function _stHoverScheduleNext(){
-    try {
-        if (!_hoverBtn) {
-            _stHoverRunning = false;
-            _stHoverCancelTask();
-            return;
-        }
-        _stHoverCancelTask();
-        _stHoverTaskDueMs = _stHoverNowMs() + _stHoverIntervalMs;
-        _stHoverTaskId = app.scheduleTask("try{if($.global.__ST_HoverTick__){$.global.__ST_HoverTick__();}}catch(e){}", _stHoverIntervalMs, false);
-    } catch (e) {
-        _stHoverRunning = false;
-        _stHoverTaskId = null;
-        _stHoverTaskDueMs = 0;
-    }
+    // DISABLED FOR AE STABILITY: no hover label scheduleTask should ever be queued.
+    try { _stHoverSetRunning(false); } catch (e0) {}
+    try { _stHoverCancelTask(); } catch (e1) {}
+    return;
 }
 
 function _stHoverStopTickIfIdle(){
@@ -14941,54 +15125,11 @@ function _stHoverStopTickIfIdle(){
 }
 
 function _stHoverTickInternal(){
-    if (!_stHoverRunning) return;
-
-    // Overdue task guard:
-    // If AE held this scheduleTask while a native Import/Render progress window was open,
-    // it may execute immediately after the modal closes. That exact post-modal tick is
-    // where ScriptUI glyphs/arrow controls have been freezing. Cancel before touching UI.
-    try {
-        var __tickNow = _stHoverNowMs();
-        if (_stHoverTaskDueMs && (__tickNow - _stHoverTaskDueMs) > _stHoverMaxOverdueMs) {
-            _hoverClearInternal();
-            _stHoverRunning = false;
-            _stHoverCancelTask();
-            try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(1800); } catch (eCoolLate) {}
-            return;
-        }
-    } catch (eLateHover) {}
-
-    // If nothing is hovered, stop immediately. No idle/background polling.
-    if (!_hoverBtn) {
-        _stHoverStopTickIfIdle();
-        return;
-    }
-
-    try {
-        if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) {
-            // Do not requeue during unsafe UI states. A pending scheduleTask during AE native modals
-            // is the line-0 lockup trigger. Mouse/key hooks will restart polling on the next real hover.
-            _hoverClearInternal();
-            _stHoverRunning = false;
-            _stHoverCancelTask();
-            return;
-        }
-    } catch (eTouch) {}
-
-    try { _hoverUpdateIfChanged(); } catch(e0) {}
-
-    if (!_hoverBtn) {
-        _stHoverStopTickIfIdle();
-        return;
-    }
-
-    try {
-        // Continue polling only while the same button remains hovered.
-        _stHoverScheduleNext();
-    } catch (e1) {
-        _stHoverRunning = false;
-        _stHoverCancelTask();
-    }
+    // DISABLED FOR AE STABILITY: no hover label UI mutation should occur from a scheduled tick.
+    try { _hoverClearInternal(); } catch (e0) {}
+    try { _stHoverSetRunning(false); } catch (e1) {}
+    try { _stHoverCancelTask(); } catch (e2) {}
+    return;
 }
 
 function _stRecoverAfterHostModal(){
@@ -15027,32 +15168,39 @@ function _stHoverInstallKeyHook(root){
     return;
 }
 
+function _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
+            // Hover label flipping is disabled, but preserve the alternate-action info in the tooltip.
+            try {
+                if (!btn) return;
+                var existing = "";
+                try { existing = String(btn.helpTip || ""); } catch (eTip0) { existing = ""; }
+                var parts = [];
+                try { if (existing) parts.push(existing); } catch (e0) {}
+                try {
+                    var altInfo = [];
+                    if (hoverText && String(hoverText) !== String(baseText)) altInfo.push("Click: " + String(hoverText));
+                    if (optionHoverText) altInfo.push("Option-click: " + String(optionHoverText));
+                    if (shiftHoverText) altInfo.push("Shift-click: " + String(shiftHoverText));
+                    if (altInfo.length) parts.push(altInfo.join("\n"));
+                } catch (e1) {}
+                try { btn.helpTip = parts.join(parts.length > 1 ? "\n\n" : ""); } catch (eSet) {}
+            } catch (e) {}
+        }
+
 function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
-            // Button-level hooks only. Do not restore root panel mouse/key listeners yet.
-            try {
-                btn.addEventListener("mouseover", function () {
-                    try { _hoverStart(btn, baseText, hoverText, optionHoverText, ""); } catch (eIn) {}
-                });
-            } catch (eMO) {}
-            try {
-                btn.addEventListener("mouseout", function () {
-                    try { _hoverStop(btn, baseText); } catch (eOut) {}
-                });
-            } catch (eMT) {}
+            // DISABLED FOR AE STABILITY:
+            // Do not attach mouseover/mouseout/mousemove handlers and do not change button text on hover.
+            try { if (btn) btn.text = baseText; } catch (eTxt) {}
+            try { _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, ""); } catch (eTip) {}
+            return;
         }
 
         function enableHoverModifierLabel(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            // Button-level hooks only. Do not restore root panel mouse/key listeners yet.
-            try {
-                btn.addEventListener("mouseover", function () {
-                    try { _hoverStart(btn, baseText, hoverText, optionHoverText, shiftHoverText); } catch (eIn) {}
-                });
-            } catch (eMO) {}
-            try {
-                btn.addEventListener("mouseout", function () {
-                    try { _hoverStop(btn, baseText); } catch (eOut) {}
-                });
-            } catch (eMT) {}
+            // DISABLED FOR AE STABILITY:
+            // Do not attach mouseover/mouseout/mousemove handlers and do not change button text on hover.
+            try { if (btn) btn.text = baseText; } catch (eTxt) {}
+            try { _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, shiftHoverText); } catch (eTip) {}
+            return;
         }
 
 // -------------------------
@@ -16087,7 +16235,10 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         var content = root.add("group");
         content.orientation   = "column";
         content.alignChildren = ["fill", "top"];
-        content.alignment     = ["fill", "top"];
+        // Fill the available tab area so expanded Default/workspace sections relayout against
+        // the docked panel height instead of being clipped against a top-sized content group.
+        content.alignment     = ["fill", "fill"];
+        try { content.maximumSize = [10000, 200000]; } catch (eContentMax) {}
         content.margins       = [10, 8, 14, 0];
         content.spacing       = 10;
 
@@ -16461,7 +16612,12 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         var accHost = content.add("group");
         accHost.orientation   = "column";
         accHost.alignChildren = ["fill", "top"];
+        // IMPORTANT: keep the accordion host top-sized, not fill-sized.
+        // When it is ["fill", "fill"], ScriptUI can clip the last Default sections
+        // inside this internal group, leaving unused panel space below. Top-sizing lets
+        // the section list flow naturally down to the actual panel edge.
         accHost.alignment     = ["fill", "top"];
+        try { accHost.maximumSize = [10000, 200000]; } catch (eAccMax) {}
         accHost.margins       = ST_CONST.COLORS.TRANSPARENT_RGBA;
         accHost.spacing       = 10;
 
@@ -16473,13 +16629,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
 // =========================
 mainAcc.defineSection("ADD LAYER", function(body){
     addGrid2(body, [
-        {
-            text: "SOLID...",
-            badgeDot: true,
-            onClick: function () { isOptionDown() ? addWhiteSolidDefault() : addSolidNativePrompt(); },
-            helpTip: "Click: Solid dialog\nOption+Click: White Solid",
-            hoverLabels: { base: "SOLID...", hover: "SOLID...", optionHover: "WHITE SOLID" }
-        },
+        { text: "SOLID...", onClick: addSolidNativePrompt, helpTip: "Open the native Solid dialog." },
         { text: "3D LIGHT...",   onClick: addLightNativePrompt },
         { text: "NULL",       onClick: addNullDefault },
         { text: "ADJ. LAYER", onClick: addAdjustmentLayerDefault }
@@ -16495,14 +16645,9 @@ mainAcc.defineSection("ADD RIG", function(body){
 
 mainAcc.defineSection("ADD EXPRESSION", function(body){
     addGrid2(body, [
-        {
-            text: ST_LABELS.BOUNCE,
-            badgeDot: true,
-            onClick: function () { isOptionDown() ? doHardBounce() : doInertialBounce(); },
-            helpTip: "Inertial Bounce\nOption: Hard Bounce",
-            hoverLabels: { base: "BOUNCE", hover: "INERTIAL BOUNCE", optionHover: "HARD BOUNCE" }
-        },
-        { text: "WIGGLE", onClick: doWiggle }
+        { text: "WIGGLE", onClick: doWiggle },
+        { text: "INERTIAL BOUNCE", onClick: doInertialBounce, helpTip: "Apply the Inertial Bounce expression." },
+        { text: "HARD BOUNCE", onClick: doHardBounce, helpTip: "Apply the Hard Bounce expression." }
     ]);
 });
 
@@ -16515,53 +16660,36 @@ mainAcc.defineSection(ST_LABELS.UTILITIES, function(body){
 	        },
         {
             text: "ADD PHOTO BORDER",
-            onClick: addPhotoBorder_Util,
-            helpTip: "Click: Create a photo border rig around the selected image.\nOption: Refit the selected bordered precomp to the current BORDER_CONTENT size and center."
+            onClick: function () { addPhotoBorder_Util(false); },
+            helpTip: "Create a photo border rig around the selected image."
         },
         {
             text: "EXTEND BORDERS",
             onClick: extendBorders_Util,
             helpTip: "Adds CC Repetile to the selected layer, expands 1000px on all sides, and sets Tiling to Unfold."
-        },
-        {
-            text: ST_LABELS.ANIMATE_STROKE,
-            badgeDot: true,
-            onClick: function () {
-                if (isShiftDown()) {
-                    trimPathsAnimateSelectedShape_30f(); // SHIFT: TRIM PATHS (END)
-                } else if (isOptionDown()) {
-                    trimPathsAnimateSelectedShapeStart_30f(); // OPTION: START
-                } else {
-                    addTrimLineAnimateEnd_30f(); // NORMAL: END
-                }
-            },
-            helpTip: "Creates a Trim Line shape and animates it\nOPTION: Add Trim Paths Start animation.\nSHIFT: Adds Trim Paths to selected Shape Layer and animates it",
-            hoverLabels: { base: "ANIMATE STROKE", hover: "END", optionHover: "START", shiftHover: "TRIM PATHS" }
         }
 ]);
+});
+
+mainAcc.defineSection("STROKE", function(body){
+    addGrid2(body, [
+        { text: "ANIMATED STROKE", onClick: addTrimLineAnimateEnd_30f, helpTip: "Create a Trim Line shape and animate the End value." },
+        { text: "ANIMATE STROKE START", onClick: trimPathsAnimateSelectedShapeStart_30f, helpTip: "Add/animate Trim Paths Start on the selected shape." },
+        { text: "TRIM PATHS", onClick: trimPathsAnimateSelectedShape_30f, helpTip: "Add Trim Paths to the selected shape layer and animate it." }
+    ]);
 });
 
 mainAcc.defineSection("TIMELINE", function(body){
     addGrid2(body, [
         {
-        text: "TRIM LAYER",
-        badgeDot: true,
-        onClick: trimLayerToNeighbor,
-        helpTip: "Trim to layer below\nOption: Trim to layer above\nClick runs the shown mode",
-        hoverLabels: { base: "TRIM LAYER", hover: "BELOW", optionHover: "ABOVE" }
-        },
-        {
-        text: ST_LABELS.OFFSET_LAYERS,
-        badgeDot: true,
-        onClick: offsetSelectedLayers_ShineTools,
-        helpTip: "Offsets selected layers in time.\nClick: Linear Frame Offset\nOption: Curve Offset (Type + Max Spread + Curve + Invert)",
-        hoverLabels: { base: "OFFSET LAYERS", hover: "FRAME OFFSET", optionHover: "CURVE OFFSET" }
-        },
-        {
         text: "EXTEND PRECOMP",
         onClick: extendPrecompToCTI_Util,
         helpTip: "Extends selected precomp (and layers inside) so the last visible frame lands on the CTI."
-        }
+        },
+        { text: "TRIM LAYER ABOVE", onClick: function () { trimLayerToNeighbor(true); }, helpTip: "Trim selected layer(s) to the nearest unselected layer above." },
+        { text: "FRAME OFFSET", onClick: function () { offsetSelectedLayers_ShineTools(false); }, helpTip: "Offset selected layers by a linear frame offset." },
+        { text: "TRIM LAYER BELOW", onClick: function () { trimLayerToNeighbor(false); }, helpTip: "Trim selected layer(s) to the nearest unselected layer below." },
+        { text: "CURVE OFFSET", onClick: function () { offsetSelectedLayers_ShineTools(true); }, helpTip: "Offset selected layers using the curve offset dialog." }
     ]);
 });
 
@@ -16575,15 +16703,12 @@ mainAcc.defineSection("CLEAN UP", function(body){
 
 mainAcc.defineSection("RENDER", function(body){
     addGrid2(body, [
-        { text: ST_LABELS.PRORES_422, onClick: renderPRORES422WithSaveDialog, badgeDot: true,
-  helpTip: "Click: Save + auto-render ProRes 422 (may keep AE in focus during render).\nOPTION: Save + auto-render ProRes 4444 (RGB+Alpha).\nSHIFT: Save + add to Render Queue only (no auto-render; you can CMD+H / Show Desktop).",
-  hoverLabels: { base: ST_LABELS.PRORES_422, hover: ST_LABELS.PRORES_422, optionHover: "PRORES 4444...", shiftHover: "QUEUE ONLY" } },
+        { text: "PRORES 422", onClick: function () { renderPRORES422WithSaveDialog(false, false); },
+  helpTip: "Save + auto-render ProRes 422." },
         {
-            text: "FRAME AS .JPG...",
-            onClick: saveCurrentFramePSDOrJPG,
-            badgeDot: true,
-            hoverLabels: { base: "FRAME AS .JPG...", hover: "FRAME AS .JPG...", optionHover: "FRAME AS .PSD..." },
-            helpTip: "Click: save current frame as .JPG (Output Module: JPG Still).  Option-click: save as .PSD (Output Module: Photoshop)."
+            text: "FRAME AS .PSD",
+            onClick: function () { saveCurrentFramePSDOrJPG(true); },
+            helpTip: "Save current frame as .PSD (Output Module: Photoshop)."
         }]);
 });
 
@@ -16591,15 +16716,19 @@ mainAcc.defineSection("RENDER", function(body){
 mainAcc.build();
 
 var collapseGap = content.add("group");
-        collapseGap.minimumSize = [0, 25];
-        collapseGap.maximumSize = [10000, 25];
+        // No extra spacer below the accordion; it caused the Default section list to clip early
+        // in docked panels.
+        collapseGap.minimumSize = [0, 0];
+        collapseGap.preferredSize = [0, 0];
+        collapseGap.maximumSize = [10000, 0];
 
         var utilRow = content.add("group");
         utilRow.orientation   = "row";
         utilRow.alignChildren = ["left", "top"];
         utilRow.alignment     = ["fill", "top"];
         utilRow.margins       = 0;
-        utilRow.spacing       = 8;
+        utilRow.spacing       = 0;
+        try { utilRow.minimumSize = [0,0]; utilRow.preferredSize = [0,0]; utilRow.maximumSize = [10000,0]; } catch(eUtilRowZero) {}
 
 // TEXT tab content is built on demand in _buildTextTabIfNeeded() to speed initial load.
         // Default to MAIN tab handled by _selectTopTab("MAIN") above.
@@ -17246,6 +17375,34 @@ try {
     };
 } catch (e6) {}
 
+// One-shot docked-panel layout settle.
+// Manual resizing fixes the Default clipping because AE recalculates the docked panel bounds after the first paint.
+// This safely mimics that post-paint settle without installing any recurring hover/polling behavior.
+try {
+    $.global.__ShineToolsLayoutSettleTask__ = 0;
+    $.global.__ShineToolsDockedLayoutSettle__ = function () {
+        try { $.global.__ShineToolsLayoutSettleTask__ = 0; } catch (eT0) {}
+        try { if ($.global.__ShineToolsClosing__ === true) return; } catch (e0) {}
+        try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) { return; }
+        var p = null;
+        try { p = $.global.__ShineTools_pal; } catch (e1) {}
+        if (!p) return;
+        try { if (p.__stTabStack && p.__stTabStack.layout) { p.__stTabStack.layout.layout(true); p.__stTabStack.layout.resize(); } } catch (e2) {}
+        try { if (p.__stTabMain && p.__stTabMain.layout) { p.__stTabMain.layout.layout(true); p.__stTabMain.layout.resize(); } } catch (e3) {}
+        try { if (p.__stMainTabRoot && p.__stMainTabRoot.layout) { p.__stMainTabRoot.layout.layout(true); p.__stMainTabRoot.layout.resize(); } } catch (e4) {}
+        try { if (p.layout) p.layout.layout(true); } catch (e5) {}
+        try { if (p.layout) p.layout.resize(); } catch (e6a) {}
+        try { if ($.global.__ShineToolsCenterLogoHeaders__) $.global.__ShineToolsCenterLogoHeaders__(); } catch (e7) {}
+        try { if (p.update) p.update(); } catch (e8) {}
+    };
+    $.global.__ShineToolsQueueLayoutSettle__ = function (delayMs) {
+        try { if ($.global.__ShineToolsClosing__ === true) return; } catch (e0) {}
+        try { if ($.global.__ShineToolsLayoutSettleTask__) app.cancelTask($.global.__ShineToolsLayoutSettleTask__); } catch (e1) {}
+        var d = Math.max(40, Math.min(1000, delayMs || 120));
+        try { $.global.__ShineToolsLayoutSettleTask__ = app.scheduleTask('$.global.__ShineToolsDockedLayoutSettle__()', d, false); } catch (e2) {}
+    };
+} catch (eSettleDef) {}
+
 try {
     if (myPal instanceof Window) {
         myPal.onClose = _stPanelCloseCleanup;
@@ -17264,9 +17421,10 @@ if (myPal instanceof Window) {
     // Close-safety guard: avoid delayed post-show relayout tasks that can outlive panel teardown.
     try { $.global.__ShineToolsKickLayout(); } catch (e7) {}
 } else {
-    // For docked panels, repeated delayed kick-layout passes can cause the footer to visibly jump.
-    // Do a single synchronous settle pass only.
+    // For docked panels, do an immediate pass plus one delayed post-paint settle.
+    // The delayed pass fixes the Default accordion clipping that otherwise clears only after manual resize.
     try { $.global.__ShineToolsKickLayout(); } catch (e10) {}
+    try { if ($.global.__ShineToolsQueueLayoutSettle__) $.global.__ShineToolsQueueLayoutSettle__(180); } catch (e10b) {}
 }
 
 try { $.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ = false; } catch (eRelayoutBypass) {}
