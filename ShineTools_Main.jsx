@@ -1,13 +1,13 @@
 // =================================================================================================
 // ShineTools_Main.jsx
-// Clean Base: 2026-05-02
+// Clean Base: 2026-05-04
 // Version: v1.1
-// Build marker: CLEAN_BASE_HOVERLIVE_RENAME_REFRESH_2026-05-02
+// Build marker: CLEAN_BASE_NO_HOVER_LABELS_UPDATE_CHANGELOG_CLEANUP_2026-05-04
 //
 // Notes:
-// - Conservative cleanup pass from the working HoverLive clean base.
-// - Keeps current UI behavior, tool wiring, workspace loading, and hover polling intact.
-// - Removes stale diagnostic comments and consolidates only obvious redundant namespace setup.
+// - Conservative cleanup pass from the stable no-hover-label build.
+// - Keeps current UI behavior, tool wiring, workspace loading, update tab, and changelog behavior intact.
+// - Hover label flipping remains disabled for AE stability; alternate actions are preserved in tooltips.
 // - Uses native ScriptUI controls; no custom paint callbacks are installed.
 // =================================================================================================
 
@@ -8932,10 +8932,9 @@ function buildUI(thisObj) {
             ? thisObj
             : new Window("palette", "ShineTools_v" + SHINE_VERSION, undefined, { resizeable: true });
 
-        // Install hover label hooks; modifier flips are also handled by hover-only polling
+        // Hover label flipping is intentionally disabled for AE stability.
+        // Keep these no-op installers for compatibility with older button wiring.
         try { _stHoverInstallMouseHook(pal); } catch(eHook) {}
-
-        // Also try key hooks for instant modifier flips (best-effort fallback).
         try { _stHoverInstallKeyHook(pal); } catch(eKey) {}
         // Do not attach blank-panel click/focus handlers.
         // Do not attach root mousedown/focus/activate handlers to the palette/panel;
@@ -14997,61 +14996,44 @@ function addDropdownHeader(col, text, insetPx) {
 
         // The real button is slightly wider than the wrapper; the wrapper's fixed width crops the ring.
 
-        // Hover + Option label engine (3-state)
+        // Hover label compatibility stubs
         // ==========================================================
-        // Hover label helpers (Modifier-aware) — tiny hover-only tick
-        // ----------------------------------------------------------
-        // While a button is actively hovered, run a lightweight scheduleTask
-        // so Option/Shift label changes update immediately without requiring
-        // mouse movement. The tick stops on mouseout / modal cancel.
+        // The old hover-label system changed button text on mouseover and used
+        // a hover-only scheduleTask for modifier-key label flips. That behavior
+        // is intentionally disabled for AE stability. Keep these small no-op
+        // functions because existing button builders still call them.
+        // Alternate action labels are preserved in button helpTips instead.
         // ==========================================================
 
         var _hoverBtn = null;
-        var _hoverText = "";
-        var _hoverOptionText = "";
-        var _hoverShiftText = "";
-        var _hoverLastAlt = null;
-        var _hoverLastShift = null;
+        var _stHoverRunning = false;
+        var _stHoverTaskId = null;
 
-// =================================================================================================
-// UTILITIES: HOVER SYSTEM: instant modifier hover labels
-// =================================================================================================
         function _hoverClearInternal() {
             _hoverBtn = null;
-            _hoverLastAlt = null;
-            _hoverLastShift = null;
         }
 
-        // Expose a global canceller so we can pause hover state when a modal dialog is shown
+        function _stHoverSetRunning(v) {
+            _stHoverRunning = v ? true : false;
+        }
+
+        function _stHoverCancelTask() {
+            try {
+                if (_stHoverTaskId !== null) app.cancelTask(_stHoverTaskId);
+            } catch (e) {}
+            _stHoverTaskId = null;
+        }
+
+        // Expose a global canceller so modal/progress operations can clear any leftover hover state.
         $.global.__ShineTools_CancelHoverPoll__ = function () {
-            try { _hoverClearInternal(); } catch (e) {}
-            try { _stHoverSetRunning(false); } catch (e2) {}
-            try { _stHoverCancelTask(); } catch (e3) {}
+            try { _hoverClearInternal(); } catch (e0) {}
+            try { _stHoverSetRunning(false); } catch (e1) {}
+            try { _stHoverCancelTask(); } catch (e2) {}
         };
 
-        function _hoverSafeSetText(btn, t) { try { btn.text = t; } catch (e) {} }
-
-        function _hoverComputeText() {
-            var altNow = isOptionDown();
-            var shiftNow = isShiftDown();
-            var next = shiftNow ? (_hoverShiftText || _hoverText) : (altNow ? _hoverOptionText : _hoverText);
-            return { alt: altNow, shift: shiftNow, text: next };
-        }
-
-        function _hoverUpdateIfChanged() {
-            if (!_hoverBtn) return;
-            var st = _hoverComputeText();
-            if (_hoverLastAlt === null || _hoverLastShift === null || st.alt !== _hoverLastAlt || st.shift !== _hoverLastShift) {
-                _hoverLastAlt = st.alt;
-                _hoverLastShift = st.shift;
-                _hoverSafeSetText(_hoverBtn, st.text);
-            }
-        }
-
         function _hoverStart(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            // DISABLED FOR AE STABILITY:
-            // Do not change ScriptUI button labels on hover, and do not start hover polling.
-            // Real-world testing showed multi-label hover buttons can freeze AE after render/project modal states.
+            // Disabled: do not mutate button text or start hover polling.
+            try { if (btn && baseText) btn.text = baseText; } catch (eTxt) {}
             try { _hoverClearInternal(); } catch (e0) {}
             try { _stHoverSetRunning(false); } catch (e1) {}
             try { _stHoverCancelTask(); } catch (e2) {}
@@ -15059,117 +15041,76 @@ function addDropdownHeader(col, text, insetPx) {
         }
 
         function _hoverStop(btn, baseText) {
-            // DISABLED FOR AE STABILITY:
-            // Do not reset/touch button text on mouseout. Buttons keep their static base label.
-            try { if (_hoverBtn === btn) _hoverClearInternal(); } catch (e0) {}
+            // Disabled: buttons keep their static base labels.
+            try { if (btn && baseText) btn.text = baseText; } catch (eTxt) {}
+            try { _hoverClearInternal(); } catch (e0) {}
             try { _stHoverSetRunning(false); } catch (e1) {}
             try { _stHoverCancelTask(); } catch (e2) {}
             return;
-}
-        // ------------------------------------------------------------
-        // Modifier-hover label update via tiny hover-only tick
-        // ------------------------------------------------------------
-        // ScriptUI doesn't reliably emit events for modifier key changes.
-        // This tick runs ONLY while a button is hovered, so pressing/releasing
-        // Option or Shift flips the visible button label without mouse movement.
-        // It is intentionally allowed even when ST.SAFE_MODE is true; SAFE_MODE
-        // still disables heavier/background UI polish elsewhere.
-var _stHoverRunning = false;
-var _stHoverTaskId  = null;
-var _stHoverTaskDueMs = 0;
-var _stHoverStartedMs = 0;
-var _stHoverIntervalMs = 90; // Poll only while a button is actively hovered; allows modifier-only label flips.
-var _stHoverMaxOverdueMs = 260; // If AE holds a hover tick through an Import/Render modal, cancel it before it touches UI.
-
-function _stHoverNowMs(){ try { return (new Date()).getTime(); } catch(e) { return 0; } }
-
-// Expose a callable for scheduleTask (string-based) to invoke our closure safely.
-$.global.__ST_HoverTick__ = function () {
-    // Hover label flipping is disabled; no scheduled hover UI work should run.
-    return;
-};
-
-function _stHoverIsRunning(){ return _stHoverRunning; }
-function _stHoverSetRunning(v){ _stHoverRunning = v ? true : false; }
-
-function _stHoverCancelTask(){
-    try {
-        if (_stHoverTaskId !== null) {
-            app.cancelTask(_stHoverTaskId);
         }
-    } catch (e) {}
-    _stHoverTaskId = null;
-    _stHoverTaskDueMs = 0;
-}
 
-function _stHoverEnsureTick(){
-    // DISABLED FOR AE STABILITY: never schedule hover polling for label flipping.
-    try { _hoverClearInternal(); } catch (e0) {}
-    try { _stHoverSetRunning(false); } catch (e1) {}
-    try { _stHoverCancelTask(); } catch (e2) {}
-    return;
-}
+        // Legacy scheduleTask entry point. It must remain harmless if an older queued task fires.
+        $.global.__ST_HoverTick__ = function () {
+            try { $.global.__ShineTools_CancelHoverPoll__(); } catch (e) {}
+            return;
+        };
 
-function _stHoverScheduleNext(){
-    // DISABLED FOR AE STABILITY: no hover label scheduleTask should ever be queued.
-    try { _stHoverSetRunning(false); } catch (e0) {}
-    try { _stHoverCancelTask(); } catch (e1) {}
-    return;
-}
-
-function _stHoverStopTickIfIdle(){
-    // Stop if no hover target (or the palette loses focus).
-    if (_hoverBtn) return;
-    _stHoverRunning = false;
-    _stHoverCancelTask();
-}
-
-function _stHoverTickInternal(){
-    // DISABLED FOR AE STABILITY: no hover label UI mutation should occur from a scheduled tick.
-    try { _hoverClearInternal(); } catch (e0) {}
-    try { _stHoverSetRunning(false); } catch (e1) {}
-    try { _stHoverCancelTask(); } catch (e2) {}
-    return;
-}
-
-function _stRecoverAfterHostModal(){
-    try {
-        if ($.global && $.global.__ST_BUSY__ === true) {
-            var started = 0;
-            try { started = $.global.__ST_BUSY_STARTED_MS__ || 0; } catch(eB0) { started = 0; }
-            var now = 0;
-            try { now = (new Date()).getTime(); } catch(eB1) { now = 0; }
-            if (!started || !now || (now - started) > 10000) {
-                $.global.__ST_BUSY__ = false;
-                $.global.__ST_BUSY_STARTED_MS__ = 0;
-            }
+        function _stHoverEnsureTick() {
+            try { $.global.__ShineTools_CancelHoverPoll__(); } catch (e) {}
+            return;
         }
-    } catch(e2) {}
-    try {
-        if ($.global && $.global.__ST_LONGOP__ === true) {
-            var stillSaving = false;
-            var stillRendering = false;
-            try { stillSaving = !!(app && app.isSaving); } catch(eS) { stillSaving = false; }
-            try { stillRendering = !!(app && app.project && app.project.renderQueue && app.project.renderQueue.rendering); } catch(eR) { stillRendering = false; }
-            if (!stillSaving && !stillRendering) $.global.__ST_LONGOP__ = false;
+
+        function _stHoverScheduleNext() {
+            try { $.global.__ShineTools_CancelHoverPoll__(); } catch (e) {}
+            return;
         }
-    } catch(e3) {}
-}
 
-// Install a single mousemove listener on the palette/panel to refresh hovered button label.
-function _stHoverInstallMouseHook(root){
-    // NO-EVENT-HOOK DIAGNOSTIC: do not install root mousemove/mouseover/mousedown hooks.
-    return;
-}
+        function _stHoverStopTickIfIdle() {
+            try { $.global.__ShineTools_CancelHoverPoll__(); } catch (e) {}
+            return;
+        }
 
-// Best-effort: key hooks (not reliable in all AE ScriptUI builds), but when they fire they give instant updates.
-function _stHoverInstallKeyHook(root){
-    // NO-EVENT-HOOK DIAGNOSTIC: do not install root keydown/keyup hooks.
-    return;
-}
+        function _stHoverTickInternal() {
+            try { $.global.__ShineTools_CancelHoverPoll__(); } catch (e) {}
+            return;
+        }
 
-function _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            // Hover label flipping is disabled, but preserve the alternate-action info in the tooltip.
+        function _stRecoverAfterHostModal(){
+            try {
+                if ($.global && $.global.__ST_BUSY__ === true) {
+                    var started = 0;
+                    try { started = $.global.__ST_BUSY_STARTED_MS__ || 0; } catch(eB0) { started = 0; }
+                    var now = 0;
+                    try { now = (new Date()).getTime(); } catch(eB1) { now = 0; }
+                    if (!started || !now || (now - started) > 10000) {
+                        $.global.__ST_BUSY__ = false;
+                        $.global.__ST_BUSY_STARTED_MS__ = 0;
+                    }
+                }
+            } catch(e2) {}
+            try {
+                if ($.global && $.global.__ST_LONGOP__ === true) {
+                    var stillSaving = false;
+                    var stillRendering = false;
+                    try { stillSaving = !!(app && app.isSaving); } catch(eS) { stillSaving = false; }
+                    try { stillRendering = !!(app && app.project && app.project.renderQueue && app.project.renderQueue.rendering); } catch(eR) { stillRendering = false; }
+                    if (!stillSaving && !stillRendering) $.global.__ST_LONGOP__ = false;
+                }
+            } catch(e3) {}
+        }
+
+        function _stHoverInstallMouseHook(root){
+            // Disabled: do not install root mousemove/mouseover/mousedown hooks.
+            return;
+        }
+
+        function _stHoverInstallKeyHook(root){
+            // Disabled: do not install root keydown/keyup hooks.
+            return;
+        }
+
+        function _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
+            // Hover label flipping is disabled, but preserve alternate-action info in the tooltip.
             try {
                 if (!btn) return;
                 var existing = "";
@@ -15187,17 +15128,15 @@ function _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, shiftH
             } catch (e) {}
         }
 
-function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
-            // DISABLED FOR AE STABILITY:
-            // Do not attach mouseover/mouseout/mousemove handlers and do not change button text on hover.
+        function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
+            // Disabled for AE stability: set the static label and preserve alternate actions in helpTip.
             try { if (btn) btn.text = baseText; } catch (eTxt) {}
             try { _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, ""); } catch (eTip) {}
             return;
         }
 
         function enableHoverModifierLabel(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            // DISABLED FOR AE STABILITY:
-            // Do not attach mouseover/mouseout/mousemove handlers and do not change button text on hover.
+            // Disabled for AE stability: set the static label and preserve alternate actions in helpTip.
             try { if (btn) btn.text = baseText; } catch (eTxt) {}
             try { _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, shiftHoverText); } catch (eTip) {}
             return;
