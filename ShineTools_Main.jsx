@@ -13454,6 +13454,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                             "Added new Save Workspace/Favorites Manager.",
                             "Added new Organize Library Elements dialog with custom section dividers, custom filenames, and reordering.",
                             "Changed section reordering to use Option-click on the MAIN and TEXT tabs.",
+                            "Removed modifier keys on buttons.  Each action now has its own button - This was causing the crash.",
                             "Bug fixes."
                         ],
                         "1.0": [
