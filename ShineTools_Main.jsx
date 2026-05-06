@@ -9,6 +9,7 @@
 // - Keeps current UI behavior, tool wiring, workspace loading, and hover polling intact.
 // - Removes stale diagnostic comments and consolidates only obvious redundant namespace setup.
 // - Uses native ScriptUI controls; no custom paint callbacks are installed.
+// - 2026-05-05 stability pass: removed remaining hover-driven dropdown clamp + ShineTracker hover swap.
 // =================================================================================================
 
 var ST = ST || {};
@@ -76,7 +77,7 @@ var ST_CONST  = ST.CONST;
 
 var SHINE_PRODUCT_NAME = "ShineTools";
 var SHINE_VERSION      = "1.1";
-var __ST_PATCH_MARKER__ = "WORKSPACE_LOAD_JSON_PICKER_FIX_2026-05-04";
+var __ST_PATCH_MARKER__ = "LIGHTWEIGHT_ACCORDION_CLIP_FIX_2026-05-05";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
@@ -10428,6 +10429,7 @@ try {
             try {
                         // =========================================================
                         var textRoot = tabText.add("group");
+                        try { pal.__stTextTabRoot = textRoot; } catch (eStoreTextRoot) {}
                         textRoot.orientation   = "column";
                         textRoot.alignChildren = ["fill", "fill"];
                         textRoot.margins       = 0;
@@ -10441,9 +10443,11 @@ try {
 
                         // Text tab content container matches MAIN’s accordion region margins
                         var textContent = textRoot.add("group");
+                        try { pal.__stTextContentRoot = textContent; } catch (eStoreTextContent) {}
                         textContent.orientation   = "column";
                         textContent.alignChildren = ["fill", "top"];
-                        textContent.alignment     = ["fill", "top"];
+                        textContent.alignment     = ["fill", "fill"];
+                        try { textContent.maximumSize = [10000, 200000]; } catch (eTextContentMax) {}
                         textContent.margins       = [10, 8, 14, 0];
                         textContent.spacing       = 10;
 
@@ -10895,6 +10899,7 @@ try {
 
                 // Accordion host (keeps ANIMATIONS bar above)
                         var textAccHost = textContent.add("group");
+                        try { pal.__stTextAccordionHost = textAccHost; } catch (eStoreTextAccHost) {}
                         textAccHost.orientation   = "column";
                         textAccHost.alignChildren = ["fill", "top"];
                         textAccHost.alignment     = ["fill", "top"];
@@ -12000,6 +12005,42 @@ function _stLockFooterDuringWorkspaceSwitch() {
             return __unlock;
         }
 
+
+function _stSettleProtectedDefaultWorkspaceLayoutNow() {
+            // ALL_WORKSPACES_CLIP_FIX_2026-05-05:
+            // Any workspace can rebuild/reorder accordions or lazy-build newly expanded sections.
+            // Give the affected workspace tab areas one contained, synchronous layout pass.
+            // Do NOT use app.scheduleTask here and do NOT kick a delayed full-panel startup settle.
+            try {
+                try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (e0) {}
+                try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return false; } catch (e1) { return false; }
+
+                var targets = [];
+                try { if (pal && pal.__stMainAccordionHost) targets.push(pal.__stMainAccordionHost); } catch (e2a) {}
+                try { if (pal && pal.__stMainContentRoot) targets.push(pal.__stMainContentRoot); } catch (e2b) {}
+                try { if (pal && pal.__stMainTabRoot) targets.push(pal.__stMainTabRoot); } catch (e2c) {}
+                try { if (pal && pal.__stTabMain) targets.push(pal.__stTabMain); } catch (e2d) {}
+                try { if (pal && pal.__stTextAccordionHost) targets.push(pal.__stTextAccordionHost); } catch (e2e) {}
+                try { if (pal && pal.__stTextContentRoot) targets.push(pal.__stTextContentRoot); } catch (e2f) {}
+                try { if (pal && pal.__stTextTabRoot) targets.push(pal.__stTextTabRoot); } catch (e2g) {}
+                try { if (pal && pal.__stTabText) targets.push(pal.__stTabText); } catch (e2h) {}
+
+                for (var i = 0; i < targets.length; i++) {
+                    try {
+                        var g = targets[i];
+                        if (!g || !g.layout) continue;
+                        try { g.layout.layout(true); } catch (eL1) {}
+                        try { g.layout.resize(); } catch (eL2) {}
+                    } catch (eEach) {}
+                }
+
+                // Paint only. Avoid pal.layout.layout(true) / pal.layout.resize() here.
+                try { if (pal && pal.update) pal.update(); } catch (eUpd) {}
+                return true;
+            } catch (e) {}
+            return false;
+        }
+
 function _stLoadWorkspaceByName(name, options) {
             try {
                 var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
@@ -12018,8 +12059,11 @@ function _stLoadWorkspaceByName(name, options) {
                 try { _stSetActiveWorkspaceNameState(wanted); } catch (e2a) {}
                 try { _stApplyWorkspaceStatusText(wanted); } catch (e2b) {}
 
-                try { if (_stIsProtectedWorkspaceName(wanted)) data = _stApplyFactoryDefaultButtonOrder(data); } catch (eDefaultOrder) {}
+                var __stProtectedDefaultLoad = false;
+                try { __stProtectedDefaultLoad = _stIsProtectedWorkspaceName(wanted); } catch (eProtectedCheck) { __stProtectedDefaultLoad = false; }
+                try { if (__stProtectedDefaultLoad) data = _stApplyFactoryDefaultButtonOrder(data); } catch (eDefaultOrder) {}
                 try { _stApplyWorkspaceState(data); } catch (e3) {}
+                try { _stSettleProtectedDefaultWorkspaceLayoutNow(); } catch (eWorkspaceLocalSettle) {}
 
                 // Reassert active-name state in case the apply path touched any workspace/status variables.
                 try { _stSetActiveWorkspaceNameState(wanted); } catch (e4a) {}
@@ -14454,36 +14498,14 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
                             launchTrackerLabel.addEventListener("mousedown",   function () { _stLaunchShineTracker(); });
                             launchClickGroup.addEventListener("mousedown",     function () { _stLaunchShineTracker(); });
 
-                            // Hover swap (icon + label + container) + reveal/hide label text
+                            // Stability cleanup: hover-driven icon/label swapping disabled.
+                            // Click behavior remains intact; avoids mouseover/mouseout ScriptUI layout churn.
                             function _stSetLaunchLabel(show) {
                                 try {
                                     if (!launchTrackerLabel) return;
-                                    launchTrackerLabel.text = show ? "Launch ShineTracker" : "";
-                                    // Force layout refresh so the text updates immediately
-                                    if (launchClickGroup && launchClickGroup.layout) launchClickGroup.layout.layout(true);
-                                    if (parent && parent.layout) { parent.layout.layout(true); parent.layout.resize(); }
+                                    launchTrackerLabel.text = "";
                                 } catch (e) {}
                             }
-
-                            // Use the container group for reliable hover behavior
-                            launchClickGroup.addEventListener("mouseover", function () {
-                                _stSetLaunchIcon(true);
-                                _stSetLaunchLabel(true);
-                            });
-                            launchClickGroup.addEventListener("mouseout", function () {
-                                _stSetLaunchIcon(false);
-                                _stSetLaunchLabel(false);
-                            });
-
-                            // Keep icon-only hover as well (helps if container events don't fire on some AE builds)
-                            launchTrackerIconCtl.addEventListener("mouseover", function () {
-                                _stSetLaunchIcon(true);
-                                _stSetLaunchLabel(true);
-                            });
-                            launchTrackerIconCtl.addEventListener("mouseout", function () {
-                                _stSetLaunchIcon(false);
-                                _stSetLaunchLabel(false);
-                            });
                         }
 
                     } catch (eIcon) {}
@@ -14643,8 +14665,7 @@ if (w && dd.list) {
             try {
                 dd.addEventListener('mousedown', function () { try { _stMarkDropdownInteraction(dd, 5000); } catch (eMD) {} _clamp(); });
                 try { dd.addEventListener('mouseup', function () { _stMarkDropdownInteraction(dd, 1500); }); } catch (eMU) {}
-                // Docked panels on macOS can sometimes miss onActivate; clamp on hover/focus too.
-                try { dd.addEventListener('mouseover', function () { _clamp(); }); } catch (e4) {}
+                // Stability cleanup: no hover-driven dropdown clamp. Clamp on mousedown/focus only.
                 try { dd.addEventListener('focus', function () { try { _stMarkDropdownInteraction(dd, 5000); } catch (eF) {} _clamp(); }); } catch (e5) {}
                 try { dd.addEventListener('blur', function () { _stClearDropdownInteraction(dd, 1200); }); } catch (e6) {}
             } catch (e3) {}
@@ -14876,6 +14897,8 @@ function requestRelayoutSoon(scopeGroup, delayMs) {
     try { if (__stNoForceRelayoutDiagnosticActive()) return; } catch (eDiag) { return; }
     try { if (!_stCanTouchUI()) return; } catch (eSafe) { return; }
     try {
+        // Lightweight accordion refresh: only relayout the requested scope.
+        // Do NOT run the broad all-workspace settle on every expand/collapse; that caused lag.
         relayoutScoped(scopeGroup || pal);
     } catch (e) {
         try {
@@ -15754,6 +15777,15 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, acco
 try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                 try { bodyWrap.maximumSize = v ? [10000, 0] : [10000, 200000]; } catch (eMax) {}
 
+                // Lightweight no-clipping nudge: when opening a section, ask only this section
+                // and its accordion container to recalculate before the normal scoped relayout.
+                // This avoids the heavier all-workspace settle that made toggles feel laggy.
+                if (!v) {
+                    try { if (body && body.layout) body.layout.layout(true); } catch (eLL1) {}
+                    try { if (bodyWrap && bodyWrap.layout) bodyWrap.layout.layout(true); } catch (eLL2) {}
+                    try { if (container && container.layout) container.layout.layout(true); } catch (eLL3) {}
+                }
+
                 if (!silent) safeRelayout();
 }
 
@@ -16266,6 +16298,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
 
         // CONTENT (accordion container)
         var content = root.add("group");
+        try { pal.__stMainContentRoot = content; } catch (eStoreMainContent) {}
         content.orientation   = "column";
         content.alignChildren = ["fill", "top"];
         // Fill the available tab area so expanded Default/workspace sections relayout against
@@ -16643,6 +16676,7 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
 
         // Accordion host (keeps Favorites bar above)
         var accHost = content.add("group");
+        try { pal.__stMainAccordionHost = accHost; } catch (eStoreMainAccHost) {}
         accHost.orientation   = "column";
         accHost.alignChildren = ["fill", "top"];
         // IMPORTANT: keep the accordion host top-sized, not fill-sized.
@@ -17041,353 +17075,148 @@ var collapseGap = content.add("group");
     try { if (ST && ST.DEBUG === true) ST_DEBUG_VALIDATE_SYNTAX(); } catch (eDbg) {}
 
     // ------------------------------------------------------------
-    // TEST CLEANUP: Remove any "Solids"/"SOLIDS" folders + their solid items
-    // (Used during warnings testing; safe best-effort removal)
+    // Launch startup check: AE File/Network scripting permission only.
+    // 2026-05-05: Restored ONLY the check for:
+    //   Preferences > Scripting & Expressions > Allow Scripts to Write Files and Access Network
+    // Kept removed: setup takeover panel, Modern JS launch check, write-permission probe cleanup,
+    // temp test-solid cleanup, and any resize hooks / delayed layout tasks.
     // ------------------------------------------------------------
-
-    // ------------------------------------------------------------
-    // TEST CLEANUP: Remove any "Solids"/"SOLIDS" folder(s) + their contents
-    // (Used during warnings testing; safe best-effort removal)
-    // ------------------------------------------------------------
-    function _cleanupSolidsFoldersBestEffort() {
-        // IMPORTANT: Only delete the temporary test solids ShineTools creates for its startup checks.
-        // Never delete user-created solids or wipe the entire Solids folder.
+    function _stIsFileNetworkAccessAllowedAtLaunch() {
         try {
-            if (!app.project) return;
-            var proj = app.project;
+            return app.preferences.getPrefAsBool("Main Pref Section", "Pref_SCRIPTING_FILE_NETWORK_SECURITY") === true;
+        } catch (ePref) {}
 
-            function isFootage(it) { try { return (it && (it instanceof FootageItem)); } catch (e) { return false; } }
-
-            // Any test solids created by ShineTools MUST use this prefix.
-            var TEST_PREFIX = "_ST_TEST_SOLID_";
-
-            // Pass 1: remove matching solids anywhere in the project
-            for (var i = proj.numItems; i >= 1; i--) {
-                var it = null;
-                try { it = proj.item(i); } catch (eIt) { it = null; }
-                if (!it) continue;
-
-                var nm = "";
-                try { nm = String(it.name || ""); } catch (eN) { nm = ""; }
-                if (!nm) continue;
-
-                if (nm.indexOf(TEST_PREFIX) === 0 && isSolidFootageSafe(it)) {
-                    try { it.remove(); } catch (eRm) {}
-                }
-            }
-
-            // NOTE: We intentionally do NOT remove the "Solids" folder itself, even if empty.
-            // Users may already have one and we should never touch their structure.
-
-        } catch (e) {}
+        // Fallback only if the preference cannot be read in this AE build.
+        // Keep this tiny and self-cleaning; do not create project items or relayout the UI.
+        var f = null;
+        try {
+            f = new File(Folder.temp.fsName + "/st_file_network_access_test.txt");
+            try { if (f.exists) f.remove(); } catch (eRm0) {}
+            if (!f.open("w")) return false;
+            f.encoding = "UTF-8";
+            f.write("test");
+            f.close();
+            try { f.remove(); } catch (eRm1) {}
+            return true;
+        } catch (eProbe) {
+            try { if (f && f.opened) f.close(); } catch (eClose) {}
+            return false;
+        }
     }
 
-    // Run once per launch (best-effort)
-    try { _cleanupSolidsFoldersBestEffort(); } catch(e0) {}
+    function _stShowNetworkAccessSetupRequiredPanel() {
+        try {
+            if (!myPal) return;
 
-    // Expose + run delayed cleanups (startup checks may create Solids after initial UI)
-    try { $.global.__ShineToolsCleanupSolidsFoldersBestEffort = _cleanupSolidsFoldersBestEffort; } catch(eG) {}
+            var host = null;
+            try { host = myPal.__stTabStack || myPal; } catch (eHost0) { host = myPal; }
+            if (!host) return;
 
-    // scheduleTask startup repeats removed by request.
-    try {
-        _cleanupSolidsFoldersBestEffort();
-    } catch (eT) {}
+            // Hide normal tab bodies, but leave the native top tab/header area visible.
+            try { if (myPal.__stTabMain) myPal.__stTabMain.visible = false; } catch (eH0) {}
+            try { if (myPal.__stTabText) myPal.__stTabText.visible = false; } catch (eH1) {}
+            try { if (myPal.__stTabRequests) myPal.__stTabRequests.visible = false; } catch (eH2) {}
+            try { if (myPal.__stTabUpdates) myPal.__stTabUpdates.visible = false; } catch (eH3) {}
+            try { if (myPal.__stTabHelp) myPal.__stTabHelp.visible = false; } catch (eH4) {}
+            try { if (myPal.__stTabWorkspaceManager) myPal.__stTabWorkspaceManager.visible = false; } catch (eH5) {}
 
-// ------------------------------------------------------------
-// ShineTools Launch Setup Check (TAKEOVER WARNING)
-// Shows ONLY a takeover warning screen if required settings are NOT enabled.
-// If user dismisses, warning hides for this AE session and returns to MAIN.
-// ------------------------------------------------------------
-try {
-    (function (pal) {
-        if (!pal) return;
-
-        // --- Checks ---
-        function _stCanWriteFilesEffective() {
-            // We want to reflect the actual checkbox (pref) when possible,
-            // but also avoid false-negatives in some AE builds by doing a quick write probe.
-            var prefEnabled = null;
-            try {
-                prefEnabled = app.preferences.getPrefAsBool("Main Pref Section", "Pref_SCRIPTING_FILE_NETWORK_SECURITY");
-            } catch (ePref) { prefEnabled = null; }
-
-            function _tryWrite(folderObj, name) {
-                var f = null;
-                try {
-                    if (!folderObj || !folderObj.exists) return false;
-                    f = new File(folderObj.fsName + "/" + name);
-                    try { if (f.exists) f.remove(); } catch (e0) {}
-                    if (!f.open("w")) return false;
-                    f.encoding = "UTF-8";
-                    f.write("test");
-                    f.close();
-                    try { f.remove(); } catch (e1) {}
-                    return true;
-                } catch (e) {
-                    try { if (f && f.opened) f.close(); } catch (e2) {}
-                    return false;
-                }
+            if (myPal.__stNetworkAccessWarnPanel) {
+                try { myPal.__stNetworkAccessWarnPanel.visible = true; } catch (eOld0) {}
+                try { if (myPal.layout) myPal.layout.layout(true); } catch (eOld1) {}
+                return;
             }
 
-            var writeOk = false;
-            try { writeOk = _tryWrite(Folder.temp, "st_write_test.txt") || _tryWrite(Folder.userData, "st_write_test.txt"); } catch (eW) { writeOk = false; }
+            var shineYellow = [1.0, 0.82, 0.2, 1.0];
 
-            // If prefs explicitly say enabled, trust that.
-            if (prefEnabled === true) return true;
+            var warnPanel = host.add("panel", undefined, "Setup Required");
+            myPal.__stNetworkAccessWarnPanel = warnPanel;
+            warnPanel.orientation = "column";
+            warnPanel.alignChildren = ["fill", "top"];
+            warnPanel.margins = 14;
+            warnPanel.spacing = 12;
+            try { warnPanel.alignment = ["fill", "fill"]; } catch (eA0) {}
 
-            // If prefs explicitly say disabled, only consider it "enabled" if the write probe succeeds.
-            // (Some hosts/versions can mis-report the pref; this avoids blocking users incorrectly.)
-            if (prefEnabled === false) return (writeOk === true);
-
-            // Pref unknown: fall back to probe.
-            return (writeOk === true);
-        }
-
-        function _stProjectSaysJavaScriptExpressions() {
-            // Non-dirty read only. Returns:
-            //   true  = definitely Modern JavaScript
-            //   false = definitely Legacy / ExtendScript
-            //   null  = unknown (do not block, do not probe)
-            try { return _stGetModernExpressionEngineStateNonDirty(); } catch (e) { return null; }
-        }
-
-        function _stRunLaunchChecks() {
-            var canWrite = _stCanWriteFilesEffective();
-
-            var jsExpr = null;
-            try { jsExpr = _stProjectSaysJavaScriptExpressions(); } catch (e1) { jsExpr = null; }
-
-            var canWriteOk = (canWrite === true);
-            // Unknown should not block launch and should not show the takeover.
-            var jsExprOk   = (jsExpr !== false);
-            return { ok: (canWriteOk && jsExprOk), canWrite: canWriteOk, jsExpr: jsExprOk };
-        }
-
-        // --- UI takeover ---
-        var __stWarnPanel = null;
-        var __stWarnHeader = null;
-        var __stWarnText = null;
-        function _stBuildTakeoverUI() {
-            if (__stWarnPanel) return;
-
-            // Full-panel takeover container
-            var __stHost = (pal.__stTabStack) ? pal.__stTabStack : pal;
-            __stWarnPanel = __stHost.add("panel", undefined, "Setup Required");
-            __stWarnPanel.orientation = "column";
-            __stWarnPanel.alignChildren = ["fill", "top"];
-            __stWarnPanel.margins = 14;
-            __stWarnPanel.spacing = 12;
-            try { __stWarnPanel.alignment = ["fill", "fill"]; } catch (eA0) {}
-
-            // Inner boxed content (matches screenshot)
-            var bodyBox = __stWarnPanel.add("panel");
+            var bodyBox = warnPanel.add("panel");
             bodyBox.orientation = "column";
             bodyBox.alignChildren = ["fill", "top"];
             bodyBox.margins = 14;
-            bodyBox.spacing = 10;
-            try { bodyBox.alignment = ["fill", "top"]; } catch (eAB) {}            // Header row: icon + single-line headline (matches your earlier styled warning)
-            var headerRow = bodyBox.add("group");
-            headerRow.orientation = "row";
-            headerRow.alignChildren = ["left", "center"];
-            headerRow.spacing = 10;
-            headerRow.alignment = ["fill", "top"];
-            headerRow.margins = 0;
+            bodyBox.spacing = 12;
+            try { bodyBox.alignment = ["fill", "top"]; } catch (eA1) {}
+            var contentRow = bodyBox.add("group");
+            contentRow.orientation = "row";
+            contentRow.alignChildren = ["left", "top"];
+            contentRow.spacing = 14;
+            contentRow.margins = 0;
+            contentRow.alignment = ["fill", "top"];
 
-            // Big yellow triangle (reliable in docked panels)
-            var warnIcon = headerRow.add("group");
-            var iconW = 25, iconH = 25;
-            warnIcon.preferredSize = [iconW, iconH];
-            warnIcon.minimumSize   = [iconW, iconH];
-            warnIcon.maximumSize   = [iconW, iconH];
-            try { warnIcon.alignment = ["left", "center"]; } catch (eAI2) {}
+            var iconCol = contentRow.add("group");
+            iconCol.orientation = "column";
+            iconCol.alignChildren = ["center", "top"];
+            iconCol.spacing = 0;
+            iconCol.margins = 0;
+            try { iconCol.preferredSize = [130, -1]; } catch (eIC0) {}
 
-
-            __stWarnHeader = headerRow.add("statictext", undefined, "ShineTools needs these settings enabled:");
-            __stWarnHeader.alignment = ["fill", "center"];
-
-            // Body copy below headline
-            __stWarnText = bodyBox.add("statictext", undefined, "", { multiline: true });
-            __stWarnText.alignment = ["fill", "top"];
-
-            // Populate copy immediately so the bodyBox isn't blank on first draw.
-            try { _stSetWarnCopy(_stRunLaunchChecks()); } catch (eCopy) {}
-
-        }
-
-        function _stSetWarnCopy(status) {
-            // Only show the lines that actually need to be changed.
-            // status: { ok:Boolean, canWrite:Boolean, jsExpr:Boolean }
-            var lines = [];
-
-            // Normalize
-            status = status || {};
-            var needWrite = (status.canWrite !== true);
-            var needJS    = (status.jsExpr   !== true);
-
-            lines.push("");
-            lines.push("Fix steps:");
-
-            if (needWrite) {
-                lines.push("• Settings > Scripting & Expressions > Allow Scripts");
-                lines.push("  to Write Files and Access Network");
-                // spacer between bullets if both are needed
-                if (needJS) lines.push("");
-            }
-
-            if (needJS) {
-                lines.push("• File > Project Settings > Expressions > Use \"JavaScript\"");
-            }
-
-            lines.push("");
-            lines.push("• Restart After Effects");
-
-            try { if (__stWarnText) __stWarnText.text = lines.join("\n"); } catch (eT) {}
-            try { if (__stWarnHeader) __stWarnHeader.text = "ShineTools needs these settings enabled:"; } catch (eH) {}
-        }
-
-                //
-function _stCollapseWarn() {
+            // Native text glyph, not custom drawing/onDraw. Use a larger warning icon block
+            // so the setup panel fills the available space better without reintroducing custom graphics.
+            var warnIcon = iconCol.add("statictext", undefined, "⚠");
+            warnIcon.alignment = ["center", "top"];
+            try { warnIcon.preferredSize = [130, 110]; } catch (eI0) {}
             try {
-                if (!__stWarnPanel) return;
-                __stWarnPanel.visible = false;
-                __stWarnPanel.minimumSize = [0, 0];
-                __stWarnPanel.maximumSize = [0, 0];
-                __stWarnPanel.preferredSize = [0, 0];
-            } catch (e) {}
+                var iconFont = warnIcon.graphics.font;
+                warnIcon.graphics.font = ScriptUI.newFont(iconFont.name, "Bold", iconFont.size + 64);
+            } catch (eI1) {}
+            try {
+                warnIcon.graphics.foregroundColor = warnIcon.graphics.newPen(warnIcon.graphics.PenType.SOLID_COLOR, shineYellow, 1);
+            } catch (eI2) {}
+
+            var textCol = contentRow.add("group");
+            textCol.orientation = "column";
+            textCol.alignChildren = ["fill", "top"];
+            textCol.spacing = 10;
+            textCol.margins = 0;
+            textCol.alignment = ["fill", "top"];
+
+            var headerText = textCol.add("statictext", undefined, "ShineTools needs this setting enabled:");
+            headerText.alignment = ["fill", "top"];
+            try {
+                var headerFont = headerText.graphics.font;
+                headerText.graphics.font = ScriptUI.newFont(headerFont.name, "Bold", headerFont.size + 1);
+            } catch (eF0) {}
+
+            var bodyText = textCol.add("statictext", undefined,
+                "Fix steps:\n" +
+                "\u2022 Settings > Scripting & Expressions > Allow Scripts\n" +
+                "  to Write Files and Access Network\n\n" +
+                "\u2022 Restart After Effects",
+                { multiline: true }
+            );
+            bodyText.alignment = ["fill", "top"];
+            try { bodyText.preferredSize = [Math.max(280, myPal.size[0] - 210), -1]; } catch (eT0) {}
+
+            try { if (host.layout) host.layout.layout(true); } catch (eL0) {}
+            try { if (myPal.layout) myPal.layout.layout(true); } catch (eL1) {}
+            try { if (myPal.update) myPal.update(); } catch (eU0) {}
+        } catch (ePanel) {
+            try {
+                alert(
+                    "ShineTools needs this After Effects setting enabled:\n\n" +
+                    "Settings > Scripting & Expressions > Allow Scripts to Write Files and Access Network\n\n" +
+                    "Enable it, then restart After Effects."
+                );
+            } catch (eAlert) {}
         }
+    }
 
-        function _stExpandWarn() {
-            try {
-                if (!__stWarnPanel) return;
-                __stWarnPanel.visible = true;
-                __stWarnPanel.minimumSize = [0, 0];
-                __stWarnPanel.maximumSize = [9999, 9999];
-                __stWarnPanel.preferredSize = [pal.size[0], pal.size[1]];
-
-                // Encourage wrapping by constraining width
-                try {
-                    var pad = 60; // approx margins + icon + spacing
-                    var w = Math.max(200, pal.size[0] - pad);
-                    __stWarnText.preferredSize = [w, -1];
-                    try { __stWarnHeader.preferredSize = [w, -1]; } catch (eWH) {}
-                } catch (eW) {}
-
-                // Pin to top + fill
-                try { __stWarnPanel.alignment = ["fill", "top"]; } catch (eA) {}
-                try { __stWarnPanel.location = [0, 0]; } catch (eL) {}
-                try { __stWarnPanel.bounds = [0, 0, pal.size[0], pal.size[1]]; } catch (eB) {}
-            } catch (e) {}
+    try {
+        if (!_stIsFileNetworkAccessAllowedAtLaunch()) {
+            _stShowNetworkAccessSetupRequiredPanel();
         }
+    } catch (eLaunchNetworkCheck) {}
 
-        function _stApplyTakeoverVisibility(forceRestore) {
-            var res = _stRunLaunchChecks();
-            var shouldWarn = (!res.ok && !forceRestore);
-
-            try { _stSetWarnCopy(res); } catch (eCopy2) {}
-// If the warning lives inside the tabStack, we must NOT hide the tabStack itself.
-            var host = null;
-            try { host = (pal.__stTabStack) ? pal.__stTabStack : pal; } catch (eH) { host = pal; }
-
-            // 1) Root visibility on the pal level.
-            //    - When warning is active: hide everything except the host container.
-            //    - When warning is NOT active: show everything, but DO NOT force all stack tabs visible.
-            try {
-                for (var i = 0; i < pal.children.length; i++) {
-                    var ch = pal.children[i];
-                    if (!ch) continue;
-
-                    if (shouldWarn) {
-                        // Keep host visible (it will either be pal itself, or the stack group inside pal)
-                        if (host !== pal && ch === host) { ch.visible = true; continue; }
-                        // If warning is hosted on pal directly, keep only the warn panel visible
-                        if (host === pal && __stWarnPanel && ch === __stWarnPanel) { ch.visible = true; continue; }
-                        ch.visible = false;
-                    } else {
-                        // Restore normal UI; don't override tab visibility logic
-                        ch.visible = true;
-                    }
-                }
-            } catch (eRoot) {}
-
-            // 2) If warning is hosted inside the tabStack, we MUST restore a visible content tab
-            //    because during takeover we hide all other stack children.
-            if (host && host !== pal) {
-                try {
-                    // First: hide everything in the stack (we'll explicitly re-show the correct tab next)
-                    for (var j = 0; j < host.children.length; j++) {
-                        var hc = host.children[j];
-                        if (!hc) continue;
-                        hc.visible = false;
-                    }
-
-                    if (shouldWarn) {
-                        // Show only the warning overlay
-                        if (__stWarnPanel) __stWarnPanel.visible = true;
-                    } else {
-                        // Hide overlay and restore MAIN (fallback to first non-overlay child)
-                        if (__stWarnPanel) __stWarnPanel.visible = false;
-
-                        var mainTab = null;
-                        try { mainTab = pal.__stTabMain || null; } catch (eM) { mainTab = null; }
-
-                        if (mainTab) {
-                            mainTab.visible = true;
-                        } else {
-                            // Fallback: first stack child that isn't the overlay
-                            for (var k = 0; k < host.children.length; k++) {
-                                var cc = host.children[k];
-                                if (!cc) continue;
-                                if (__stWarnPanel && cc === __stWarnPanel) continue;
-                                cc.visible = true;
-                                break;
-                            }
-                        }
-                    }
-                } catch (eHost) {}
-            }
-
-            // Ensure warning visibility + sizing
-            try {
-                if (__stWarnPanel) {
-                    __stWarnPanel.visible = shouldWarn ? true : false;
-                    __stWarnPanel.minimumSize = [0, 0];
-                    __stWarnPanel.maximumSize = [9999, 9999];
-                    __stWarnPanel.alignment = ["fill", "fill"];
-                }
-            } catch (eW) {}
-
-            // Refresh layout
-            try {
-                pal.layout.layout(true);
-                pal.layout.resize();
-            } catch (eL) {}
-        }
-
-        _stBuildTakeoverUI();
-        _stCollapseWarn();
-        _stApplyTakeoverVisibility(false);
-
-        // Keep takeover pinned during resize
-        try {
-            var prevResize = pal.onResize;
-            pal.onResize = function () {
-                try { if (prevResize) prevResize(); } catch (e0) {}
-                try { if (__stWarnPanel && __stWarnPanel.visible) _stExpandWarn(); } catch (e1) {}
-            };
-        } catch (eR) {}
-
-        try {
-            var prevResizing = pal.onResizing;
-            pal.onResizing = function () {
-                try { if (prevResizing) prevResizing(); } catch (e0) {}
-                try { if (__stWarnPanel && __stWarnPanel.visible) _stExpandWarn(); } catch (e1) {}
-            };
-        } catch (eRR) {}
-
-    })(myPal);
-} catch (eLaunchCheck) {}
-
-// Expose pal + a safe "kick" relayout to global scope so scheduleTask can access it.
+// Expose pal globally, but disable startup force-relayout behavior for this stability test.
+// 2026-05-05: The remaining reported freeze appears to happen during AE/ShineTools startup.
+// For this build, do NOT perform the old startup "kick" layout pass and do NOT queue the
+// delayed docked-panel post-paint settle scheduleTask. Render/modal safety gates remain intact.
 try { $.global.__ShineTools_pal = myPal; } catch (e0) {}
 try { $.global.__ShineToolsClosing__ = false; } catch (e0a) {}
 try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (e0aa) {}
@@ -17395,44 +17224,24 @@ try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (e0aa) {}
 try { $.global.__ShineToolsInitialized = true; } catch (e0b) {}
 try {
     $.global.__ShineToolsKickLayout = function () {
-        try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagKick) { return; }
-        try { if ($.global.__ShineToolsClosing__ === true) return; } catch (ePC3) {}
-        try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeKick) { return; }
-        var p = null;
-        try { p = $.global.__ShineTools_pal; } catch (e1) {}
-        if (!p) return;
-        try { p.layout.layout(true); } catch (e2) {}
-        try { p.layout.resize(); } catch (e3) {}
-        try { p.update(); } catch (e4) {}
-        try { p.graphics && p.graphics.invalidate && p.graphics.invalidate(); } catch (e5) {}
+        // Disabled intentionally for STARTUP_RELAYOUT_DISABLED_TEST_2026-05-05.
+        return;
     };
 } catch (e6) {}
 
-// One-shot docked-panel layout settle.
-// Manual resizing fixes the Default clipping because AE recalculates the docked panel bounds after the first paint.
-// This safely mimics that post-paint settle without installing any recurring hover/polling behavior.
+// Startup/docked layout settle disabled for stability test.
+// Keep the globals defined as no-ops so older calls safely do nothing instead of queuing UI work.
 try {
+    try { if ($.global.__ShineToolsLayoutSettleTask__) app.cancelTask($.global.__ShineToolsLayoutSettleTask__); } catch (eCancelOldSettle) {}
     $.global.__ShineToolsLayoutSettleTask__ = 0;
     $.global.__ShineToolsDockedLayoutSettle__ = function () {
         try { $.global.__ShineToolsLayoutSettleTask__ = 0; } catch (eT0) {}
-        try { if ($.global.__ShineToolsClosing__ === true) return; } catch (e0) {}
-        try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) { return; }
-        var p = null;
-        try { p = $.global.__ShineTools_pal; } catch (e1) {}
-        if (!p) return;
-        try { if (p.__stTabStack && p.__stTabStack.layout) { p.__stTabStack.layout.layout(true); p.__stTabStack.layout.resize(); } } catch (e2) {}
-        try { if (p.__stTabMain && p.__stTabMain.layout) { p.__stTabMain.layout.layout(true); p.__stTabMain.layout.resize(); } } catch (e3) {}
-        try { if (p.__stMainTabRoot && p.__stMainTabRoot.layout) { p.__stMainTabRoot.layout.layout(true); p.__stMainTabRoot.layout.resize(); } } catch (e4) {}
-        try { if (p.layout) p.layout.layout(true); } catch (e5) {}
-        try { if (p.layout) p.layout.resize(); } catch (e6a) {}
-        try { if ($.global.__ShineToolsCenterLogoHeaders__) $.global.__ShineToolsCenterLogoHeaders__(); } catch (e7) {}
-        try { if (p.update) p.update(); } catch (e8) {}
+        return;
     };
     $.global.__ShineToolsQueueLayoutSettle__ = function (delayMs) {
-        try { if ($.global.__ShineToolsClosing__ === true) return; } catch (e0) {}
         try { if ($.global.__ShineToolsLayoutSettleTask__) app.cancelTask($.global.__ShineToolsLayoutSettleTask__); } catch (e1) {}
-        var d = Math.max(40, Math.min(1000, delayMs || 120));
-        try { $.global.__ShineToolsLayoutSettleTask__ = app.scheduleTask('$.global.__ShineToolsDockedLayoutSettle__()', d, false); } catch (e2) {}
+        try { $.global.__ShineToolsLayoutSettleTask__ = 0; } catch (e2) {}
+        return;
     };
 } catch (eSettleDef) {}
 
@@ -17450,14 +17259,9 @@ if (myPal instanceof Window) {
     myPal.center();
     myPal.show();
 
-    // Final layout pass after show.
-    // Close-safety guard: avoid delayed post-show relayout tasks that can outlive panel teardown.
-    try { $.global.__ShineToolsKickLayout(); } catch (e7) {}
+    // Startup force-relayout disabled for stability test.
 } else {
-    // For docked panels, do an immediate pass plus one delayed post-paint settle.
-    // The delayed pass fixes the Default accordion clipping that otherwise clears only after manual resize.
-    try { $.global.__ShineToolsKickLayout(); } catch (e10) {}
-    try { if ($.global.__ShineToolsQueueLayoutSettle__) $.global.__ShineToolsQueueLayoutSettle__(180); } catch (e10b) {}
+    // Docked startup force-relayout and delayed post-paint settle disabled for stability test.
 }
 
 try { $.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ = false; } catch (eRelayoutBypass) {}
