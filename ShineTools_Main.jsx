@@ -77,7 +77,7 @@ var ST_CONST  = ST.CONST;
 
 var SHINE_PRODUCT_NAME = "ShineTools";
 var SHINE_VERSION      = "1.1";
-var __ST_PATCH_MARKER__ = "LIGHTWEIGHT_ACCORDION_CLIP_FIX_2026-05-05";
+var __ST_PATCH_MARKER__ = "COPYRIGHT_FOOTER_COMPACT_STATUS_FIX_2026-05-05";
 var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
 var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
 var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
@@ -6278,7 +6278,7 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
     }
 
     function esc(s){
-        return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+                                            return '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
     }
 
     // ADD PHOTO BORDER (from ShineTools_BorderButton_Test_v4.jsx)
@@ -9303,7 +9303,7 @@ function _stAddPinnedTabFooter(tabRoot, tabKey) {
         copy.alignment = ["left","center"];
         try {
             var __copyG = copy.graphics;
-            __copyG.foregroundColor = __copyG.newPen(__copyG.PenType.SOLID_COLOR, [0.78, 0.78, 0.78, 1], 1);
+            __copyG.foregroundColor = __copyG.newPen(__copyG.PenType.SOLID_COLOR, [0.48, 0.48, 0.48, 1], 1);
         } catch (eCopyColor) {}
 
         try {
@@ -9338,9 +9338,9 @@ var globalFooter = pal.add("group");
 globalFooter.orientation   = "column";
 globalFooter.alignChildren = ["left", "center"];
 globalFooter.alignment     = ["fill", "bottom"];
-globalFooter.margins       = [10, 4, 10, 6];
-// Ensure footer has enough height for 2 lines (legend/status + copyright)
-globalFooter.minimumSize  = [0, 34];
+globalFooter.margins       = [4, 0, 10, 0];
+// Compact by default: status row collapses unless update text is visible.
+globalFooter.minimumSize  = [0, 22];
 
 globalFooter.spacing       = 2;
 try { pal.__stFooterGroup = globalFooter; } catch(eFGStore) {}
@@ -9350,8 +9350,10 @@ var gfTopRow = globalFooter.add("group");
 gfTopRow.orientation   = "row";
 gfTopRow.alignChildren = ["left", "center"];
 gfTopRow.alignment     = ["left", "center"];
-gfTopRow.margins       = [10, 0, 0, 0];
+gfTopRow.margins       = [0, 0, 0, 0];
 gfTopRow.spacing       = 0;
+try { gfTopRow.visible = false; gfTopRow.enabled = false; } catch(eGfTopVis0) {}
+try { gfTopRow.minimumSize = [0,0]; gfTopRow.maximumSize = [10000,0]; gfTopRow.preferredSize = [0,0]; } catch(eGfTopSize0) {}
 
 // Update status label
 // NOTE: ScriptUI statictext created with empty string can get "stuck" at ~0 width.
@@ -9368,7 +9370,7 @@ var gfCopyRow = globalFooter.add("group");
 gfCopyRow.orientation   = "row";
 gfCopyRow.alignChildren = ["left", "center"];
 gfCopyRow.alignment     = ["left", "bottom"];
-gfCopyRow.margins = [8, 0, 0, 0];
+gfCopyRow.margins = [0, 0, 0, 0];
 gfCopyRow.spacing       = 0;
 
 var gfCopy = gfCopyRow.add("statictext", undefined, "(c) 2025 Shine Creative | v" + SHINE_VERSION);
@@ -9376,8 +9378,29 @@ gfCopy.margins = 0;
 gfCopy.alignment = ["left","center"];
 try {
     var __gfCopyG = gfCopy.graphics;
-    __gfCopyG.foregroundColor = __gfCopyG.newPen(__gfCopyG.PenType.SOLID_COLOR, [0.78, 0.78, 0.78, 1], 1);
+    __gfCopyG.foregroundColor = __gfCopyG.newPen(__gfCopyG.PenType.SOLID_COLOR, [0.48, 0.48, 0.48, 1], 1);
 } catch (eGfCopyColor) {}
+
+function _stSetGlobalFooterCompactMode(hasStatusText) {
+    try {
+        var __has = (hasStatusText === true);
+        try {
+            gfTopRow.visible = __has;
+            gfTopRow.enabled = __has;
+            gfTopRow.minimumSize = __has ? [0,18] : [0,0];
+            gfTopRow.maximumSize = __has ? [10000,18] : [10000,0];
+            gfTopRow.preferredSize = __has ? [0,18] : [0,0];
+        } catch (eRow) {}
+
+        // When there is no update/status text, collapse the unused first row so
+        // the copyright can sit close to the bottom edge again.
+        var __h = __has ? 44 : 22;
+        try { globalFooter.minimumSize = [0,__h]; } catch (eMin) {}
+        try { globalFooter.maximumSize = [10000,__h]; } catch (eMax) {}
+        try { globalFooter.preferredSize = [0,__h]; } catch (ePref) {}
+        try { globalFooter.margins = __has ? [4, 2, 10, 2] : [4, 0, 10, 0]; } catch (eMar) {}
+    } catch (e) {}
+}
 
 function _setFooterUpdateIndicator(isUpToDate, msgOverride) {
     try {
@@ -9408,6 +9431,8 @@ function _setFooterUpdateIndicator(isUpToDate, msgOverride) {
             gfStatusLabel.visible = (nextText !== "");
         } catch (eGf) {}
 
+        try { _stSetGlobalFooterCompactMode(nextText !== ""); } catch (eCompactFooter) {}
+
         try { if (pal && pal.layout) pal.layout.resize(); } catch (eL0) {}
         try { if (pal && pal.update) pal.update(); } catch (eL1) {}
     } catch (e) {}
@@ -9416,9 +9441,12 @@ function _setFooterUpdateIndicator(isUpToDate, msgOverride) {
 // Default until the first check runs
 try {
     gfStatusLabel.text = "";
+    gfStatusLabel.visible = false;
+    _stSetGlobalFooterCompactMode(false);
 } catch(e) {}
 
-try { _stAddPinnedTabFooter(pal.__stMainTabRoot, "MAIN"); } catch (eFootMain) {}
+// Global footer is restored below, so do not add a duplicate per-tab footer here.
+try { /* _stAddPinnedTabFooter(pal.__stMainTabRoot, "MAIN"); */ } catch (eFootMain) {}
 
 // Keep the old global footer out of layout flow; each tab now owns its own pinned footer.
 try {
@@ -9430,16 +9458,20 @@ try {
     __footerGlue.preferredSize = [0,0];
 } catch (eHideGlue) {}
 
+// Keep the copyright/version footer visible globally at the bottom of the panel.
+// This covers MAIN, TEXT, REQUESTS, UPDATES, HELP, and the setup-required screen
+// without adding delayed layout tasks or per-tab duplicate footer rows.
 try {
-    globalFooter.visible = false;
-    globalFooter.enabled = false;
-    globalFooter.alignment = ["fill", "top"];
-    globalFooter.minimumSize = [0,0];
-    globalFooter.maximumSize = [0,0];
-    globalFooter.preferredSize = [0,0];
-    globalFooter.margins = 0;
-    globalFooter.spacing = 0;
-} catch (eHideFooter) {}
+    globalFooter.visible = true;
+    globalFooter.enabled = true;
+    globalFooter.alignment = ["fill", "bottom"];
+    globalFooter.minimumSize = [0,22];
+    globalFooter.maximumSize = [10000,22];
+    globalFooter.preferredSize = [0,22];
+    globalFooter.margins = [4, 0, 10, 0];
+    globalFooter.spacing = 2;
+} catch (eShowFooter) {}
+try { _stSetGlobalFooterCompactMode(false); } catch (eCompactFooterInit) {}
 
 // Deferred build: TEXT tab (speeds initial panel load)
         // --------------------------------------------------
@@ -13712,8 +13744,11 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
                         var thisFile = new File(thisPath);
 
-                        // Prefer installing updates into the shared main file (user-writable).
-                        // This avoids permission issues when the loader lives in /Applications/...
+                        // Prefer installing updates into the shared main file.
+                        // Installer-based deployments normally use the system location:
+                        //   /Library/Application Support/ShineTools/ShineTools_Main.jsx
+                        // That path may require admin privileges, so the copy fallback below
+                        // must be allowed to elevate when this destination is selected.
                         try {
                             var __stSharedMain = _stGetSharedMainFile();
                             if (__stSharedMain) {
@@ -13740,26 +13775,50 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                             try {
                                 var destFS = thisFile && thisFile.fsName ? String(thisFile.fsName) : "";
                                 var srcFS  = newFile && newFile.fsName ? String(newFile.fsName) : "";
-                                var needsAdmin = false; // User-library install: no admin needed
+                                var parentFS = "";
+                                try { parentFS = (thisFile && thisFile.parent && thisFile.parent.fsName) ? String(thisFile.parent.fsName) : ""; } catch (ePFS) { parentFS = ""; }
+
+                                // System Library installs require admin elevation. User Library installs do not.
+                                var needsAdmin = /^\/Library\/Application Support\/ShineTools(\/|$)/.test(destFS);
 
                                 if (needsAdmin && srcFS && destFS) {
                                     try { _setUpdatesStatus(__UPD_STATUS.INSTALLING_ADMIN); } catch (eST) {}
 
+                                    function _stAppleScriptQuotedString(s) {
+                                        try {
+                                            return '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+                                        } catch (eQ) {
+                                            return '""';
+                                        }
+                                    }
+
                                     // Use AppleScript to request admin privileges and perform the copy.
-                                    // NOTE: We keep it simple: copy over destination (and rely on our backup above).
-                                    var cmd = 'osascript -e ' +
-                                              '"do shell script \"cp -f \\"' + srcFS.replace(/"/g, '\\"') + '\\" \\"' + destFS.replace(/"/g, '\\"') + '\\"\" with administrator privileges"';
+                                    // Also mkdir -p so a missing system payload folder can be created during update.
+                                    var shellLine = "";
+                                    try {
+                                        shellLine = (parentFS ? ("mkdir -p " + _shellEscape(parentFS) + " && ") : "") +
+                                                    "cp -f " + _shellEscape(srcFS) + " " + _shellEscape(destFS);
+                                    } catch (eSL) { shellLine = ""; }
+
+                                    var cmd = shellLine ? ("osascript -e " + _shellEscape("do shell script " + _stAppleScriptQuotedString(shellLine) + " with administrator privileges")) : "";
 
                                     var out = null;
-                                    try { out = safeCallSystem(cmd); } catch (eSC) { out = null; }
+                                    try { if (cmd) out = safeCallSystem(cmd); } catch (eSC) { out = null; }
 
-                                    // Re-check
-                                    try { copied = (thisFile && thisFile.exists); } catch (eEX) { copied = false; }
+                                    // Verify by reading the installed file's version. Existence alone can be a false positive
+                                    // when the old protected file was never replaced.
+                                    try {
+                                        var installedAfterRaw = _readTextFile(thisFile);
+                                        var installedAfterVer = _extractShineVersionFromJsx(installedAfterRaw);
+                                        copied = (downloadedVer && installedAfterVer && downloadedVer === installedAfterVer);
+                                    } catch (eEX) { copied = false; }
                                 }
                             } catch (eADM) {}
 
                             if (!copied) {
-                                _setUpdatesStatus("Downloaded v" + latest + " but couldn't replace the installed .jsx (permissions).");
+                                var failPath = "";
+                                try { failPath = thisFile && thisFile.fsName ? String(thisFile.fsName) : ""; } catch (eFP) { failPath = ""; }
+                                _setUpdatesStatus("Downloaded v" + latest + " but couldn't replace" + (failPath ? (": " + failPath) : " the installed .jsx") + ". Check permissions or run installer.");
                                 return;
                             }
                         }
