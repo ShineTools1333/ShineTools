@@ -1,18 +1,27 @@
 // =================================================================================================
 // ShineTools_Main.jsx
-// Clean Base: 2026-05-02
-// Version: v1.1
-// Build marker: CLEAN_BASE_HOVERLIVE_RENAME_REFRESH_2026-05-02
+// Production Release: 2026-06-19
+// Version: v1.2
+// Build: STABLE_RELEASE_V1_2_2026-06-19
 //
-// Notes:
-// - Conservative cleanup pass from the working HoverLive clean base.
-// - Keeps current UI behavior, tool wiring, workspace loading, and hover polling intact.
-// - Removes stale diagnostic comments and consolidates only obvious redundant namespace setup.
+// Release summary:
+// - Uses the production-tested batched accordion behavior that prevents repeated sibling relayouts.
+// - Keeps button labels static; no hover polling, hover label mutation, or background UI tasks.
+// - Consolidates workspace, dropdown, Organize-dialog, updater, and shared utility code.
+// - PRORES 422: normal click renders; Option-click adds the item directly to the Render Queue.
+// - Contains no scheduleTask, cancelTask, $.sleep, or desktop diagnostic logging.
 // - Uses native ScriptUI controls; no custom paint callbacks are installed.
-// - 2026-05-05 stability pass: removed remaining hover-driven dropdown clamp + ShineTracker hover swap.
 // =================================================================================================
 
-var ST = ST || {};
+var ST = null;
+try {
+    // Reuse one shared namespace across reloads instead of creating a second in the panel closure.
+    ST = $.global.__ShineToolsNS || $.global.ST || {};
+    $.global.__ShineToolsNS = ST;
+    $.global.ST = ST;
+} catch (eSTNamespace) {
+    ST = {};
+}
 
 ST.TEXT = ST.TEXT || {
     // Tabs / section titles
@@ -25,12 +34,6 @@ ST.TEXT = ST.TEXT || {
     REQUESTS: "REQUESTS",
 
     // Common button/option labels
-    TEXT_BOX: "TEXT BOX",
-    TRIM_LAYER: "TRIM LAYER",
-    BREAK_APART_TEXT: "BREAK APART TEXT",
-    FRAME_AS_JPG: "FRAME AS .JPG...",
-    SOLID_BTN: "SOLID...",
-    PRORES_422: "PRORES 422...",
     REFRESH: "REFRESH",
     STATUS: "STATUS",
     EASE_IN: "EASE IN",
@@ -42,8 +45,6 @@ ST.TEXT = ST.TEXT || {
     // Shared UI labels
     CHECK_FOR_UPDATES: "CHECK FOR UPDATES",
     INSTALL_UPDATE: "INSTALL UPDATE",
-    OFFSET_LAYERS: "OFFSET LAYERS",
-    ANIMATE_STROKE: "ANIMATE STROKE",
     BOUNCE: "BOUNCE",
     UTILITIES: "UTILITIES",
     EXPORT_FONT_LIST: "EXPORT FONT LIST",
@@ -75,119 +76,131 @@ var ST_CONST  = ST.CONST;
 // Panel title: ShineTools_vX.Y
 // Other UI: vX.Y
 
-var SHINE_PRODUCT_NAME = "ShineTools";
-var SHINE_VERSION      = "1.1";
-var __ST_PATCH_MARKER__ = "COPYRIGHT_FOOTER_COMPACT_STATUS_FIX_2026-05-05";
-var SHINE_VERSION_TAG  = "v" + SHINE_VERSION;
-var SHINE_TITLE_TEXT   = SHINE_PRODUCT_NAME + "_" + SHINE_VERSION_TAG;
-var SHINETOOLS_VERSION = SHINE_VERSION_TAG;
+var SHINE_VERSION      = "1.2";
+var SHINETOOLS_VERSION = "v" + SHINE_VERSION;
 
-function _resolveActiveWorkspaceStatusName() {
-    var name = "";
-    try { name = String(pal.__stCurrentWorkspaceName || ""); } catch (e0) { name = ""; }
+function _stCleanWorkspaceName(value) {
+    try { return String(value || "").replace(/^\s+|\s+$/g, ""); } catch (e) {}
+    return "";
+}
+
+function _stGetWorkspaceDropdownName() {
+    try {
+        if (pal && pal.__stWorkspaceDropdown && pal.__stWorkspaceDropdown.selection) {
+            return _stCleanWorkspaceName(pal.__stWorkspaceDropdown.selection.text);
+        }
+    } catch (e) {}
+    return "";
+}
+
+function _stResolveWorkspaceName(priority) {
+    var order = priority || ["status", "current", "startup", "pending", "persisted", "dropdown"];
+    for (var i = 0; i < order.length; i++) {
+        var name = "";
+        try {
+            switch (order[i]) {
+                case "status":    name = pal.__stWorkspaceStatusName; break;
+                case "current":   name = pal.__stCurrentWorkspaceName; break;
+                case "startup":   name = pal.__stStartupAppliedWorkspaceName; break;
+                case "pending":   name = pal.__stPendingWorkspaceName; break;
+                case "persisted": name = _stReadLastUsedWorkspaceName(); break;
+                case "dropdown":  name = _stGetWorkspaceDropdownName(); break;
+            }
+        } catch (eEach) { name = ""; }
+        name = _stCleanWorkspaceName(name);
+        if (name) return name;
+    }
+    return "";
+}
+
+function _stSetWorkspaceNameState(name, options) {
+    var clean = _stCleanWorkspaceName(name);
+    options = options || {};
+    try { if (options.current !== false) pal.__stCurrentWorkspaceName = clean; } catch (e0) {}
+    try { if (options.pending !== false) pal.__stPendingWorkspaceName = clean; } catch (e1) {}
+    try { if (options.startup !== false) pal.__stStartupAppliedWorkspaceName = clean; } catch (e2) {}
+    try { if (options.status !== false) pal.__stWorkspaceStatusName = clean; } catch (e3) {}
+    try { if (options.persist === true) _stWriteLastUsedWorkspaceName(clean); } catch (e4) {}
+    return clean;
+}
+
+function _stWorkspaceStatusText(name) {
+    var clean = _stCleanWorkspaceName(name);
+    return clean ? ("Workspace: " + clean) : "Workspace:";
+}
+
+function _stApplyWorkspaceStatusLabel(lbl, text, mode) {
+    if (!lbl) return;
+    var value = String(text || "Workspace:");
+    try { lbl.text = value; } catch (e0) {}
+    try { lbl.justify = "right"; } catch (e1) {}
+    try { lbl.alignment = ["right", "center"]; } catch (e2) {}
+
+    if (mode === "wide") {
+        try { lbl.characters = Math.max(12, Math.min(64, value.length + 1)); } catch (e3) {}
+        try { lbl.minimumSize = [0, 20]; lbl.maximumSize = [10000, 20]; } catch (e4) {}
+        return;
+    }
+
+    var minChars = (mode === "list") ? 1 : 12;
+    var maxChars = (mode === "list") ? 32 : 64;
+    try { lbl.characters = Math.max(minChars, Math.min(maxChars, value.length + 1)); } catch (e5) {}
+    try {
+        lbl.minimumSize = [0, 20];
+        lbl.maximumSize = [260, 20];
+        lbl.preferredSize = [Math.max(18, Math.min(260, (value.length * 9) + 10)), 20];
+    } catch (e6) {}
+}
+
+function _stRenderWorkspaceStatus(name) {
+    var clean = _stCleanWorkspaceName(name);
+    var statusText = _stWorkspaceStatusText(clean);
+    try { pal.__stWorkspaceStatusName = clean; } catch (e0) {}
+
+    try { _stApplyWorkspaceStatusLabel(pal.__stWorkspaceStatusNameLabel_MAIN, statusText, "wide"); } catch (e1) {}
+    try { _stApplyWorkspaceStatusLabel(pal.__stWorkspaceStatusNameLabel_TEXT, statusText, "wide"); } catch (e2) {}
+    try { _stApplyWorkspaceStatusLabel(pal.__stWorkspaceStatusNameLabel, statusText, "compact"); } catch (e3) {}
 
     try {
-        if (!name && pal.__stWorkspaceDropdown && pal.__stWorkspaceDropdown.selection) {
-            name = String(pal.__stWorkspaceDropdown.selection.text || "");
+        var labels = pal.__stWorkspaceStatusNameLabels;
+        if (labels && labels.length) {
+            for (var i = 0; i < labels.length; i++) {
+                try { _stApplyWorkspaceStatusLabel(labels[i], statusText, "list"); } catch (eEach) {}
+            }
         }
-    } catch (e1) {}
-
-    try {
-        if (!name && pal.__stPendingWorkspaceName) {
-            name = String(pal.__stPendingWorkspaceName || "");
-        }
-    } catch (e2) {}
-
-    return String(name || "");
+    } catch (e4) {}
+    return statusText;
 }
 
 function _updateWorkspaceStatusLabel(options) {
     try {
         var name = "";
-        var __stHasAnyWorkspaces = false;
+        var hasWorkspaces = false;
         try {
-            var __stNames = _stListWorkspaceNames();
-            __stHasAnyWorkspaces = !!(__stNames && __stNames.length);
-        } catch (eNames) { __stHasAnyWorkspaces = false; }
+            var names = _stListWorkspaceNames();
+            hasWorkspaces = !!(names && names.length);
+        } catch (eNames) { hasWorkspaces = false; }
 
-        if (!__stHasAnyWorkspaces) {
-            // Do not clear the persisted last-used workspace here.
-            // During startup / refresh there can be transient moments where the list is empty.
-            // We only want the UI to fall back visually, not wipe the saved active workspace.
-            try { pal.__stWorkspaceStatusName = ""; } catch (eClrA) {}
-            name = "";
-        } else {
-            try { name = String(pal.__stWorkspaceStatusName || ""); } catch (e0) { name = ""; }
-            try { if (!name) name = String(pal.__stCurrentWorkspaceName || ""); } catch (e1) {}
-            try { if (!name) name = String(pal.__stStartupAppliedWorkspaceName || ""); } catch (e3) {}
-            try { if (!name) name = String(pal.__stPendingWorkspaceName || ""); } catch (e4) {}
-            try { if (!name) name = String(_stReadLastUsedWorkspaceName() || ""); } catch (e2) {}
-            try { if (!name && pal.__stWorkspaceDropdown && pal.__stWorkspaceDropdown.selection) name = String(pal.__stWorkspaceDropdown.selection.text || ""); } catch (e1a) {}
+        if (hasWorkspaces) {
+            name = _stResolveWorkspaceName(["status", "current", "startup", "pending", "persisted", "dropdown"]);
         }
+        _stRenderWorkspaceStatus(name);
 
-        name = String(name || "").replace(/^\s+|\s+$/g, "");
-        var __statusDisplayText = name ? ("Workspace: " + name) : "Workspace:";
-        try { pal.__stWorkspaceStatusName = name; } catch (e5) {}
-
-        try {
-            if (pal.__stWorkspaceStatusNameLabel_MAIN) {
-                pal.__stWorkspaceStatusNameLabel_MAIN.text = ((name && String(name).replace(/^\s+|\s+$/g, "")) ? ("Workspace: " + name) : "Workspace:");
-                try { pal.__stWorkspaceStatusNameLabel_MAIN.characters = Math.max(12, Math.min(64, String(name ? ("Workspace: " + name) : "Workspace:").length + 1)); } catch (e6a0) {}
-                try { pal.__stWorkspaceStatusNameLabel_MAIN.justify = "right"; } catch (e6a1) {}
-                try { pal.__stWorkspaceStatusNameLabel_MAIN.alignment = ["right", "center"]; } catch (e6a2) {}
-                try { pal.__stWorkspaceStatusNameLabel_MAIN.minimumSize = [0, 20]; pal.__stWorkspaceStatusNameLabel_MAIN.maximumSize = [10000, 20]; } catch (e6a3) {}
-            }
-        } catch (e6a) {}
-        try {
-            if (pal.__stWorkspaceStatusNameLabel_TEXT) {
-                pal.__stWorkspaceStatusNameLabel_TEXT.text = ((name && String(name).replace(/^\s+|\s+$/g, "")) ? ("Workspace: " + name) : "Workspace:");
-                try { pal.__stWorkspaceStatusNameLabel_TEXT.characters = Math.max(12, Math.min(64, String(name ? ("Workspace: " + name) : "Workspace:").length + 1)); } catch (e6b0) {}
-                try { pal.__stWorkspaceStatusNameLabel_TEXT.justify = "right"; } catch (e6b1) {}
-                try { pal.__stWorkspaceStatusNameLabel_TEXT.alignment = ["right", "center"]; } catch (e6b2) {}
-                try { pal.__stWorkspaceStatusNameLabel_TEXT.minimumSize = [0, 20]; pal.__stWorkspaceStatusNameLabel_TEXT.maximumSize = [10000, 20]; } catch (e6b3) {}
-            }
-        } catch (e6b) {}
-        try {
-            if (pal.__stWorkspaceStatusNameLabel) {
-                pal.__stWorkspaceStatusNameLabel.text = ((name && String(name).replace(/^\s+|\s+$/g, "")) ? ("Workspace: " + name) : "Workspace:");
-                try { pal.__stWorkspaceStatusNameLabel.characters = Math.max(12, Math.min(64, String(name ? ("Workspace: " + name) : "Workspace:").length + 1)); } catch (e6c0) {}
-                try { pal.__stWorkspaceStatusNameLabel.justify = "right"; } catch (e6c1) {}
-                try { pal.__stWorkspaceStatusNameLabel.alignment = ["right", "center"]; } catch (e6c2) {}
-                try { pal.__stWorkspaceStatusNameLabel.minimumSize = [0, 20]; pal.__stWorkspaceStatusNameLabel.maximumSize = [260, 20]; pal.__stWorkspaceStatusNameLabel.preferredSize = [Math.max(18, Math.min(260, (String(__statusDisplayText || "Workspace:").length * 9) + 10)), 20]; } catch (e6c3) {}
-            }
-        } catch (e6c) {}
-
-        try {
-            if (pal.__stWorkspaceStatusNameLabels && pal.__stWorkspaceStatusNameLabels.length) {
-                for (var i = 0; i < pal.__stWorkspaceStatusNameLabels.length; i++) {
-                    try {
-                        var lbl = pal.__stWorkspaceStatusNameLabels[i];
-                        if (!lbl) continue;
-                        lbl.text = __statusDisplayText;
-                        try { lbl.characters = Math.max(1, Math.min(32, String(__statusDisplayText || "Workspace:").length + 1)); } catch (e7a) {}
-                        try { lbl.justify = "right"; } catch (e7b) {}
-                        try { lbl.alignment = ["right", "center"]; } catch (e7c) {}
-                        try { lbl.minimumSize = [0, 20]; lbl.maximumSize = [260, 20]; lbl.preferredSize = [Math.max(18, Math.min(260, (String(__statusDisplayText || "Workspace:").length * 9) + 10)), 20]; } catch (e7d) {}
-                    } catch (e7) {}
-                }
-            }
-        } catch (e8) {}
-
-        var __stDoRelayout = true;
-        try { if (options && options.suppressLayout) __stDoRelayout = false; } catch (eOpt0) {}
-        if (__stDoRelayout) {
-            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeWS) { return; }
-            try { if (pal.layout) pal.layout.layout(true); } catch (e9) {}
-            try { if (pal.layout) pal.layout.resize(); } catch (e10) {}
-            try { if (pal.update) pal.update(); } catch (e11) {}
+        var doRelayout = true;
+        try { if (options && options.suppressLayout) doRelayout = false; } catch (eOpt) {}
+        if (doRelayout) {
+            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) { return; }
+            try { if (pal.layout) pal.layout.layout(true); } catch (e5) {}
+            try { if (pal.layout) pal.layout.resize(); } catch (e6) {}
+            try { if (pal.update) pal.update(); } catch (e7) {}
         }
-    } catch (e12) {}
+    } catch (e8) {}
 }
 
 function _stReadLastUsedWorkspaceName() {
     try {
         if (app && app.settings && app.settings.haveSetting("ShineTools", "CurrentWorkspaceName")) {
-            return String(app.settings.getSetting("ShineTools", "CurrentWorkspaceName") || "");
+            return _stCleanWorkspaceName(app.settings.getSetting("ShineTools", "CurrentWorkspaceName"));
         }
     } catch (e0) {}
     return "";
@@ -195,7 +208,7 @@ function _stReadLastUsedWorkspaceName() {
 
 function _stWriteLastUsedWorkspaceName(name) {
     try {
-        var clean = String(name || "").replace(/^\s+|\s+$/g, "");
+        var clean = _stCleanWorkspaceName(name);
         if (!app || !app.settings) return false;
         app.settings.saveSetting("ShineTools", "CurrentWorkspaceName", clean);
         return true;
@@ -207,17 +220,20 @@ function _syncWorkspaceDropdownToActiveName() {
     try {
         if (!pal || !pal.__stWorkspaceDropdown) return false;
         var dd = pal.__stWorkspaceDropdown;
-        var wanted = "";
-        try { wanted = String(pal.__stCurrentWorkspaceName || pal.__stStartupAppliedWorkspaceName || pal.__stPendingWorkspaceName || ""); } catch (e0) { wanted = ""; }
+        var wanted = _stResolveWorkspaceName(["current", "startup", "pending"]);
         if (!wanted) return false;
 
         try {
             pal.__stWorkspaceDropdownSyncing = true;
             for (var i = 0; i < dd.items.length; i++) {
                 try {
-                    if (String(dd.items[i].text || "") === wanted) {
+                    if (_stCleanWorkspaceName(dd.items[i].text) === wanted) {
                         dd.selection = i;
-                        try { pal.__stWorkspaceStatusName = wanted; } catch (e1a) {}
+                        try {
+                            _stSetWorkspaceNameState(wanted, {
+                                current: false, pending: false, startup: false
+                            });
+                        } catch (e1a) {}
                         return true;
                     }
                 } catch (e1) {}
@@ -242,7 +258,6 @@ function _syncWorkspaceDropdownToActiveName() {
             try { __p = $.global.__ShineTools_pal; } catch (e0) {}
             if (__p) { try { __p.toString(); } catch (e1) { __p = null; } }
             if (__p) {
-                try { $.global.__ShineToolsKickLayout && $.global.__ShineToolsKickLayout(); } catch (e2) {}
                 return;
             } else {
                 try { $.global.__ShineToolsInitialized = false; } catch (e3) {}
@@ -251,138 +266,44 @@ function _syncWorkspaceDropdownToActiveName() {
     } catch (eG) {}
 
     // ============================================================
-    // GLOBAL MODAL SAFETY (scheduleTask-safe)
+    // GLOBAL UI / MODAL SAFETY
     // ------------------------------------------------------------
-    // scheduleTask() executes in the global eval context, so any
-    // wrapper MUST live on $.global (not only inside this closure).
+    // Direct host-state checks used before touching ScriptUI.
     // ============================================================
     try {
-        if (!$.global.__ST_withModalSafety__) {
+        try { if ($.global.__ShineToolsClosing__ === undefined) $.global.__ShineToolsClosing__ = false; } catch (ePC0) {}
 
-            // Global "is it safe to touch ScriptUI right now?" helper.
-            // Used to prevent post-render / modal edge-case panel freezes.
-            $.global.__ST_isSafeToTouchUI__ = function () {
-                try {
-                    try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (ePCG) {}
-                    try { if ($.global.__ShineToolsIsPanelSafe__ && !$.global.__ShineToolsIsPanelSafe__()) return false; } catch (ePCS) {}
-                    // UI cooldown window (ms) after long ops like render.
-                    try {
-                        if ($.global.__ST_UI_COOLDOWN_UNTIL__) {
-                            var nowMs = (new Date()).getTime();
-                            if (nowMs < $.global.__ST_UI_COOLDOWN_UNTIL__) return false;
-                        }
-                    } catch (eC) {}
-
-                    // Explicit long-op flag (we set this around renders).
-                    try { if ($.global.__ST_LONGOP__ === true) return false; } catch (eL) {}
-
-                    // Saving can trigger modal-ish UI moments.
-                    try { if (app && app.isSaving) return false; } catch (eS) {}
-
-                    // Rendering state (Render Queue)
-                    try {
-                        if (app && app.project && app.project.renderQueue) {
-                            if (app.project.renderQueue.rendering) return false;
-                        }
-                    } catch (eR) {}
-
-                    return true;
-                } catch (e) {}
-                return true; // best-effort fallback
-            };
-
-            // Simple helper to set a UI cooldown (ms) after long ops.
-            $.global.__ST_SetUICooldown__ = function (ms) {
-                try {
-                    var dur = (ms === undefined || ms === null) ? 500 : ms;
-                    dur = Math.max(0, dur);
-                    $.global.__ST_UI_COOLDOWN_UNTIL__ = (new Date()).getTime() + dur;
-                } catch (e) {}
-            };
-
-            $.global.__ST_withModalSafety__ = function (fn) {
-                try {
-                    if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return;
-                    if (fn && typeof fn === "function") fn();
-                } catch (e) {}
-            };
-
-            // Global panel-closing guard: all deferred UI ticks must bail once the panel is hiding/closing.
-            try { if ($.global.__ShineToolsClosing__ === undefined) $.global.__ShineToolsClosing__ = false; } catch (ePC0) {}
-            $.global.__ShineToolsIsPanelSafe__ = function () {
-                try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (ePC1) {}
-                try {
-                    var p = $.global.__ShineTools_pal;
-                    if (!p) return false;
-                    try { p.toString(); } catch (ePC2) { return false; }
-                    return true;
-                } catch (ePC3) {}
-                return false;
-            };
-        }
-    } catch (eG) {}
-
-
-    // ============================================================
-    // MODAL/RENDER SAFE UI GATE
-    // ------------------------------------------------------------
-    // Do not remove any features. Instead, any direct ScriptUI touch
-    // (layout/update/dropdown clamp/hover tick) should pass through this
-    // gate so AE is not asked to execute UI code while it is returning
-    // from a native modal dialog, render, save, or focus transition.
-    // ============================================================
-    try {
-        $.global.__ST_MODAL_SAFE_PATCH_VERSION__ = "MODAL_RENDER_SAFE_UI_GATE";
-
-        $.global.__ST_nowMs__ = function(){
-            try { return (new Date()).getTime(); } catch(e) { return 0; }
-        };
-
-        $.global.__ST_SetUICooldown__ = function(ms) {
+        $.global.__ShineToolsIsPanelSafe__ = function () {
+            try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (ePC1) {}
             try {
-                var dur = (ms === undefined || ms === null) ? 1800 : ms;
-                dur = Math.max(0, dur);
-                var until = $.global.__ST_nowMs__() + dur;
-                if (!$.global.__ST_UI_COOLDOWN_UNTIL__ || until > $.global.__ST_UI_COOLDOWN_UNTIL__) {
-                    $.global.__ST_UI_COOLDOWN_UNTIL__ = until;
-                }
-            } catch (e) {}
+                var p = $.global.__ShineTools_pal;
+                if (!p) return false;
+                try { p.toString(); } catch (ePC2) { return false; }
+                return true;
+            } catch (ePC3) {}
+            return false;
         };
 
         $.global.__ST_isSafeToTouchUI__ = function () {
             try {
                 try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (e0) {}
-                try { if ($.global.__ST_LONGOP__ === true) return false; } catch (e1) {}
-                try { if ($.global.__ST_MODAL_DEPTH__ && $.global.__ST_MODAL_DEPTH__ > 0) return false; } catch (e2) {}
+                try { if ($.global.__ST_MODAL_DEPTH__ && $.global.__ST_MODAL_DEPTH__ > 0) return false; } catch (e1) {}
+                try { if (app && app.isSaving) return false; } catch (e2) {}
                 try {
-                    if ($.global.__ST_UI_COOLDOWN_UNTIL__) {
-                        var now = $.global.__ST_nowMs__ ? $.global.__ST_nowMs__() : (new Date()).getTime();
-                        if (now < $.global.__ST_UI_COOLDOWN_UNTIL__) return false;
-                    }
+                    if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) return false;
                 } catch (e3) {}
-                try { if (app && app.isSaving) { $.global.__ST_SetUICooldown__(1800); return false; } } catch (e4) {}
-                try {
-                    if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) {
-                        $.global.__ST_LONGOP__ = true;
-                        $.global.__ST_SetUICooldown__(3000);
-                        return false;
-                    }
-                } catch (e5) {}
                 try {
                     if ($.global.__ShineToolsIsPanelSafe__ && !$.global.__ShineToolsIsPanelSafe__()) return false;
-                } catch (e6) {}
+                } catch (e4) {}
                 return true;
             } catch (e) {}
             return false;
         };
 
-        $.global.__ST_SafeUITouch__ = function(fn) {
-            try {
-                if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return null;
-                if (fn && typeof fn === "function") return fn();
-            } catch (e) {}
-            return null;
-        };
+        // The single modal wrapper is declared later in this closure and is hoisted.
+        // Publish that implementation globally for legacy module callbacks.
+        try { $.global.__ST_withModalSafety__ = __ST_withModalSafety__; } catch (eModalAlias) {}
+
     } catch (eSTSafePatch) {}
 
     try {
@@ -509,79 +430,18 @@ function _stLooksLikeShineToolsMain(raw) {
     if (_stMaybeLoadSharedMainAndExit()) { return; }
 
     // ============================================================
-    // 0a) Dropdown helpers (temporary display then revert to blank)
+    // 0b) Shared namespace, logging, and lightweight helpers
     // ============================================================
-// =================================================================================================
-// UTILITIES: UI SUPPORT: Dropdown temp state / flash
-// =================================================================================================
-    function _ensureDDStore() {
-        if (!$.global.__ShineToolsDDStore) $.global.__ShineToolsDDStore = {};
-        return $.global.__ShineToolsDDStore;
-    }
-
-    // ============================================================
-    // DEBUG FLAGS (set to true temporarily while troubleshooting)
-    // ============================================================
-    var ST_DEBUG_LISTS = false; // when true, logs list load/save source to the JavaScript Console
-// =================================================================================================
-// UTILITIES: DEBUG + OS INTEGRATION: debug info / clipboard / safe run
-// =================================================================================================
-    function _dbgList(msg) {
-        try { if (ST_DEBUG_LISTS) $.writeln("[ShineTools][LIST] " + msg); } catch (e) {}
-    }
-
-    // ============================================================
-    // 0b) Lightweight helpers (safe, mac-only)
-    // ============================================================
-    // Namespace for debug toggles / shared state (kept global so a docked panel reload can reuse it).
-    var ST = $.global.__ShineToolsNS || ($.global.__ShineToolsNS = { DEBUG: false });
-    // Modal-safe mode: avoid persistent app.scheduleTask UI ticks; allow guarded one-shot dropdown clear.
-    // Set false if you want the original deferred UI polish back.
-    ST.SAFE_MODE = (ST.SAFE_MODE === false) ? false : true;
-    var SHINETOOLS_BUILD_STAMP = "2026-01-18 02:08 UTC";
-
-    ST.RELEASE_MODE = (ST.RELEASE_MODE !== false); // default true unless explicitly set to false
-    ST.BuildInfo = ST.BuildInfo || {};
-    try { ST.BuildInfo.version = (typeof SHINETOOLS_VERSION !== "undefined") ? String(SHINETOOLS_VERSION) : ""; } catch (e) {}
-    try { ST.BuildInfo.build = (typeof SHINETOOLS_BUILD_STAMP !== "undefined") ? String(SHINETOOLS_BUILD_STAMP) : ""; } catch (e) {}
-
-    ST.Env = ST.Env || {};
-    ST.Env.getScriptFile = ST.Env.getScriptFile || function() {
-        try { return File($.fileName); } catch (e) { return null; }
-    };
-    ST.Env.getPanelsFolder = ST.Env.getPanelsFolder || function() {
-        try { return findScriptUIPanelsFolderByScript(); } catch (e) { return null; }
-    };
-
-    ST.DEBUG = (ST.DEBUG === true); // normalize
-    try { if (ST && ST.RELEASE_MODE !== false) { /* release mode */ ST.DEBUG = false; } } catch(eRM) {}
+    // Keep Requests code available for a future re-enable, but do not build/show the tab.
+    ST.FEATURE_REQUESTS_ENABLED = false;
 
     ST.Log = ST.Log || {};
-    ST.Log.flags = ST.Log.flags || {
-        ui: false,
-        updates: false,
-        settings: false,
-        tools: false,
-        perf: false
-    };
-
-    ST.Log._write = ST.Log._write || function(tag, msg) {
-        try { $.writeln("[ShineTools]" + (tag ? "[" + tag + "] " : " ") + String(msg)); } catch (e) {}
-    };
-
-    ST.Log.d = ST.Log.d || function(tag, msg) {
-        try {
-            if (ST.DEBUG || (ST.Log.flags && ST.Log.flags[tag] === true)) ST.Log._write(tag, msg);
-        } catch (e) {}
-    };
-
     ST.Log.e = ST.Log.e || function(tag, msg, err) {
         try {
             var out = String(msg || "Error");
-            if (err) { try { out += " :: " + err.toString(); } catch (e2) {} }
-            // Store the last error for quick support snapshots.
-            try { ST.LastError = { tag: String(tag || "ERR"), message: out, time: (new Date()).toString() }; } catch (eLE) {}
-            ST.Log._write(tag || "ERR", out);
+            if (err) { try { out += " :: " + err.toString(); } catch (e0) {} }
+            try { ST.LastError = { tag: String(tag || "ERR"), message: out, time: (new Date()).toString() }; } catch (e1) {}
+            try { $.writeln("[ShineTools][" + String(tag || "ERR") + "] " + out); } catch (e2) {}
         } catch (e) {}
     };
 
@@ -589,124 +449,19 @@ function _stLooksLikeShineToolsMain(raw) {
         try {
             ST.Log.e(tag, msg, err);
             if (alsoAlert === true) {
-                try { alert(String(msg || "Error") + (err ? ("\n\n" + err.toString()) : "")); } catch (eA) {}
+                try { alert(String(msg || "Error") + (err ? ("\n\n" + err.toString()) : "")); } catch (e0) {}
             }
         } catch (e) {}
     };
 
-    // UI namespace (Pass 4.7): isolate core UI builders without behavior changes
     ST.UI = ST.UI || {};
 
-    ST.Settings    = ST.Settings    || {};
-    ST.Core        = ST.Core        || {};
-
-    // Core input helpers (macOS modifiers)
-    ST.Core.isCmdDown  = ST.Core.isCmdDown  || function() { return _isCmdDown(); };
-    ST.Core.isOptDown  = ST.Core.isOptDown  || function() { return _isOptDown(); };
-    ST.Core.isShiftDown = ST.Core.isShiftDown || function() { return isShiftDown(); };
-
-    try {
-        // Layout / relayout utilities
-        ST.UI.relayoutScoped     = ST.UI.relayoutScoped     || function(scopeGroup){ return relayoutScoped(scopeGroup); };
-        ST.UI.requestRelayout    = ST.UI.requestRelayout    || function(scopeGroup, delayMs){ return requestRelayoutSoon(scopeGroup, delayMs); };
-        ST.UI.requestFullRelayout = ST.UI.requestFullRelayout || function(){ return requestFullRelayoutSoon(); };
-
-        // Resize helpers
-        ST.UI.clampAllDropdowns  = ST.UI.clampAllDropdowns  || function(){ return _clampAllDropdowns(); };
-
-        // UI builders (aliases)
-        ST.UI.buildTopTabHeader  = ST.UI.buildTopTabHeader  || function(palRef){ return _buildTopTabHeader(palRef); };
-        ST.UI.buildTabStack      = ST.UI.buildTabStack      || function(palRef){ return _buildTabStack(palRef); };
-
-        // Dialogs (already extracted)
-        ST.UI.showReorderButtonsDialog = ST.UI.showReorderButtonsDialog || function(title, aKey, reg){
-            return _showReorderButtonsDialog(title, aKey, reg);
+    // Small action wrapper retained for consistent button registration.
+    function _stActionWrap(label, fn) {
+        return function () {
+            if (!fn || typeof fn !== "function") return null;
+            return fn.apply(this, arguments);
         };
-    } catch (e) {}
-
-    try {
-        ST.Tools      = ST.Tools      || {};
-        ST.Tools.Main = ST.Tools.Main || {};
-        ST.Tools.Text = ST.Tools.Text || {};
-
-        // MAIN tab tools
-        if (typeof uniqueCompDeepFromSelectedLayer === "function")
-            ST.Tools.Main.uniqueComp = ST.Tools.Main.uniqueComp || uniqueCompDeepFromSelectedLayer;
-
-        if (typeof copyUniqueCompDeepToPrecompsFromSelectedLayer === "function")
-            ST.Tools.Main.copyUniqueCompToPrecomps = ST.Tools.Main.copyUniqueCompToPrecomps || copyUniqueCompDeepToPrecompsFromSelectedLayer;
-
-        // TEXT BOX module bootstrap (creates $.global.ShineTools.TextBox)
-        if (typeof initTextBoxModule === "function")
-            ST.Tools.Text.initTextBoxModule = ST.Tools.Text.initTextBoxModule || initTextBoxModule;
-
-        // If the TextBox module is already present, alias it for convenience
-        try {
-            if ($.global.ShineTools && $.global.ShineTools.TextBox) {
-                ST.Tools.Text.TextBox = ST.Tools.Text.TextBox || $.global.ShineTools.TextBox;
-            }
-        } catch (eTB) {}
-
-    } catch (e) {}
-
-function _ddEnsureKey(dd) {
-        try {
-            if (!dd) return null;
-            var store = _ensureDDStore();
-            if (!dd.__shineDDKey) {
-                dd.__shineDDKey = "dd_" + (new Date().getTime()) + "_" + Math.floor(Math.random() * 1000000);
-            }
-            store[dd.__shineDDKey] = dd;
-            return dd.__shineDDKey;
-        } catch (e) {}
-        return null;
-    }
-
-    function _stNowMs() {
-        try { return (new Date()).getTime(); } catch (e) {}
-        return 0;
-    }
-
-    function _stMarkDropdownInteraction(dd, holdMs) {
-        try {
-            if (!dd) return;
-            _ddEnsureKey(dd);
-            var ms = (holdMs == null) ? 5000 : Math.max(0, holdMs);
-            dd.__stDropdownInteracting = true;
-            dd.__stDropdownInteractionUntil = _stNowMs() + ms;
-        } catch (e) {}
-    }
-
-    function _stClearDropdownInteraction(dd, keepAliveMs) {
-        try {
-            if (!dd) return;
-            if (keepAliveMs != null && keepAliveMs > 0) {
-                dd.__stDropdownInteractionUntil = _stNowMs() + Math.max(0, keepAliveMs);
-            }
-            dd.__stDropdownInteracting = false;
-        } catch (e) {}
-    }
-
-    function _stIsDropdownInteractionActive(dd) {
-        try {
-            if (!dd) return false;
-            var now = _stNowMs();
-            var until = 0;
-            try { until = dd.__stDropdownInteractionUntil || 0; } catch (e0) {}
-            if (until && now <= until) return true;
-            try {
-                var ks = ScriptUI.environment.keyboardState;
-                if (dd.active && ks && (ks.leftButtonPressed || ks.rightButtonPressed)) return true;
-            } catch (e1) {}
-        } catch (e) {}
-        return false;
-    }
-
-// =================================================================================================
-// UTILITIES: TASKING: scheduleTask safe cancel
-// =================================================================================================
-    function _cancelTaskSafe(taskId) {
-        try { if (taskId) app.cancelTask(taskId); } catch (e) {}
     }
 
     // ------------------------------------------------------------
@@ -765,52 +520,54 @@ function _ddEnsureKey(dd) {
         return {};
     }
 
-    function _isOptDown() {
-        // macOS Option key is reported as Alt in ScriptUI.
+    function _stReadTextFile(pathOrFile, encoding) {
+        var f = null;
         try {
-            var ks = ScriptUI.environment.keyboardState;
-            return (ks && ks.altKey) ? true : false;
-        } catch (e) {}
+            f = (pathOrFile instanceof File) ? pathOrFile : new File(String(pathOrFile || ""));
+            if (!f || !f.exists) return null;
+            f.encoding = encoding || "UTF-8";
+            if (!f.open("r")) return null;
+            var raw = f.read();
+            f.close();
+            return String(raw || "");
+        } catch (e) {
+            try { if (f && f.opened) f.close(); } catch (eClose) {}
+        }
+        return null;
+    }
+
+    function _stWriteTextFile(pathOrFile, text, encoding) {
+        var f = null;
+        try {
+            f = (pathOrFile instanceof File) ? pathOrFile : new File(String(pathOrFile || ""));
+            if (!f) return false;
+            f.encoding = encoding || "UTF-8";
+            if (!f.open("w")) return false;
+            f.write(String(text === undefined || text === null ? "" : text));
+            f.close();
+            return true;
+        } catch (e) {
+            try { if (f && f.opened) f.close(); } catch (eClose) {}
+        }
         return false;
+    }
+
+    function _stKeyboardState() {
+        try { return ScriptUI.environment.keyboardState || null; } catch (e) {}
+        return null;
+    }
+
+    function _isOptDown() {
+        var ks = _stKeyboardState();
+        return !!(ks && ks.altKey);
     }
 
     function _isCmdDown() {
-        // macOS Command key is reported as Meta in ScriptUI.
-        try {
-            var ks = ScriptUI.environment.keyboardState;
-            return (ks && ks.metaKey) ? true : false;
-        } catch (e) {}
-        return false;
+        var ks = _stKeyboardState();
+        return !!(ks && ks.metaKey);
     }
 
     // Safe runner with centralized error logging (no alerts unless requested)
-
-    // Compose a short debug snapshot string (for support / troubleshooting)
-    function _stGetDebugInfoString() {
-        var lines = [];
-        try { lines.push("ShineTools Debug Info"); } catch (e) {}
-        try { lines.push("Version: " + ((typeof SHINETOOLS_VERSION !== "undefined") ? SHINETOOLS_VERSION : "(unknown)")); } catch (e) {}
-        try { lines.push("Build: " + ((typeof SHINETOOLS_BUILD_STAMP !== "undefined") ? SHINETOOLS_BUILD_STAMP : "(unknown)")); } catch (e) {}
-        try { lines.push("Date: " + (new Date()).toString()); } catch (e) {}
-try { lines.push("AE: " + app.version + " (" + app.buildNumber + ")"); } catch (e) {}
-        try { lines.push("OS: " + $.os); } catch (e) {}
-        try {
-            if (ST && ST.LastError) {
-                lines.push("LastError: [" + ST.LastError.tag + "] " + ST.LastError.message);
-                lines.push("LastErrorTime: " + ST.LastError.time);
-            } else {
-                lines.push("LastError: (none)");
-            }
-        } catch (e) {}
-        return lines.join("\n");
-    }
-
-    // Best-effort copy to clipboard (ExtendScript supports this in many hosts)
-    function _stCopyToClipboardBestEffort(str) {
-        try { if (app && app.setClipboard) { app.setClipboard(String(str)); return true; } } catch (e) {}
-        try { if ($.setenv) { $.setenv("SHINETOOLS_CLIPBOARD", String(str)); } } catch (e2) {}
-        return false;
-    }
 
 function _safeRun(tag, name, fn, alsoAlert) {
         try {
@@ -824,175 +581,163 @@ function _safeRun(tag, name, fn, alsoAlert) {
 
 function _withUndoGroup(name, fn) {
         // Safe Undo wrapper: guarantees endUndoGroup even if fn throws.
+        var __stUndoName = String(name || "ShineTools");
         if (!fn || typeof fn !== "function") return;
-        try { app.beginUndoGroup(String(name || "ShineTools")); } catch (eBegin) {}
-        try { fn(); } catch (eRun) { throw eRun; } finally { try { app.endUndoGroup(); } catch (eEnd) {} }
+        try { app.beginUndoGroup(__stUndoName); } catch (eBegin) {}
+        try {
+            fn();
+        } finally {
+            try { app.endUndoGroup(); } catch (eEnd) {}
+        }
     }
 
     // ============================================================
     // 0) Locate ScriptUI Panels folder + logo
     // ============================================================
-    // Version comes from top-level SHINE_VERSION / SHINE_VERSION_TAG
-    var SHINE_TOOLS_VERSION = SHINE_VERSION_TAG;
     var LOGO_FILENAME   = "shinetools_logo.png";
 
-    // Unified dropdown "flash then reset" helper (matches MAIN behavior across tabs).
-    function _ddFlashThenReset(dd, frames) {
+    // Shared dropdown helpers for Library Elements and Text Animators.
+    // These helpers never schedule work or force a ScriptUI repaint/layout.
+    function _stDropdownResetToBlank(dd) {
         try {
             if (!dd) return;
-            // force a repaint so the selected text actually shows before any heavy work runs
-            try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd) {}
-            _dropdownResetAfterFrames(dd, frames);
-        } catch (e) {}
-    }
-
-    // Simple, robust dropdown reset used by MAIN Favorites and TEXT Animators.
-    // It avoids the older shared message/defer framework that can leave the dropdown
-    // stuck in a programmatic state after workspace-manager rebuilds.
-    function _stResetDropdownToBlankSoon(dd, delayMs) {
-        try {
-            if (!dd) return;
-            // Do not let the normal blank-reset routine erase the temporary "Added" message.
-            try { if (dd.__stShowingAddedFlash === true) return; } catch (eFlashGuard) {}
             try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafe) {}
-
             dd.__shineProgrammatic = true;
-            try { dd.selection = 0; } catch (eSel) {}
-            try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd) {}
+            try { if (dd.items && dd.items.length) dd.selection = 0; } catch (eSel) {}
             dd.__shineProgrammatic = false;
-            dd.__stBlankResetTaskId = 0;
-        } catch (e) {}
-    }
-
-    // Temporary dropdown feedback used by PLUS buttons.
-    // Shows "Added" directly in the CLOSED dropdown box for a short, real-time flash,
-    // then rebuilds the dropdown back to its normal contents.
-    // Keep the clear step independent from the broader post-dialog UI cooldown.
-    try {
-        if (!$.global.__ST_clearDropdownAddedFlash__) {
-            $.global.__ST_clearDropdownAddedFlash__ = function (ddKey) {
-                try {
-                    var store = $.global.__ShineToolsDDStore || {};
-                    var dd = store[String(ddKey || "")];
-                    if (!dd) return;
-
-                    // Overdue task guard:
-                    // AE native progress windows (Import Project, render finalization, etc.) can hold
-                    // a scheduleTask until AFTER the modal/progress state ends. If this clear task is
-                    // badly overdue, do not touch ScriptUI immediately on that first post-modal tick.
-                    // The next real user interaction / rebuild will normalize the dropdown safely.
-                    try {
-                        var __due = dd.__stAddedFlashDueMs || 0;
-                        var __now = (new Date()).getTime();
-                        if (__due && (__now - __due) > 700) {
-                            try { dd.__stAddedFlashTaskId = 0; } catch (eLateTask) {}
-                            return;
-                        }
-                    } catch (eLateGuard) {}
-
-                    // Do not use the broad modal/render cooldown gate here.
-                    // That gate includes the post-file-dialog cooldown, which was stretching
-                    // the visible "Added" time to several seconds no matter what frame count was passed.
-                    // Only avoid truly unsafe states: panel closing/dead or active render.
-                    try { if ($.global.__ShineToolsClosing__ === true) return; } catch (eCloseGuard) {}
-                    try { if ($.global.__ShineToolsIsPanelSafe__ && !$.global.__ShineToolsIsPanelSafe__()) return; } catch (ePanelGuard) {}
-                    try {
-                        if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) {
-                            // Do not queue a delayed ScriptUI clear during render/progress states.
-                            return;
-                        }
-                    } catch (eRenderGuard) {}
-
-                    dd.__shineProgrammatic = true;
-                    try {
-                        dd.__stShowingAddedFlash = false;
-                        dd.__stFlashBlankText = " ";
-
-                        // Restore the real dropdown contents. This is more reliable than trying
-                        // to edit one item label back in place after ScriptUI has painted the closed box.
-                        if (dd.__stAddedFlashRebuild && typeof dd.__stAddedFlashRebuild === "function") {
-                            dd.__stAddedFlashRebuild();
-                        } else {
-                            try { dd.removeAll(); } catch (eRA) {}
-                            try {
-                                var blank = dd.add("item", " ");
-                                blank._isBlank = true;
-                                dd.selection = blank;
-                            } catch (eBlank) {}
-                        }
-
-                        try { if (dd.items && dd.items.length > 0) dd.selection = dd.items[0]; } catch (eSel) {}
-                        try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd) {}
-                    } catch (eUI) {}
-                    dd.__shineProgrammatic = false;
-                    try { dd.__stSuppressOnChangeUntil = 0; } catch (eSupDone) {}
-                    try { dd.__stAddedFlashTaskId = 0; } catch (eDone) {}
-                } catch (e) {}
-            };
+        } catch (e) {
+            try { if (dd) dd.__shineProgrammatic = false; } catch (eClear) {}
         }
-    } catch (eAddedGlobal) {}
-
-    function _dropdownResetAfterFrames(dd, frames) {
-        // MODAL DIAGNOSTIC:
-        // Do not queue a post-dialog/post-import scheduleTask that may run as AE returns
-        // from a native progress window. Leave dropdown cleanup to the next normal rebuild.
-        try { if (dd) dd.__stAddedFlashTaskId = 0; } catch (e) {}
-        return;
     }
 
-    function _ddFlashAddedFrames(dd, frames, rebuildFn) {
+    function _stDropdownRebuild(dd, buildItemsFn) {
+        if (!dd || !buildItemsFn || typeof buildItemsFn !== "function") return;
+        dd.__shineProgrammatic = true;
         try {
-            if (!dd) return;
-            var key = _ddEnsureKey(dd);
-            if (!key) return;
+            try { dd.removeAll(); } catch (eRemove) {}
+            buildItemsFn();
+            try { if (dd.items && dd.items.length) dd.selection = 0; } catch (eSel) {}
+        } finally {
+            try { dd.__shineProgrammatic = false; } catch (eClear) {}
+        }
+    }
 
-            // The PLUS click continues only after the native file dialog has closed.
-            // Do NOT bail because of the general modal/render cooldown here -- that cooldown
-            // was preventing the user-facing "Added" feedback from ever appearing.
-            // The delayed CLEAR task below remains safety-gated.
+    function _stDropdownAddBlank(dd) {
+        var item = dd.add("item", " ");
+        item._isBlank = true;
+        return item;
+    }
 
-            try { if (dd.__stAddedFlashTaskId) app.cancelTask(dd.__stAddedFlashTaskId); } catch (eCancel) {}
-            try { if (rebuildFn && typeof rebuildFn === "function") dd.__stAddedFlashRebuild = rebuildFn; } catch (eRebSet) {}
+    function _stDropdownAddDivider(dd, text) {
+        var item = dd.add("item", String(text || ""));
+        item._isDivider = true;
+        item._fullText = String(text || "");
+        try { item.enabled = false; } catch (e) {}
+        return item;
+    }
 
-            // IMPORTANT: Do not just rename the existing blank item. In AE ScriptUI, the
-            // closed dropdown box often will not repaint that change. Instead, temporarily
-            // replace the dropdown contents with a single selected "Added" item, then rebuild
-            // the normal list after roughly the requested frame count. This is visibly inside the blue box.
-            var __flashMs = Math.max(120, Math.min(5000, Math.round(((frames == null) ? 30 : frames) * 33.333)));
-            dd.__shineProgrammatic = true;
-            try {
-                dd.__stShowingAddedFlash = true;
-                dd.__stSuppressOnChangeUntil = (new Date()).getTime() + __flashMs + 250;
-                try { dd.removeAll(); } catch (eRemove) {}
-                var addedItem = dd.add("item", "Added");
-                // Do NOT mark this as _isBlank. Some AE builds fire onChange after the
-                // programmatic selection, and the old blank-row logic would immediately
-                // reset the dropdown before the user ever saw the message.
-                try { addedItem._isAddedFlash = true; } catch (eFlag) {}
-                try { addedItem.enabled = true; } catch (eEn) {}
-                try { dd.selection = addedItem; } catch (eSelObj) { try { dd.selection = 0; } catch (eSelIdx) {} }
-                try { dd.active = false; } catch (eAct) {}
-                try { if (dd.parent && dd.parent.layout) dd.parent.layout.layout(true); } catch (eLayLocal) {}
-                try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd) {}
-            } catch (eUI) {}
-            // SAFE SYNC FLASH: keep the user-facing "Added" message visible briefly,
-            // but do NOT use app.scheduleTask. scheduleTask was one of the risky pieces
-            // around AE native progress windows. This blocks only this click handler for
-            // a short moment, then restores the real dropdown contents synchronously.
-            try {
-                try { $.sleep(__flashMs); } catch (eSleep) {}
-                dd.__stShowingAddedFlash = false;
-                if (dd.__stAddedFlashRebuild && typeof dd.__stAddedFlashRebuild === "function") dd.__stAddedFlashRebuild();
-                try { if (dd.items && dd.items.length > 0) dd.selection = dd.items[0]; } catch (eSel0) {}
-                try { if (dd.window && dd.window.update) dd.window.update(); } catch (eUpd2) {}
-            } catch (eRebNow) {}
-            dd.__shineProgrammatic = false;
-            // Intentionally no delayed reset task here.
+    function _stDropdownAddPathItem(dd, text, path, pathProperty, isDefault, helpText) {
+        var item = dd.add("item", String(text || ""));
+        item._fullText = String(text || "");
+        item[String(pathProperty || "_path")] = String(path || "");
+        if (isDefault === true) item._isDefault = true;
+        try { item.helpTip = String(helpText || text || ""); } catch (e) {}
+        return item;
+    }
+
+    function _stDropdownAddAction(dd, text, actionName) {
+        var item = dd.add("item", String(text || ""));
+        item.__action = String(actionName || "");
+        return item;
+    }
+
+    function _stDropdownBeginChange(dd) {
+        try {
+            if (!dd || dd.__stOnChangeBusy === true) return false;
+            if (dd.__shineProgrammatic === true) return false;
+            dd.__stOnChangeBusy = true;
+            return true;
+        } catch (e) {}
+        return false;
+    }
+
+    function _stDropdownEndChange(dd) {
+        try { if (dd) dd.__stOnChangeBusy = false; } catch (e) {}
+    }
+
+    function _stClearAddStatusLabel(lbl, defaultText) {
+        // Manual clear for the add confirmation label. No timers or deferred UI work.
+        try {
+            if (!lbl) return;
+            try { lbl.__stAddStatusShowing = false; } catch (eShow) {}
+            try { lbl.text = String(defaultText || lbl.__stAddStatusDefaultText || ""); } catch (eText) {}
+            try { lbl.helpTip = ""; } catch (eTip) {}
+
+            // Let AE repaint naturally after the click handler exits. No forced update.
         } catch (e) {}
     }
+
+    function _stAttachAddStatusClose(lbl, defaultText) {
+        // Adds click-to-clear behavior directly to the existing header label.
+        // The visible close icon is part of the same statictext string, so it sits tight
+        // next to the Added message without adding another ScriptUI control to the row.
+        try {
+            if (!lbl) return null;
+            try { lbl.__stAddStatusDefaultText = String(defaultText || lbl.text || ""); } catch (eDef) {}
+            try { if (lbl.__stAddStatusClickAttached === true) return lbl; } catch (eChk) {}
+            try { lbl.helpTip = ""; } catch (eTip0) {}
+
+            try {
+                lbl.addEventListener("mousedown", function () {
+                    try {
+                        if (lbl.__stAddStatusShowing === true) _stClearAddStatusLabel(lbl, defaultText);
+                    } catch (eClear) {}
+                });
+            } catch (eEvt) {
+                try {
+                    lbl.onClick = function () {
+                        try { if (lbl.__stAddStatusShowing === true) _stClearAddStatusLabel(lbl, defaultText); } catch (eClear2) {}
+                    };
+                } catch (eClick) {}
+            }
+
+            try { lbl.__stAddStatusClickAttached = true; } catch (eStore) {}
+            return lbl;
+        } catch (e) {}
+        return null;
+    }
+
+    function _stSetAddStatusLabel(lbl, count, singularName, defaultText) {
+        // Update one existing status label; no deferred UI work is used.
+        try {
+            if (!lbl) return;
+
+            var n = 0;
+            try { n = parseInt(count, 10); } catch (eN) { n = 0; }
+
+            if (!n || n < 1) {
+                _stClearAddStatusLabel(lbl, defaultText);
+                return;
+            }
+
+            var one = String(singularName || "file");
+            var many = one;
+            try { many = (one === "preset") ? "presets" : (one + "s"); } catch (ePlural) {}
+
+            // Filled-circle close icon is intentionally inside this same label so it stays
+            // directly beside the confirmation text instead of drifting to the row edge.
+            // Uses a single statictext control for stability.
+            try { lbl.__stAddStatusShowing = true; } catch (eShow) {}
+            try { lbl.text = "Ⓧ Added " + n + " " + ((n === 1) ? one : many) + " ✓"; } catch (eText) {}
+            try { lbl.helpTip = "Click Ⓧ to clear this message."; } catch (eTip) {}
+
+            // Let AE repaint naturally after the click handler exits. No forced update.
+        } catch (e) {}
+    }
+
 
     // Apply an .ffx preset to a text layer (create/select a text layer if needed).
-    // Exposed globally so dropdown handlers / deferred tasks can trigger it safely.
+    // Exposed globally so the Text Animator dropdown can call it.
     if (!$.global._shineToolsApplyFFXPreset) {
         $.global._shineToolsApplyFFXPreset = function (presetPath) {
             try {
@@ -1050,84 +795,35 @@ function _withUndoGroup(name, fn) {
         };
     }
 
-    // Defer applying an .ffx preset so ScriptUI can repaint the dropdown selection first.
-    // Also guards against rapid double-fires by canceling any pending apply task per dropdown.
-    function _ddDeferApplyFFX(dd, presetPath, delayMs) {
-        try {
-            if (!dd) return;
-            if (!_stIsDropdownInteractionActive(dd)) return;
-            _stMarkDropdownInteraction(dd, 5000);
-            dd.__shineApplyTaskId = 0;
-
-            var safe = String(presetPath || "");
-            try { $.global._shineToolsApplyFFXPreset(safe); } catch(eNow) {}
-        } catch (e) {}
-    }
-
     // ============================================================
     // Shared UI namespaces used by Workspace + Organize systems
     // ============================================================
-    ST.UI = ST.UI || {};
-    ST.UI.Dropdown = ST.UI.Dropdown || {};
-    ST.UI.Dropdown.flash = ST.UI.Dropdown.flash || function(dd, frames) {
-        return _ddFlashThenReset(dd, frames);
-    };
-    ST.UI.Dropdown.reset = ST.UI.Dropdown.reset || function(dd, delayMs) {
-        return _stResetDropdownToBlankSoon(dd, delayMs);
-    };
-    ST.UI.Dropdown.deferPresetApply = ST.UI.Dropdown.deferPresetApply || function(dd, presetPath, delayMs) {
-        return _ddDeferApplyFFX(dd, presetPath, delayMs);
-    };
-    ST.UI.Dropdown.markInteraction = ST.UI.Dropdown.markInteraction || function(dd, holdMs) {
-        return _stMarkDropdownInteraction(dd, holdMs);
-    };
-    ST.UI.Dropdown.isInteractionActive = ST.UI.Dropdown.isInteractionActive || function(dd) {
-        return _stIsDropdownInteractionActive(dd);
-    };
 
     ST.UI.Organize = ST.UI.Organize || {};
-    ST.UI.Organize.getSharedSizing = ST.UI.Organize.getSharedSizing || function() {
-        var dialogW = 860;
-        var dialogH = 580;
-        return {
-            dialogW: dialogW,
-            dialogH: dialogH,
-            listW: dialogW - 36,
-            listH: 400
-        };
-    };
     ST.UI.Organize.buildConfig = ST.UI.Organize.buildConfig || function(kind, overrides) {
-        var cfg = {};
-        var sizing = ST.UI.Organize.getSharedSizing();
-        cfg.dialogW = sizing.dialogW;
-        cfg.dialogH = sizing.dialogH;
-        cfg.listW = sizing.listW;
-        cfg.listH = sizing.listH;
-        cfg.multiselect = true;
-        cfg.allowDelete = true;
-        cfg.allowRename = true;
-        cfg.allowNewDivider = true;
-        cfg.allowDividerSelection = true;
-        cfg.allowDividerDeletion = true;
-        cfg.returnObjects = true;
-        cfg.indentNonDividerRows = true;
-        cfg.__stOrganizeSharedLayout = true; // Library Elements + Text Animators must stay visually identical.
-        // Wider left/right dialog padding for the Organize dialogs so the list box
-        // sits farther from the window edges.
-        cfg.dialogPadLR = 28;
-        cfg.dialogPadTop = 10;
-        cfg.dialogPadBot = 10;
+        var dialogW = 860;
+        var cfg = {
+            dialogW: dialogW,
+            dialogH: 580,
+            listW: dialogW - 36,
+            listH: 400,
+            multiselect: true,
+            allowDelete: true,
+            allowRename: true,
+            allowNewDivider: true,
+            allowDividerSelection: true,
+            allowDividerDeletion: true,
+            returnObjects: true,
+            indentNonDividerRows: true,
+            __stOrganizeSharedLayout: true,
+            dialogPadLR: 28,
+            dialogPadTop: 10,
+            dialogPadBot: 10,
+            infoText: 'Shift / Cmd - Select multiple items to reorder, use "Move To..." to place them under section dividers, Rename selected items, or press Delete / Backspace to remove selected items.'
+        };
 
-        if (kind === "text_animators") {
-            // Keep Organize Text Animators visually matched to Organize Library Elements:
-            // same shared dialog sizing, same list sizing, same bottom button architecture,
-            // and the same one-line info copy so the dialog height/spacing does not shift.
-            cfg.infoText = 'Shift / Cmd - Select multiple items to reorder, use "Move To..." to place them under section dividers, Rename selected items, or press Delete / Backspace to remove selected items.';
-            cfg.addFilesHelpTip = "Add .ffx files to Text Animators";
-        } else if (kind === "library_elements") {
-            cfg.infoText = 'Shift / Cmd - Select multiple items to reorder, use "Move To..." to place them under section dividers, Rename selected items, or press Delete / Backspace to remove selected items.';
-            cfg.addFilesHelpTip = "Add files to Library Elements";
-        }
+        if (kind === "text_animators") cfg.addFilesHelpTip = "Add .ffx files to Text Animators";
+        else if (kind === "library_elements") cfg.addFilesHelpTip = "Add files to Library Elements";
 
         if (overrides) {
             for (var k in overrides) {
@@ -1135,6 +831,167 @@ function _withUndoGroup(name, fn) {
             }
         }
         return cfg;
+    };
+
+
+    // Shared filename/path formatter used by the file-backed Organize dialogs.
+    // This must live in the main ShineTools scope because the shared adapters and
+    // generic rename handler are created outside the later tab-builder scope.
+    function _stPrettyFileLabel(pathOrLabel) {
+        var s = pathOrLabel;
+        try {
+            if (s && typeof s === "object" && !(s instanceof File)) {
+                var lbl = (typeof _favEntryLabel === "function") ? _favEntryLabel(s) : "";
+                if (lbl) return String(lbl);
+                if (typeof _favEntryPath === "function") s = _favEntryPath(s);
+            }
+        } catch (eObj) {}
+        try {
+            if (s instanceof File) {
+                if (s && s.name) return String(s.name);
+            }
+        } catch (e0) {}
+        try {
+            if (typeof s === "string") {
+                var f = new File(s);
+                if (f && f.name) s = f.name;
+            }
+        } catch (e1) {}
+        s = String(s == null ? "" : s);
+        try { s = decodeURIComponent(s); } catch (e2) {}
+        try { s = s.replace(/%20/g, " "); } catch (e3) {}
+        return s;
+    }
+
+    // Shared adapters for the two file-backed Organize dialogs.
+    ST.UI.Organize.cleanPathId = ST.UI.Organize.cleanPathId || function(id, prefixes) {
+        var clean = String(id || "");
+        prefixes = prefixes || [];
+        for (var i = 0; i < prefixes.length; i++) {
+            var prefix = String(prefixes[i] || "");
+            if (prefix && clean.indexOf(prefix) === 0) {
+                clean = String(clean.substring(prefix.length) || "");
+                break;
+            }
+        }
+        return clean;
+    };
+
+    ST.UI.Organize.makePathResolvers = ST.UI.Organize.makePathResolvers || function(prefixes) {
+        prefixes = prefixes || [];
+        function cleanId(id) {
+            return ST.UI.Organize.cleanPathId(id, prefixes);
+        }
+        return {
+            originalFilenameForId: function(id) {
+                return _stPrettyFileLabel(cleanId(id));
+            },
+            displayLabelForId: function(id, label, obj, showOriginalFilename) {
+                if (obj && obj._isDivider) return label;
+                if (!showOriginalFilename && label) return String(label);
+                return _stPrettyFileLabel(cleanId(id));
+            }
+        };
+    };
+
+    ST.UI.Organize.makeFileAddHandler = ST.UI.Organize.makeFileAddHandler || function(openDialogFn, options) {
+        options = options || {};
+        return function(lb, dlg, dialogOptions) {
+            if (!openDialogFn || typeof openDialogFn !== "function") return false;
+
+            var picked = openDialogFn();
+            if (!picked) return false;
+            if (!(picked instanceof Array)) picked = [picked];
+
+            var insertAt = lb.items.length;
+            try {
+                if (lb.selection) {
+                    var selectedId = String(lb.selection._id || "");
+                    for (var si = 0; si < lb.items.length; si++) {
+                        if (String(lb.items[si]._id || "") === selectedId) {
+                            insertAt = si + 1;
+                            break;
+                        }
+                    }
+                }
+            } catch (eSelectedInsert) {}
+
+            var existingIds = {};
+            for (var ei = 0; ei < lb.items.length; ei++) {
+                try { existingIds[String(lb.items[ei]._id || "")] = true; } catch (eExisting) {}
+            }
+
+            var addedAny = false;
+            for (var pi = 0; pi < picked.length; pi++) {
+                var fileObj = picked[pi];
+                if (!fileObj || !fileObj.exists) continue;
+
+                var path = String(fileObj.fsName || "");
+                if (!path) continue;
+                if (typeof options.acceptPath === "function" && !options.acceptPath(path, fileObj)) continue;
+
+                var itemId = (typeof options.idForPath === "function")
+                    ? String(options.idForPath(path, fileObj) || "")
+                    : path;
+                if (!itemId || existingIds[itemId]) continue;
+
+                var itemLabel = (typeof options.labelForPath === "function")
+                    ? String(options.labelForPath(path, fileObj) || "")
+                    : String(_stPrettyFileLabel(path) || "");
+                itemLabel = itemLabel.replace(/^[\s\u00A0]+/, "");
+
+                var addedItem = lb.add("item", itemLabel);
+                try { addedItem._id = itemId; } catch (eSetId) {}
+                try { addedItem._label = itemLabel; } catch (eSetLabel) {}
+                try { addedItem._isDivider = false; } catch (eSetDivider) {}
+                try { addedItem.helpTip = itemLabel; } catch (eSetTip) {}
+                try { addedItem.enabled = true; } catch (eSetEnabled) {}
+                try { addedItem.selected = true; } catch (eSetSelected) {}
+                try {
+                    if (insertAt < (lb.items.length - 1)) {
+                        addedItem.index = insertAt;
+                        insertAt++;
+                    }
+                } catch (eReindex) {}
+
+                existingIds[itemId] = true;
+                addedAny = true;
+            }
+            return addedAny;
+        };
+    };
+
+    ST.UI.Organize.buildPathConfig = ST.UI.Organize.buildPathConfig || function(kind, options) {
+        options = options || {};
+        var resolvers = ST.UI.Organize.makePathResolvers(options.stripPrefixes || []);
+        var cfg = {
+            onAddFiles: ST.UI.Organize.makeFileAddHandler(options.openDialog, {
+                acceptPath: options.acceptPath,
+                idForPath: options.idForPath,
+                labelForPath: options.labelForPath
+            }),
+            originalFilenameForId: resolvers.originalFilenameForId,
+            displayLabelForId: resolvers.displayLabelForId,
+            sectionChoices: options.sectionChoices || [],
+            sectionTokenForChoice: options.sectionTokenForChoice,
+            newDividerTokenForLabel: options.newDividerTokenForLabel,
+            newDividerDisplayForLabel: options.newDividerDisplayForLabel,
+            initialShowOriginalFilename: options.initialShowOriginalFilename === true
+        };
+        return ST.UI.Organize.buildConfig(kind, cfg);
+    };
+
+    ST.UI.Organize.attachOptionOpen = ST.UI.Organize.attachOptionOpen || function(controls, openFn) {
+        controls = controls || [];
+        var handler = function() {
+            var ks = null;
+            try { ks = ScriptUI.environment.keyboardState; } catch (eKeyboard) {}
+            if (ks && ks.altKey && openFn && typeof openFn === "function") openFn();
+        };
+        for (var i = 0; i < controls.length; i++) {
+            try { if (controls[i]) controls[i].addEventListener("mousedown", handler); } catch (eAttach) {}
+        }
+        return handler;
     };
 
     // Cache (AE 2025 safe-pass): avoid repeated disk/path checks during UI build
@@ -1293,7 +1150,7 @@ function _withUndoGroup(name, fn) {
     function warn(msg) {
     try {
         if (typeof __ST_withModalSafety__ === "function") {
-            $.global.__ST_withModalSafety__(function(){ alert(msg); });
+            __ST_withModalSafety__(function(){ alert(msg); });
         } else {
             alert(msg);
         }
@@ -1391,124 +1248,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
             }
         }catch(e){}
         return false;
-    }
-
-    // ============================================================
-    // UNIQUE COMP (Deep duplicate selected precomp layer + nested precomps)
-    // - Leaves original layer untouched
-    // - Duplicates the selected precomp layer (layer.duplicate) and swaps source to a deep-duplicated comp tree
-    // ============================================================
-    function uniqueCompDeepFromSelectedLayer() {
-        if (!app.project) { alert("No project is open."); return; }
-
-        var comp = getComp();
-        if (!comp) { alert("Make a comp active and select a precomp layer."); return; }
-
-        var sel = comp.selectedLayers;
-        if (!sel || sel.length !== 1) {
-            alert("Please select exactly one precomp layer in the active comp timeline.");
-            return;
-        }
-
-        var lyr = sel[0];
-        if (!(lyr instanceof AVLayer) || !lyr.source || !(lyr.source instanceof CompItem)) {
-            alert("Selected layer is not a precomp layer. Please select a precomp layer (AVLayer with a Comp source).");
-            return;
-        }
-
-        var srcComp = lyr.source;
-
-        // Prompt for a base name for the unique duplicate
-        var userBaseName = __ST_promptSafe__("Name the new comp:", String(srcComp.name || "Comp") + "_");
-        if (userBaseName === null) { return; }
-        userBaseName = String(userBaseName || "");
-        if (!userBaseName) { userBaseName = String(srcComp.name || "Comp") + "_"; }
-
-        function _compNameExists(folder, name) {
-            try {
-                for (var i = 1; i <= app.project.numItems; i++) {
-                    var it = app.project.item(i);
-                    if (it && (it instanceof CompItem) && it.name === name) {
-                        try {
-                            if ((folder && it.parentFolder && it.parentFolder.id === folder.id) || (!folder && !it.parentFolder)) return true;
-                        } catch (e1) { return true; }
-                    }
-                }
-            } catch (e) {}
-            return false;
-        }
-
-        function _uniqueCompName(folder, base) {
-            var baseName = String(base || "Comp");
-            var candidate = baseName;
-            var n = 2;
-            while (_compNameExists(folder, candidate) && n < 500) {
-                candidate = baseName + "_" + n;
-                n++;
-            }
-            return candidate;
-        }
-
-        app.beginUndoGroup("ShineTools - UNIQUE COMP");
-
-        try {
-            var dupMap = {};
-
-            function dupCompRecursive(c) {
-                if (!c) return null;
-
-                var key = String(c.id);
-                if (dupMap[key]) return dupMap[key];
-
-                var newComp = null;
-                try { newComp = c.duplicate(); } catch (eDup) { newComp = null; }
-                if (!newComp) return null;
-
-                dupMap[key] = newComp;
-
-                // Keep in same folder and give a unique-ish name
-                try { if (c.parentFolder) newComp.parentFolder = c.parentFolder; } catch (ePF) {}
-                try { newComp.name = _uniqueCompName(c.parentFolder, (c === srcComp ? userBaseName : (String(c.name || "Comp") + "_"))); } catch (eNm) {}
-
-                // Relink nested precomps inside the duplicated comp
-                try {
-                    for (var i = 1; i <= newComp.numLayers; i++) {
-                        var childL = newComp.layer(i);
-                        if (!childL || !childL.source || !(childL.source instanceof CompItem)) continue;
-
-                        var origChild = childL.source;
-                        var newChild  = dupCompRecursive(origChild);
-                        if (newChild) {
-                            try { childL.replaceSource(newChild, false); } catch (eReplace) {}
-                        }
-                    }
-                } catch (eLoop) {}
-
-                return newComp;
-            }
-
-            var uniqueComp = dupCompRecursive(srcComp);
-            if (!uniqueComp) { alert("Could not deep-duplicate the selected comp."); return; }
-
-            // Duplicate the layer (preserves transforms, keys, effects, masks, matte relationships, etc.)
-            var newLayer = null;
-            try { newLayer = lyr.duplicate(); } catch (eLD) { newLayer = null; }
-            if (!newLayer) { alert("Could not duplicate the selected layer."); return; }
-
-            // Put the unique one above the original
-            try { newLayer.moveBefore(lyr); } catch (eMv) {}
-
-            // Swap its source to the new unique comp
-            try { newLayer.replaceSource(uniqueComp, false); } catch (eRS) {}
-
-            // Friendly rename
-            try { newLayer.name = String(userBaseName || (lyr.name || "Precomp") + "_"); } catch (eLN) {}
-
-        } catch (e) {
-            alert("UNIQUE COMP error:\n" + e.toString());
-        } finally {
-            app.endUndoGroup();
-        }
     }
 
     // ============================================================
@@ -1760,14 +1499,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         return props;
     }
 
-    function requireSelectedProps(c) {
-        var props = getSelectedExprProps(c);
-        if (!props || props.length === 0) {
-            warn("Select one or more properties (Position/Scale/Rotation/etc.) in the timeline, then click the button.");
-            return null;
-        }
-        return props;
-    }
 
     function layerFromProperty(prop) {
         try { return prop.propertyGroup(prop.propertyDepth); } catch (e) { return null; }
@@ -1790,19 +1521,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         }
     }
 
-    function isOptionDown() {
-        try {
-            var ks = ScriptUI.environment.keyboardState;
-            return (ks && ks.altKey) ? true : false;
-        } catch (e) { return false; }
-    }
-
-    function isShiftDown() {
-        try {
-            var ks = ScriptUI.environment.keyboardState;
-            return (ks && ks.shiftKey) ? true : false;
-        } catch (e) { return false; }
-    }
 
     // ============================================================
     // 2.5) TEXT BOX module (integrated from ShineTools_TEXT_BOX_v2.36_panel_fix.jsx)
@@ -1850,16 +1568,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
 
     var DEFAULT_TEXT_SIZE   = 200;
     var DEFAULT_TEXT_STRING = "enter text";
-
-    // Highlight defaults
-    var DEFAULT_ANIMATE_ON = 0;
-    var ANIMATE_FRAMES = 30;
-
-    // Watch cadence
-    var WATCH_INTERVAL_MS = 1000; // (disabled watcher) kept for legacy
-
-    // Pause watcher while user is editing/has text selected
-    var EDIT_PAUSE_MS = 5000;
 
     // ===== Small helpers =====
     function isComp(item){ return (item && (item instanceof CompItem)); }
@@ -2021,12 +1729,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         return s;
     }
 
-    function addColor(fx, name, rgb) {
-        var c = fx.addProperty("ADBE Color Control");
-        c.name = name;
-        try { c.property(1).setValue(rgb); } catch (e) {}
-        return c;
-    }
 
     function addCheck(fx, name, onVal) {
         var cb = fx.addProperty("ADBE Checkbox Control");
@@ -2035,48 +1737,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         return cb;
     }
 
-    function removeAllKeys(prop) {
-        try { while (prop && prop.numKeys > 0) prop.removeKey(1); } catch (e) {}
-    }
-
-    function runEasyEaseMenuOnKeys(prop, keys, owningLayer) {
-        // Runs AE menu command: Animation > Keyframe Assistant > Easy Ease
-        // This relies on UI selection, so we temporarily select the layer/property/keys.
-        try {
-            if (!prop || !keys || keys.length === 0) return;
-
-            var cmd = 0;
-            try { cmd = app.findMenuCommandId("Easy Ease"); } catch (e0) { cmd = 0; }
-            if (!cmd) {
-                // Some AE builds/locales may not find it; try the older name.
-                try { cmd = app.findMenuCommandId("Easy ease"); } catch (e1) {}
-            }
-            if (!cmd) return;
-
-            // Try to ensure the owning layer is selected in the active comp
-            try {
-                if (owningLayer && owningLayer.containingComp) {
-                    var comp = owningLayer.containingComp;
-                    // Deselect other layers to avoid applying to unintended keys
-                    try {
-                        for (var i=1; i<=comp.numLayers; i++) comp.layer(i).selected = false;
-                    } catch (eD) {}
-                    owningLayer.selected = true;
-                }
-            } catch (e2) {}
-
-            // Select the property (UI) and keys
-            try { prop.selected = true; } catch (e3) {}
-            for (var k=0; k<keys.length; k++) {
-                try { prop.setSelectedAtKey(keys[k], true); } catch (e4) {}
-            }
-
-            // Execute command
-            app.executeCommand(cmd);
-
-            // Optional cleanup: leave selection as-is (users often don't mind).
-        } catch (e) {}
-    }
 
     // ----- Find layers in a comp -----
     function findTaggedTextLayer(comp) {
@@ -2126,10 +1786,6 @@ function _stPlaceLayerAtCTI(layer, comp) {
         } catch (e) {}
     }
 
-/* =========================
-   NOTE: Legacy list helpers removed; ShineTools now uses the unified
-   ========================= */
-
 function syncNamesForPrecompLayer(precompLayer) {
         // Previously, this auto-renamed the precomp layer + the precomp itself
         // to match the first 3 words of the text. This caused comps to be renamed
@@ -2149,95 +1805,9 @@ function syncNamesForPrecompLayer(precompLayer) {
         } catch (e) {}
     }
 
-    function findTaggedPrecompLayersInComp(comp) {
-        var out = [];
-        if (!isComp(comp)) return out;
-        for (var i=1; i<=comp.numLayers; i++) {
-            var lyr = comp.layer(i);
-            if (!lyr) continue;
-            try {
-                if (lyr.comment === TAG_PRECOMP_LAYER && lyr.source && isComp(lyr.source)) out.push(lyr);
-            } catch (e) {}
-        }
-        return out;
-    }
-
-    function findBoxLayersInComp(comp) {
-        var out = [];
-        if (!isComp(comp)) return out;
-        for (var i=1; i<=comp.numLayers; i++) {
-            var lyr = comp.layer(i);
-            if (!lyr) continue;
-            try {
-                if (isShapeLayer(lyr) && (lyr.comment === TAG_BOX_LAYER || String(lyr.name).toLowerCase() === "text box")) out.push(lyr);
-            } catch (e) {}
-        }
-        return out;
-    }
 
     // ----- Highlight / Reveal helpers -----
-    function getAnimateCheckboxValue(boxLayer) {
-        try {
-            var fx = boxLayer.property("ADBE Effect Parade");
-            if (!fx) return 0;
-            if (!eff) return 0;
-            return eff.property(1).value;
-        } catch (e) { return 0; }
-    }
 
-    function getRevealSlider(boxLayer) {
-        try {
-            var fx = boxLayer.property("ADBE Effect Parade");
-            if (!fx) return null;
-            var e = fx.property("Animate %");
-            if (!e) return null;
-            return e.property(1);
-        } catch (e) { return null; }
-    }
-
-    function ensureAnimateState(boxLayer) {
-
-        // Patched: ANIMATE toggle removed. Do not auto-manage keys.
-        return;
-try {
-            if (!boxLayer || !isShapeLayer(boxLayer)) return;
-            var comp = boxLayer.containingComp;
-            if (!isComp(comp)) return;
-
-            var reveal = getRevealSlider(boxLayer);
-            if (!reveal) return;
-
-            var on = (getAnimateCheckboxValue(boxLayer) === 1);
-
-            var id = "L" + String(boxLayer.id);
-            if (!mod.__animState) mod.__animState = {};
-            var prev = (mod.__animState[id] === undefined) ? -1 : mod.__animState[id];
-
-            if (on) {
-                // Only build keys if they are missing (do NOT retime existing keys)
-                if (reveal.numKeys < 2) {
-                    if (reveal.numKeys > 0) removeAllKeys(reveal);
-
-                    var t0 = Math.max(comp.time, boxLayer.inPoint);
-                    var t1 = t0 + (ANIMATE_FRAMES / comp.frameRate);
-
-                    reveal.setValueAtTime(t0, 0);
-                    reveal.setValueAtTime(t1, 100);
-
-                    // Since we just created them, they are key 1 and 2
-                    if (reveal.numKeys >= 2) {
-                        // Run the actual AE menu command on both keys
-                        runEasyEaseMenuOnKeys(reveal, [1,2], boxLayer);
-                    }
-                }
-            } else {
-                if (reveal.numKeys > 0) removeAllKeys(reveal);
-                try { reveal.setValue(100); } catch (eSet) {}
-            }
-
-            mod.__animState[id] = on ? 1 : 0;
-        } catch (e) {}
-    }
 
     // Public helper: enable ANIMATE + build Animate % keys immediately (used by TEXT BOX Option-click)
     mod.__enableRevealAnim = function(compId, boxIndex) {
@@ -2398,8 +1968,6 @@ var precompLayer = parentComp.layer(insertAt);
                 //     run "Open Layer" (like double-clicking the layer), then select "TEXT BOX" inside.
                 try {
                     var _pcId = pc.id;
-                    var _parentId = parentCompId;
-                    var _layerIndex = insertAt;
 
                     // Select "TEXT BOX" layer inside a given comp
                                         var _cmdSelectInside = "try{"
@@ -2451,7 +2019,6 @@ var precompLayer = parentComp.layer(insertAt);
                         + "}"
                         + "}catch(e){}";
 
-                    // Run directly (scheduleTask removed by request).
                     try { eval(_cmdOpenPrecompAndSelect); } catch (eSelPass1) {}
                     try { eval(_cmdOpenPrecompAndSelect); } catch (eSelPass2) {}
                     try { eval(_cmdSelectInside); } catch (eSelInside1) {}
@@ -2577,10 +2144,10 @@ var precompLayer = parentComp.layer(insertAt);
 
         app.endUndoGroup();
 
-        // Apply expressions + precompose directly (scheduleTask removed by request)
-        try { $.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.applyExpressions(compId, bi); }); } catch (eApplyNow) {}
+        // Apply expressions and precompose directly.
+        try { __ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.applyExpressions(compId, bi); }); } catch (eApplyNow) {}
 
-        try { $.global.__ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.precomposeTextBox(compId, ti, bi, initialName); }); } catch (ePreNow) {}
+        try { __ST_withModalSafety__(function(){ $.global.ShineTools.TextBox.precomposeTextBox(compId, ti, bi, initialName); }); } catch (ePreNow) {}
             // TextBox watcher removed (no continuous polling needed)
 };
 
@@ -2788,25 +2355,10 @@ try {
         var existing = findFootageByFile(fileObj);
         if (existing) return existing;
 
-        // MODAL DIAGNOSTIC:
-        // Import can show AE's native progress UI for a while. Treat it like a long host op
-        // and make sure ShineTools has no hover/dropdown/UI task waiting to touch ScriptUI
-        // immediately after AE returns.
-        try { if ($.global.__ShineTools_CancelHoverPoll__) $.global.__ShineTools_CancelHoverPoll__(); } catch (eH) {}
-        try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD0) {}
-        try { $.global.__ST_LONGOP__ = true; } catch (eL0) {}
-        try {
-            var io = new ImportOptions(fileObj);
-            return app.project.importFile(io);
-        } finally {
-            try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD1) {}
-            try { $.global.__ST_LONGOP__ = false; } catch (eL1) {}
-        }
+        var io = new ImportOptions(fileObj);
+        return app.project.importFile(io);
     }
 
-    var FAV_SETTINGS_SECTION = "ShineTools";
-    var FAV_SETTINGS_KEY     = "";
-    var FAV_MAX              = 50;
     var FAV_DEFAULT_START_FOLDER = "/Volumes/EDIT DRIVE 8TB/_LIBRARY ELEMENTS";
 
 var FAV_DEFAULT_START_FOLDER_NAME = "LIBRARY ELEMENTS_1"; // preferred start folder (mounted volume)
@@ -2957,26 +2509,11 @@ var FAV_DEFAULT_START_FOLDER_NAME = "LIBRARY ELEMENTS_1"; // preferred start fol
     }
 
     // TEXT TAB: ANIMATIONS BAR (preset list)
-    var ANIM_SETTINGS_SECTION = "ShineTools";
-    var ANIM_SETTINGS_KEY     = "text_animations_ffx_v1";
-    var ANIM_BUNDLED_ORDER_KEY = "text_animations_bundled_order_v1";
-    var ANIM_MAX              = 50;
 
     // Bundled Text Animator presets (shipped with ShineTools)
     // These are shown at the top of the TEXT ANIMATORS dropdown, above a divider.
     // User-added items are stored separately via animLoad()/animSave().
     var ANIM_BUNDLED_SUBFOLDER = "presets/text";
-    var ANIM_BUNDLED_DEFAULTS = [
-        "Blinking Cursor.ffx",
-        "Blur and Fade In.ffx",
-        "Contract.ffx",
-        "Decrease Tracking.ffx",
-        "Flicker Exposure.ffx",
-        "Increase Tracking.ffx",
-        "Opacity Flicker In.ffx",
-        "Slide and Pop In.ffx",
-        "Typewriter.ffx"
-    ];
 
     function _stResolveBundledTextPresetFolder() {
 
@@ -3154,147 +2691,31 @@ try {
     return out;
 }
 
-    function _favParse(str) {
-        if (!str) return [];
-        try {
-            var v = JSON.parse(str);
-            return (v && v.length) ? v : [];
-        } catch (e) {}
-        var parts = String(str).split("|");
-        var out = [];
-        for (var i = 0; i < parts.length; i++) if (parts[i]) out.push(parts[i]);
-        return out;
-    }
-
-    // ------------------------------------------------------------
-
-    // ------------------------------------------------------------
-    // File / path helpers (macOS-only)
-    // ------------------------------------------------------------
-    function _pathExists(pathStr) {
-        if (!pathStr) return false;
-        try {
-            var f = new File(pathStr);
-            if (f.exists) return true;
-        } catch (e1) {}
-        try {
-            var d = new Folder(pathStr);
-            if (d.exists) return true;
-        } catch (e2) {}
-        return false;
-    }
-
-// Session-only list helpers
-    // ------------------------------------------------------------
-    function _listParseCompat(raw) {
-        if (!raw) return [];
-        // Prefer JSON (current format)
-        var arr = _favParse(raw);
-        if (arr && arr.length) return arr;
-
-        // Legacy parse fallback retained only so old in-memory strings do not error
-        // e.g. "['/path/a.ffx','/path/b.ffx']"
-        try {
-            // eslint-disable-next-line no-eval
-            var v = eval(raw);
-            if (v && v.length) return v;
-        } catch (e) {}
-        return [];
-    }
-
+    // Normalize paths imported from dialogs or legacy URI-style values.
     function _normalizePath(p) {
         try {
             if (!p) return "";
             p = String(p);
-
-            // Convert file:// URIs into a usable filesystem path
             if (p.indexOf("file://") === 0) {
                 try { return (new File(p)).fsName; } catch (e0) {}
             }
-
-            // Decode URL-encoded characters (e.g., %20) that sometimes get stored in prefs
             if (p.indexOf("%") !== -1) {
                 try {
-                    // decodeURIComponent will throw if malformed; fall back gracefully
-                    var dec = decodeURIComponent(p);
-                    if (dec && dec.length) p = dec;
+                    var decoded = decodeURIComponent(p);
+                    if (decoded) p = decoded;
                 } catch (e1) {
-                    // minimal common fix
                     p = p.replace(/%20/g, " ");
                 }
             }
-
             return p;
         } catch (e) {}
         return String(p || "");
     }
 
-function _listClean(arr, maxLen) {
-        var clean = [];
-        var seen = {};
-        try {
-            for (var i = 0; i < arr.length; i++) {
-                var p = _normalizePath(arr[i] || "");
-                if (!p) continue;
-                if (seen[p]) continue;
-                seen[p] = true;
-                clean.push(p);
-                if (maxLen && clean.length >= maxLen) break;
-            }
-        } catch (e) {}
-        return clean;
-    }
-
-    function _listLoad(section, key, maxLen) {
-        try {
-            // Load without pruning first, then prune missing files.
-            var arr = _listLoadChunked(section, key, maxLen);
-
-            // Prune missing files ONLY if they are actually missing; never prune due to encoding.
-            var out = [];
-            for (var i = 0; i < arr.length; i++) {
-                var p = _normalizePath(arr[i]);
-                if (!p) continue;
-                try {
-                    var f = new File(p);
-                    if (f && f.exists) out.push(p);
-                    else out.push(p); // keep even if missing (user can Clear Favorites)
-                } catch (e1) {
-                    out.push(p);
-                }
-                if (maxLen && out.length >= maxLen) break;
-            }
-
-            // Save back the normalized list (keeps both stores in sync)
-            _listSave(section, key, out, maxLen);
-
-            return out;
-        } catch (e) {}
+    function _stArrayCopy(value) {
+        try { return (value && value.slice) ? value.slice(0) : []; } catch (e) {}
         return [];
     }
-
-    function _listLoadNoPrune(section, key, maxLen) {
-    // Session-only loader.
-    return [];
-}
-
-// --- Session-only list storage (UI list persistence removed) ---
-function _listLoadChunked(section, keyBase, maxLen) {
-    // Do not read favorites or text animator lists from saved settings.
-    return [];
-}
-
-function _listSaveChunked(section, keyBase, arr, maxLen) {
-    // Keep runtime list behavior only; do not save any UI state.
-    try { return _listClean(arr || [], maxLen); } catch (e) {}
-    return [];
-}
-
-function _listSave(section, key, arr, maxLen) {
-    // Session-only list pass-through.
-    try { return _listSaveChunked(section, key, arr, maxLen); } catch (e) {}
-    return [];
-}
 
     var __ST_SESSION_MAIN_FAVORITES__ = [];
 var __ST_SESSION_MAIN_FAVORITES_SHOW_ORIGINAL__ = false;
@@ -3329,21 +2750,6 @@ function _animLabelGet(id) {
     try { if (__ST_SESSION_TEXT_LABELS__ && __ST_SESSION_TEXT_LABELS__.hasOwnProperty(key)) return String(__ST_SESSION_TEXT_LABELS__[key] || ""); } catch (e0) {}
     return "";
 }
-function _animLabelSet(id, label) {
-    var key = _animNormalizeEntryId(id);
-    if (!key || _animIsDividerToken(key)) return;
-    try {
-        if (!__ST_SESSION_TEXT_LABELS__) __ST_SESSION_TEXT_LABELS__ = {};
-        var clean = String(label || "").replace(/^\s+|\s+$/g, "");
-        if (clean) __ST_SESSION_TEXT_LABELS__[key] = clean;
-        else delete __ST_SESSION_TEXT_LABELS__[key];
-    } catch (e) {}
-}
-function _animLabelDelete(id) {
-    var key = _animNormalizeEntryId(id);
-    if (!key) return;
-    try { if (__ST_SESSION_TEXT_LABELS__ && __ST_SESSION_TEXT_LABELS__.hasOwnProperty(key)) delete __ST_SESSION_TEXT_LABELS__[key]; } catch (e) {}
-}
 function _animLabelMapReplace(mapObj) {
     try { __ST_SESSION_TEXT_LABELS__ = _animLabelMapClone(mapObj || {}); } catch (e) { __ST_SESSION_TEXT_LABELS__ = {}; }
 }
@@ -3353,16 +2759,14 @@ function _animLabelMapLoad() {
 }
 
 function favLoad() {
-        var arr = [];
-        try { arr = (__ST_SESSION_MAIN_FAVORITES__ && __ST_SESSION_MAIN_FAVORITES__.slice) ? __ST_SESSION_MAIN_FAVORITES__.slice(0) : []; } catch (eFavMem) { arr = []; }
-        if (!arr || !(arr instanceof Array)) arr = [];
+        var arr = _stArrayCopy(__ST_SESSION_MAIN_FAVORITES__);
         try { arr = _favEnsureDefaultDividers(arr || []); } catch (eFavDiv) {}
         return arr || [];
     }
 
     function favSave(arr) {
         try { arr = _favEnsureDefaultDividers(arr || []); } catch (eFavDiv2) {}
-        try { __ST_SESSION_MAIN_FAVORITES__ = (arr && arr.slice) ? arr.slice(0) : (arr || []); } catch (eFavSet) {}
+        __ST_SESSION_MAIN_FAVORITES__ = _stArrayCopy(arr);
     }
 
     function favAddPath(pathStr) {
@@ -3398,16 +2802,14 @@ function favLoad() {
     function favClear() { favSave([]); }
 
     function animLoad() {
-        var arr = [];
-        try { arr = (__ST_SESSION_TEXT_FAVORITES__ && __ST_SESSION_TEXT_FAVORITES__.slice) ? __ST_SESSION_TEXT_FAVORITES__.slice(0) : []; } catch (eAnimMem) { arr = []; }
-        if (!arr || !(arr instanceof Array)) arr = [];
+        var arr = _stArrayCopy(__ST_SESSION_TEXT_FAVORITES__);
         try { arr = _animEnsureDefaultDividers(arr || []); } catch (eAnimDiv) {}
         return arr || [];
     }
 
     function animSave(arr) {
         try { arr = _animEnsureDefaultDividers(arr || []); } catch (eAnimDiv2) {}
-        try { __ST_SESSION_TEXT_FAVORITES__ = (arr && arr.slice) ? arr.slice(0) : (arr || []); } catch (eAnimSet) {}
+        __ST_SESSION_TEXT_FAVORITES__ = _stArrayCopy(arr);
     }
 
     function animClear() { animSave([]); try { animUnifiedOrderSave([]); } catch (eAnimClrU) {} }
@@ -3422,25 +2824,19 @@ function favLoad() {
     }
 
     function animBundledOrderLoad() {
-        var arr = [];
-        try { arr = (__ST_SESSION_TEXT_BUNDLED_ORDER__ && __ST_SESSION_TEXT_BUNDLED_ORDER__.slice) ? __ST_SESSION_TEXT_BUNDLED_ORDER__.slice(0) : []; } catch (eBundMem) { arr = []; }
-        if (!arr || !(arr instanceof Array)) arr = [];
-        return arr || [];
+        return _stArrayCopy(__ST_SESSION_TEXT_BUNDLED_ORDER__);
     }
 
     function animBundledOrderSave(arr) {
-        try { __ST_SESSION_TEXT_BUNDLED_ORDER__ = (arr && arr.slice) ? arr.slice(0) : (arr || []); } catch (eBundSet) {}
+        __ST_SESSION_TEXT_BUNDLED_ORDER__ = _stArrayCopy(arr);
     }
 
     function animUnifiedOrderLoad() {
-        var arr = [];
-        try { arr = (__ST_SESSION_TEXT_UNIFIED_ORDER__ && __ST_SESSION_TEXT_UNIFIED_ORDER__.slice) ? __ST_SESSION_TEXT_UNIFIED_ORDER__.slice(0) : []; } catch (eUniMem) { arr = []; }
-        if (!arr || !(arr instanceof Array)) arr = [];
-        return arr || [];
+        return _stArrayCopy(__ST_SESSION_TEXT_UNIFIED_ORDER__);
     }
 
     function animUnifiedOrderSave(arr) {
-        try { __ST_SESSION_TEXT_UNIFIED_ORDER__ = (arr && arr.slice) ? arr.slice(0) : (arr || []); } catch (eUniSet) {}
+        __ST_SESSION_TEXT_UNIFIED_ORDER__ = _stArrayCopy(arr);
     }
 
     function _applyPathOrder(paths, savedOrder) {
@@ -3675,8 +3071,7 @@ function favLoad() {
                 try { btn.graphics.font = ScriptUI.newFont('Helvetica', 'BOLD', 13); } catch (eF) {
                     try { btn.graphics.font = ScriptUI.newFont(btn.graphics.font.name, 'Bold', 13); } catch (eF2) {}
                 }
-                try { defocusButtonBestEffort(btn); } catch (eDF) {}
-                btn.onClick = function () {
+btn.onClick = function () {
                     try { btn.active = false; } catch (eA0) {}
                     try { if (typeof wrap.__onActivate === 'function') wrap.__onActivate(); } catch (eAct) {}
                     try { btn.active = false; } catch (eA1) {}
@@ -3708,8 +3103,7 @@ function favLoad() {
                 b.preferredSize = [0, __dlgBtnH2];
                 b.minimumSize   = [minW || __dlgMinW2, __dlgBtnH2];
                 b.maximumSize   = [10000, __dlgBtnH2];
-                try { defocusButtonBestEffort(b); } catch (eDF2) {}
-                return { cell: cell, btn: b };
+return { cell: cell, btn: b };
             }
 
             var __controlsLeadSpacer = controls.add('statictext', undefined, '   ');
@@ -4123,10 +3517,7 @@ function favLoad() {
                     var ok = __moveOkPack.btn;
                     var __moveCancelPack = __makeDlgCellBtn__(row, "Cancel", 90);
                     var cancel = __moveCancelPack.btn;
-                    try { defocusButtonBestEffort(ok); } catch (eMoveOkDF) {}
-                    try { defocusButtonBestEffort(cancel); } catch (eMoveCancelDF) {}
-
-                    var chosenIndex = -1;
+var chosenIndex = -1;
                     ok.onClick = function () {
                         if (!dd.selection) return;
                         try { chosenIndex = dd.selection.index; } catch (eDDIndex) { chosenIndex = -1; }
@@ -5109,32 +4500,6 @@ var solidIdsBefore = {};
         }
     }
 
-    function addWhiteSolidDefault() {
-        var c = requireComp();
-        if (!c) return;
-
-        app.beginUndoGroup("ShineTools - ADD WHITE SOLID");
-        try {
-            var __stRefLayer = null;
-            try { if (c.selectedLayers && c.selectedLayers.length) __stRefLayer = c.selectedLayers[0]; } catch (eRef) {}
-
-            // Create a plain white solid with no dialog
-            var white = ST_CONST.COLORS.WHITE_RGB;
-            var name = "WHITE SOLID";
-            var lay = c.layers.addSolid(white, name, c.width, c.height, c.pixelAspect, c.duration);
-            /* selection set after placement */
-
-            _stPlaceLayerAtCTI(lay, c);
-            try { if (__stRefLayer) lay.moveBefore(__stRefLayer); } catch (eMv) {}
-            try { lay.selected = true; } catch (eSel) {}
-// Ensure the underlying solid footage item lives in SOLIDS (all caps)
-            _stPlaceLayerSourceInSolidsFolder(lay);
-} catch (err) {
-            warn("Error: " + err.toString());
-        } finally {
-            app.endUndoGroup();
-        }
-    }
     function addNullDefault() {
         var c = requireComp();
         if (!c) return;
@@ -5203,92 +4568,6 @@ _stPlaceLayerSourceInSolidsFolder(adj);
     // ============================================================
     // 6) EXPRESSIONS
     // ============================================================
-    function addTrimPaths() {
-        var c = requireComp();
-        if (!c) return;
-
-        var __stRefLayer = (c.selectedLayers && c.selectedLayers.length) ? c.selectedLayers[0] : null;
-        var t0 = c.time;
-        var t1 = t0 + 1.0;
-
-        app.beginUndoGroup("ShineTools - ADD TRIM PATHS");
-        try {
-            var lineLen = Math.round(c.width * 0.9);
-            var strokeW = 100;
-
-            var lyr = c.layers.addShape();
-            lyr.name = "Trim Line";
-            lyr.property("Transform").property("Position").setValue([c.width / 2, c.height / 2]);
-
-            // CTI START: set layer start BEFORE keyframes so the first keyframe lands at the CTI
-            try {
-                var __stDelta0 = t0 - lyr.inPoint;
-                lyr.startTime += __stDelta0;
-                lyr.inPoint = t0;
-                // Ensure the layer lasts long enough for the 30f animation
-                try {
-                    if (lyr.outPoint < t1) lyr.outPoint = Math.min(c.duration, t1 + (1.0 / c.frameRate));
-                } catch (eOP0) {}
-            } catch (eTimeTL0) {}
-
-            var root = lyr.property("ADBE Root Vectors Group");
-            var grp = root.addProperty("ADBE Vector Group");
-            grp.name = "Line Group";
-            var grpContents = grp.property("ADBE Vectors Group");
-
-            var pathProp = grpContents.addProperty("ADBE Vector Shape - Group");
-            var shp = new Shape();
-            shp.vertices = [[-lineLen / 2, 0], [lineLen / 2, 0]];
-            shp.inTangents = [[0, 0], [0, 0]];
-            shp.outTangents = [[0, 0], [0, 0]];
-            shp.closed = false;
-            pathProp.property("ADBE Vector Shape").setValue(shp);
-
-            var stroke = grpContents.addProperty("ADBE Vector Graphic - Stroke");
-            stroke.property("ADBE Vector Stroke Color").setValue(ST_CONST.COLORS.WHITE_RGB);
-            stroke.property("ADBE Vector Stroke Width").setValue(strokeW);
-            stroke.property("ADBE Vector Stroke Line Cap").setValue(1);
-
-            var trim = grpContents.addProperty("ADBE Vector Filter - Trim");
-            var endProp = trim.property("ADBE Vector Trim End");
-
-            endProp.setValueAtTime(t0, 0);
-            endProp.setValueAtTime(t1, 100);
-
-            endProp.setInterpolationTypeAtKey(1, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
-            endProp.setInterpolationTypeAtKey(2, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
-
-            endProp.setTemporalEaseAtKey(1, [new KeyframeEase(0, 66)], [new KeyframeEase(0, 66)]);
-            endProp.setTemporalEaseAtKey(2, [new KeyframeEase(0, 85)], [new KeyframeEase(0, 17)]);
-
-            // Place Trim Line above the originally selected layer (if any)
-            try {
-                if (__stRefLayer) {
-                    lyr.moveBefore(__stRefLayer);
-                } else {
-                    lyr.moveToBeginning();
-                }
-            } catch (eMoveTL) {
-                try { lyr.moveToBeginning(); } catch (eMoveTL2) {}
-            }
-
-            // Make the layer bar start at the CTI
-            try {
-                var __stDelta = t0 - lyr.inPoint;
-                lyr.startTime += __stDelta;
-                lyr.inPoint = t0;
-                // Preserve outPoint if possible; clamp to comp duration
-                try {
-                    if (lyr.outPoint < t0) lyr.outPoint = Math.min(c.duration, t0 + 1.0);
-                } catch (eOP) {}
-            } catch (eTimeTL) {}
-
-        } catch (err) {
-            warn("Error: " + err.toString());
-        } finally {
-            app.endUndoGroup();
-        }
-    }
 
     // Option-click helper for ANIMATE STROKE: add Trim Paths to the SELECTED shape layer
     // and animate End 0→100 over 30 frames (starting at the CTI) with Easy Ease.
@@ -5590,7 +4869,6 @@ _stPlaceLayerSourceInSolidsFolder(adj);
     }
 
     function addTrimLineAnimateEnd_30f() { _addTrimLineAndAnimate_30f("END"); }
-    function addTrimLineAnimateStart_30f() { _addTrimLineAndAnimate_30f("START"); }
 
     function hardBounceExpr() {
         return [
@@ -5819,30 +5097,43 @@ _stPlaceLayerSourceInSolidsFolder(adj);
     }
 
     function trimLayerToNeighbor(trimToAboveOverride) {
+
         var c = requireComp();
-        if (!c) return;
+        if (!c) {  return; }
 
         var layers = c.selectedLayers;
         if (!layers || layers.length === 0) {
+
             alert("Select one or more layers to trim.");
             return;
         }
 
+        // Copy selected layers into a normal array first. This avoids relying on AE's live
+        // selectedLayers collection while layer in/out points are being edited.
+        var layerList = [];
+        try {
+            for (var copyI = 0; copyI < layers.length; copyI++) {
+                if (layers[copyI]) layerList.push(layers[copyI]);
+            }
+        } catch (eCopyLayers) {}
+        if (!layerList.length) {  return; }
+
         // Explicit buttons can force the mode; legacy modifier-click still works if no override is passed.
-        var trimToAbove = (trimToAboveOverride === true) ? true : ((trimToAboveOverride === false) ? false : isOptionDown());
+        var trimToAbove = (trimToAboveOverride === true) ? true : ((trimToAboveOverride === false) ? false : _isOptDown());
+
 
         // Build a quick lookup so we can skip over selected layers
         var selectedIndex = {};
         try {
-            for (var s = 0; s < layers.length; s++) {
-                try { selectedIndex[layers[s].index] = true; } catch (eIdx) {}
+            for (var s = 0; s < layerList.length; s++) {
+                try { selectedIndex[layerList[s].index] = true; } catch (eIdx) {}
             }
         } catch (eMap) {}
 
         app.beginUndoGroup("ShineTools - TRIM LAYER");
         try {
-            for (var i = 0; i < layers.length; i++) {
-                var lyr = layers[i];
+            for (var i = 0; i < layerList.length; i++) {
+                var lyr = layerList[i];
                 if (!lyr) continue;
 
                 var idx = lyr.index;
@@ -5867,7 +5158,8 @@ _stPlaceLayerSourceInSolidsFolder(adj);
                 } catch (e) {}
             }
         } finally {
-            app.endUndoGroup();
+            try { app.endUndoGroup(); } catch(eEndTrim) {}
+
         }
     }
 
@@ -6112,46 +5404,6 @@ function rawChildNeedAbs(parentComp, parentPrecompLayer, parentTargetEndAbs){
     return childAbs;
   }
 
-function maybeRecurseThroughLayer(precompLayer){
-      if(!precompLayer || !isAVLayer(precompLayer)) return;
-      var src = null;
-      try{ src = precompLayer.source; }catch(_e){}
-      if(!isCompItem(src)) return;
-
-      var key = String(src.id);
-      if(!seen[key]) seen[key] = {maxEnd:-1};
-
-      // Compute child target end (absolute in child comp time)
-      var childTargetAbs = rawChildNeedAbs(parentComp, precompLayer, parentTargetEndAbs);
-
-      // Force child to at least reach the same absolute end as parentTargetAbs when displayStartTime=0 scenarios.
-      // (This helps if you want "open the child at the same CTI" behavior.)
-      if(opts.forceSameAbsEnd){
-        childTargetAbs = Math.max(childTargetAbs, parentTargetEndAbs);
-      }
-
-      if(opts.verbose){
-        var st=0, stretch=100;
-        try{ st = precompLayer.startTime; }catch(_e2){}
-        try{ stretch = precompLayer.stretch; }catch(_e3){}
-        log.push(indent + '  LAYER[' + precompLayer.index + ']: ' + precompLayer.name + ' | startTime=' + st + ' | stretch=' + stretch);
-        log.push(indent + '    childTargetAbs=' + childTargetAbs + ' | childDur=' + src.duration + ' | childDisplayStart=' + src.displayStartTime);
-      }
-
-      // Extend child if needed
-      if(childTargetAbs > seen[key].maxEnd + (parentComp.frameDuration*0.25)){
-        seen[key].maxEnd = childTargetAbs;
-        extendRecursive(src, childTargetAbs, null, opts, depth+1, seen, log);
-      }
-
-      // Hard refresh the precomp layer instance in the parent comp (optional)
-      if(opts.hardRefresh){
-        if(opts.verbose) log.push(indent + '    hardRefresh: ' + precompLayer.name);
-        var newLayer = hardRefreshLayer(precompLayer);
-        // nothing else needed
-      }
-    }
-
 function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, seen, log){
     depth = depth || 0;
     if(depth > 50) return; // safety
@@ -6235,9 +5487,6 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
     // UTILITIES: PHOTO BORDERS (FINAL IMPLEMENTATIONS)
     // --------------------------------------------------
 
-    function isAVLayer(layer) {
-        return layer && (layer instanceof AVLayer);
-    }
     function ensureEffect(layer, matchName, displayName, defaultValue) {
         try {
             var fx = layer.property("Effects");
@@ -6396,7 +5645,7 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
         try {
             if (forceRefit === true) __stDoRefit = true;
             else if (forceRefit === false) __stDoRefit = false;
-            else __stDoRefit = isOptionDown();
+            else __stDoRefit = _isOptDown();
         } catch (eRefitOpt) { __stDoRefit = false; }
 
         if (__stDoRefit) {
@@ -6600,25 +5849,7 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
     // ============================================================
     // 8) RENDER
     // ============================================================
-    function renderQueueSolo(rqItem) {
-        var rq = app.project.renderQueue;
-        var prev = [];
-        for (var i = 1; i <= rq.numItems; i++) {
-            prev[i] = rq.item(i).render;
-            rq.item(i).render = false;
-        }
-        rqItem.render = true;
 
-        rq.render();
-
-        for (var j = 1; j <= rq.numItems; j++) {
-            try { rq.item(j).render = prev[j]; } catch (eR) {}
-        }
-    }
-
-    function safeFileName(name) {
-        try { return String(name).replace(/[\\\/\:\*\?\"\<\>\|]/g, "_"); } catch (e) { return "output"; }
-    }
 
     function revealInOS(fileObj) {
         try {
@@ -6656,24 +5887,7 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
         return null;
     }
 
-    function forceRGBAlphaIfPossible(om) {
-        // Best-effort: If template doesn't already set alpha, try to enforce it.
-        // This may fail silently depending on AE/format settings.
-        try {
-            var s = om.getSettings(GetSettingsFormat.OBJECT);
-            if (s && s.OutputModuleSettings) {
-                if (s.OutputModuleSettings.Channels !== undefined) s.OutputModuleSettings.Channels = "RGB+Alpha";
-                if (s.OutputModuleSettings["Channels"] !== undefined) s.OutputModuleSettings["Channels"] = "RGB+Alpha";
-
-                if (s.OutputModuleSettings.Depth !== undefined) s.OutputModuleSettings.Depth = "Millions of Colors+";
-                if (s.OutputModuleSettings["Depth"] !== undefined) s.OutputModuleSettings["Depth"] = "Millions of Colors+";
-
-                om.setSettings(s);
-            }
-        } catch (e) {}
-    }
-
-    function renderPRORES422WithSaveDialog(use4444Override, queueOnlyOverride) {
+    function renderPRORES422(queueOnly) {
         var undoOpen = false;
 
         try {
@@ -6682,78 +5896,55 @@ function extendRecursive(parentComp, parentTargetEndAbs, layer, opts, depth, see
             var c = requireComp();
             if (!c) return;
 
-            // Explicit buttons can force the mode; legacy modifier-click still works if no override is passed.
-            var ks = ScriptUI.environment.keyboardState;
-            var use4444 = (use4444Override === true) ? true : ((use4444Override === false) ? false : (ks && ks.altKey === true));
-            var queueOnly = (queueOnlyOverride === true) ? true : ((queueOnlyOverride === false) ? false : (ks && ks.shiftKey === true));
+            // Normal click renders immediately; Option-click only adds the item to the queue.
+            queueOnly = (queueOnly === true);
 
-var rsTemplate = "Best Settings"; // Always Best Settings
-            var omTemplateCandidates = use4444
-                ? [
-                    "PRORES 4444 RGB+ALPHA",
-                    "PRORES 4444 RGB+ALPHA (Straight)",
-                    "PRORES 4444",
-                    "Apple ProRes 4444",
-                    "ProRes 4444"
-                ]
-                : [
-                    "PRORES 422",
-                    "Apple ProRes 422",
-                    "ProRes 422",
-                    "PRORES 422 HQ",
-                    "Apple ProRes 422 HQ"
-                ];
+            var rsTemplate = "Best Settings";
+            var omTemplateCandidates = [
+                "PRORES 422",
+                "Apple ProRes 422",
+                "ProRes 422",
+                "PRORES 422 HQ",
+                "Apple ProRes 422 HQ"
+            ];
 
             app.beginUndoGroup("ShineTools - PRORES Render");
             undoOpen = true;
 
-            // Add comp to Render Queue
             var rqItem = app.project.renderQueue.items.add(c);
 
-            // Render Settings = Best Settings
             try { rqItem.applyTemplate(rsTemplate); } catch (eRS) {}
 
-            // Output Module
             var om = rqItem.outputModule(1);
-
             var appliedName = applyFirstMatchingOMTemplate(om, omTemplateCandidates);
 
             if (!appliedName) {
-                if (use4444) {
-                    alert(
-                        "Could not find a PRORES 4444 (RGB+ALPHA) Output Module template.\n\n" +
-                        "Go to: Edit > Templates > Output Module...\n" +
-                        "Create one (QuickTime + Apple ProRes 4444, Channels: RGB+Alpha)\n" +
-                        "Name it exactly: 'PRORES 4444 RGB+ALPHA' (recommended)."
-                    );
-                } else {
-                    alert(
-                        "Could not find a PRORES 422 Output Module template.\n\n" +
-                        "Go to: Edit > Templates > Output Module...\n" +
-                        "Create/rename one to 'PRORES 422' (recommended)."
-                    );
-                }
+                alert(
+                    "Could not find a PRORES 422 Output Module template.\n\n" +
+                    "Go to: Edit > Templates > Output Module...\n" +
+                    "Create/rename one to 'PRORES 422' (recommended)."
+                );
 
                 try { rqItem.remove(); } catch (eRm) {}
-                app.endUndoGroup(); undoOpen = false;
+                app.endUndoGroup();
+                undoOpen = false;
                 return;
             }
 
-            // Best-effort enforcement of RGB+Alpha when using 4444
-            if (use4444) {
-                forceRGBAlphaIfPossible(om);
+            // Option-click = queue only. Keep AE's normal queued output destination
+            // and do not interrupt the workflow with a save dialog.
+            if (queueOnly) {
+                app.endUndoGroup();
+                undoOpen = false;
+                return;
             }
 
-            // Save dialog (pause hover polling if present)
-            try { if ($.global && $.global.__ShineTools_CancelHoverPoll__) $.global.__ShineTools_CancelHoverPoll__(); } catch (eH) {}
-
-            var suffix = use4444 ? "_PRORES4444_ALPHA.mov" : "_PRORES422mov";
-            var promptTitle = use4444 ? "Save PRORES 4444 (RGB+ALPHA) render as…" : "Save PRORES 422 render as…";
-            var outFile = __ST_saveDialogSafe__(promptTitle, "*.mov");
+            var outFile = __ST_saveDialogSafe__("Save PRORES 422 render as...", "*.mov");
 
             if (!outFile) {
                 try { rqItem.remove(); } catch (eRm2) {}
-                app.endUndoGroup(); undoOpen = false;
+                app.endUndoGroup();
+                undoOpen = false;
                 return;
             }
 
@@ -6763,78 +5954,24 @@ var rsTemplate = "Best Settings"; // Always Best Settings
 
             om.file = outFile;
 
-            // Close undo group BEFORE leaving (avoids mismatch warning)
             app.endUndoGroup();
             undoOpen = false;
 
-            // SHIFT-click = Queue only (no auto-render). Lets you CMD+H / Show Desktop, etc.
-            if (queueOnly) {
-                // IMPORTANT: Do NOT toggle the Render Queue panel here.
-                // The menu command is a toggle (open/close). If the user already has it open,
-                // executing it would close it—which is what you were seeing.
-                // So for SHIFT-click we simply leave the RQ item queued and return.
-                return;
-            }
-
-// Normal click = Auto-render (original behavior), but defer a tick so the Save dialog fully releases.
             try {
-                // Capture whether CMD was held at click-time (since render runs later)
+                // Capture Command at click-time so reveal behavior is not affected by
+                // releasing the key while AE is rendering.
                 var _doReveal = false;
                 try { _doReveal = (typeof _isCmdDown === "function" && _isCmdDown()); } catch (eC) {}
 
-                $.global.__ST_lastRenderOutFileFS = outFile.fsName;
-                $.global.__ST_lastRenderReveal = _doReveal;
+                app.project.renderQueue.render();
 
-                if (!$.global.__ST_RQRenderAndReveal__) {
-                    $.global.__ST_RQRenderAndReveal__ = function () {
-                        try {
-                            var p = $.global.__ST_lastRenderOutFileFS;
-                            var rev = $.global.__ST_lastRenderReveal === true;
-                            var f = (p ? new File(p) : null);
-
-                            try { $.global.__ST_LONGOP__ = true; } catch (eL0) {}
-                            try {
-                                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD0) {}
-                try { $.global.__ST_LONGOP__ = true; } catch (eL0b) {}
-                try {
-                    app.project.renderQueue.render();
-                } finally {
-                    // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
-                    try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD1) {}
-                    try { $.global.__ST_LONGOP__ = false; } catch (eL1b) {}
+                if (_doReveal) {
+                    try { revealInOS(outFile); } catch (eR) {}
                 }
-                            } finally {
-                                // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
-                                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD) {}
-                                try { $.global.__ST_LONGOP__ = false; } catch (eL1) {}
-                                // MODAL DIAGNOSTIC: do not touch ScriptUI immediately after renderQueue.render() returns.
-                                // try { if ($.global && $.global.__ShineTools_RequestFullRelayoutSoon__) $.global.__ShineTools_RequestFullRelayoutSoon__(); } catch (eRL) {}
-                            }
-
-                            if (rev && f) {
-                                try { revealInOS(f); } catch (eR) {}
-                            }
-                        } catch (e) {
-                            alert("Render failed:\n" + e.toString());
-                        }
-                    };
-                }
-
-                try { $.global.__ST_RQRenderAndReveal__(); } catch (eRunNow) {}
-            } catch (eSched) {
-                // Fallback: render immediately if scheduling fails
-                try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD0) {}
-                try { $.global.__ST_LONGOP__ = true; } catch (eL0b) {}
-                try {
-                    app.project.renderQueue.render();
-                } finally {
-                    // UI cooldown after render to avoid post-render ScriptUI edge-case freezes
-                    try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(3000); } catch (eCD1) {}
-                    try { $.global.__ST_LONGOP__ = false; } catch (eL1b) {}
-                }
-                _revealIfRequested(outFile);
+            } catch (eRender) {
+                alert("Render failed:\n" + eRender.toString());
             }
-} catch (err) {
+        } catch (err) {
             if (undoOpen) {
                 try { app.endUndoGroup(); } catch (eEnd) {}
             }
@@ -7000,7 +6137,6 @@ var rsTemplate = "Best Settings"; // Always Best Settings
         _beginSuppress();
         var renderErr = null;
         try { rq.render(); } catch (eRender) { renderErr = eRender; }
-        try { $.sleep(700); } catch (eSleep) {}
         _endSuppress();
 
         // Normalize/cleanup variants and ensure final exists and is non-empty
@@ -8150,10 +7286,6 @@ findOrCreateSubFolder(fPrecomps, "TEXT");
     // ============================================================
 
 // ============================================================
-// Offset Layers Utility (ported from OffsetLayers_Standalone15.jsx)
-// NOTE: Must be in global scope so MAIN > UTILITIES button can call it.
-// ============================================================
-// ============================================================
 // Offset Layers Utility (Frame Offset engine)
 // Ported from: Frame Offset.jsx
 // NOTE: Must be in global scope so MAIN > UTILITIES button can call it.
@@ -8161,7 +7293,7 @@ findOrCreateSubFolder(fPrecomps, "TEXT");
 // Option/Alt: Curve Offset dialog (Square/Cubic/Ease In-Out/Exponential + preview + invert)
 // ============================================================
 
-var ST_FO_MAX_SPREAD_FRAMES = 90; // max total spread for CURVE mode (frames)
+// max total spread for CURVE mode (frames)
 
 function _stFrameOffset_getComp(){ var i=app.project && app.project.activeItem; return (i&&i instanceof CompItem)?i:null; }
 
@@ -8182,7 +7314,6 @@ function _stFrameOffset_addFocusSink(win){
     sink.maximumSize=[0,0]; sink.minimumSize=[0,0];
     return sink;
 }
-function _stFrameOffset_focusSink(sink){ try{ sink && (sink.active=true); }catch(e){} }
 function _stFrameOffset_defocus(btn,sink){
     // Best-effort: remove ScriptUI's blue focus ring by moving focus to a hidden edittext.
     // Some AE ScriptUI builds ignore addEventListener on dialog buttons, so we also set onMouseDown/onMouseUp.
@@ -8201,21 +7332,6 @@ function _stFrameOffset_defocus(btn,sink){
     // Older/quirky ScriptUI fallbacks
     try{ btn.onMouseDown = _do; }catch(eD){}
     try{ btn.onMouseUp   = _do; }catch(eE){}
-}
-
-// Dialog buttons (OK/Cancel) need extra help: explicitly defocus BEFORE closing the dialog.
-function _stFrameOffset_wireDialogBtn(btn, sink, closeFn){
-    if(!btn) return;
-    btn.onClick = function(){
-        try{ _stFrameOffset_defocus(btn, sink); }catch(e0){}
-        try{ btn.active = false; }catch(e1){}
-        try{ if(sink) sink.active = true; }catch(e2){}
-        try{ if(btn.window && btn.window.update) btn.window.update(); }catch(e3){}
-        try{ if(closeFn) closeFn(); }catch(e4){}
-    };
-    // Also hook mouse down/up so the ring doesn't "stick" while the dialog is still open.
-    try{ btn.onMouseDown = function(){ try{ btn.active=false; }catch(e){} try{ if(sink) sink.active=true; }catch(e2){} }; }catch(e5){}
-    try{ btn.onMouseUp   = function(){ try{ btn.active=false; }catch(e){} try{ if(sink) sink.active=true; }catch(e2){} }; }catch(e6){}
 }
 
 // ===================== LINEAR (NORMAL CLICK) =====================
@@ -8369,104 +7485,9 @@ function _stFrameOffset_computeOffsetsFloat(count, totalFrames, typeIdx, curve50
     }
     return out;
 }
-function _stFrameOffset_computeOffsetsRounded(count, totalFrames, typeIdx, curve50, invert){
-    var f = _stFrameOffset_computeOffsetsFloat(count, totalFrames, typeIdx, curve50, invert);
-    var r=[];
-    for(var i=0;i<f.length;i++) r.push(Math.round(f[i]));
-    for(i=1;i<r.length;i++) if(r[i] < r[i-1]) r[i]=r[i-1];
-    return r;
-}
-
-// ---- ASCII preview ----
-var ST_FO_DOT_CHAR = "·";      // background
-var ST_FO_CURVE_DOT = "●";    // curve position (large dot)
-function _stFrameOffset_makeBarLine(pos, cols){
-    if(cols < 18) cols = 18;
-    if(pos < 0) pos = 0;
-    if(pos > cols-1) pos = cols-1;
-    var s="";
-    for(var c=0;c<cols;c++){
-        if(c===pos) s += ST_FO_CURVE_DOT;
-        else s += ST_FO_DOT_CHAR;
-    }
-    return s;
-}
-
-function _stFrameOffset_computeBarPositions(offsets, cols){
-    var max = offsets[offsets.length-1] || 1;
-    var pos=[];
-    for(var i=0;i<offsets.length;i++){
-        pos.push(Math.round((offsets[i]/max)*(cols-1)));
-    }
-    return pos;
-}
-function _stFrameOffset_measureLineWidth(st, cols){
-    try{
-        // Worst-case width estimate: mostly ST_FO_DOT_CHAR with at least one ST_FO_CURVE_DOT.
-        // Some fonts render ST_FO_CURVE_DOT wider than ST_FO_DOT_CHAR; this prevents line-wrap "extra spacing".
-        var sample="";
-        for(var i=0;i<cols;i++) sample += ST_FO_DOT_CHAR;
-        if(cols > 2){
-            // put ST_FO_CURVE_DOT near the middle
-            var mid = Math.floor(cols/2);
-            sample = sample.substring(0, mid) + ST_FO_CURVE_DOT + sample.substring(mid+1);
-        }else if(cols === 2){
-            sample = ST_FO_CURVE_DOT + ST_FO_DOT_CHAR;
-        }else if(cols === 1){
-            sample = ST_FO_CURVE_DOT;
-        }
-        return st.graphics.measureString(sample)[0];
-    }catch(e){
-        return cols * 6;
-    }
-}
-function _stFrameOffset_calcNoWrapCols(previewPanel, st){
-    // Use the best available width estimate (sizes can be 0 until after first layout)
-    var w = 0;
-    try{ w = (st && st.size && st.size.width) ? st.size.width : 0; }catch(e){}
-    if(!w){
-        try{ w = (previewPanel && previewPanel.size && previewPanel.size.width) ? previewPanel.size.width : 0; }catch(e){}
-    }
-    if(!w){
-        try{ w = (previewPanel && previewPanel.window && previewPanel.window.size) ? (previewPanel.window.size.width - 60) : 260; }catch(e){}
-    }
-    // Prefer dialog/window width so the preview can use the full available space
-    try{
-        if(previewPanel && previewPanel.window && previewPanel.window.size && previewPanel.window.size.width){
-            w = Math.max(w, previewPanel.window.size.width - 60);
-        }
-    }catch(e){}
-    if(!w || w < 80) w = 260;
-
-    var dotW=5.5;
-    try{
-    var wDot = st.graphics.measureString(ST_FO_DOT_CHAR)[0] || dotW;
-    var wCurve = st.graphics.measureString(ST_FO_CURVE_DOT)[0] || wDot;
-    dotW = Math.max(wDot, wCurve) || dotW;
-}catch(e){}
-// Nudge smaller so we can fit more dots (loop below backs off if we overflow)
-dotW *= 0.90;
-
-    // EVEN WIDER: assume minimal padding (we also reduce panel margins below)
-    var usable = w - 0;
-    var cols = ((Math.floor(usable/dotW) + 18) * 2) + 60; // more columns to reach the edge
-    if(isNaN(cols) || cols < 18) cols = 18;
-    if(cols > 800) cols = 800;
-
-    // keep a tiny right margin so we don't clip inside panel
-    var pad = 8; // safety padding to avoid wrap
-    var tries=0;
-    while(tries<260 && _stFrameOffset_measureLineWidth(st, cols) > (w - pad)){
-        cols--;
-        tries++;
-    }
-    if(cols < 18) cols = 18;
-    return cols;
-}
 
 function _stFrameOffset_showCurveDialog(comp){
     var fps = (comp && comp.frameRate) ? comp.frameRate : 30;
-    var layerCount = 0;
     // Photo-02 style curve dialog (based on Curve Offset.jsx), adapted to ShineTools pipeline.
     // Returns legacy object: { totalFrames, typeIdx, curve50, invert } so existing apply code works.
 
@@ -8727,19 +7748,8 @@ function _stFrameOffset_applyCurveOffset(comp, layers, totalFrames, typeIdx, cur
 // Entry point for the MAIN > UTILITIES button
 
 // ============================================================
-// Modal-safe helpers: pause background scheduleTask loops while dialogs are open
-// (AE throws "Cannot run a script while a modal dialog is waiting for response")
+// Modal-safe helpers
 // ============================================================
-function __ST_pauseBackgroundTasks__(){
-    try{
-        // Cancel hover label polling (it uses scheduleTask while hovering)
-        if ($.global && $.global.__ShineTools_CancelHoverPoll__) $.global.__ShineTools_CancelHoverPoll__();
-    }catch(e1){}
-}
-
-function __ST_resumeBackgroundTasks__(){
-}
-
 function __ST_runExclusive__(fn){
     try {
         if (!$.global) $.global = {};
@@ -8773,51 +7783,44 @@ function __ST_withModalSafety__(fn){
         }
     } catch (eDepth0) {}
     return __ST_runExclusive__(function(){
-        // During long blocking operations (e.g. Render Queue render), skip UI scheduleTask callbacks
-        // to avoid ScriptUI re-entrancy / glyph loss on focus changes.
-        try { if ($.global && $.global.__ST_LONGOP__ === true) return null; } catch (eSkip) {}
-        // Also skip scheduleTask UI callbacks during saves or when renderQueue reports rendering.
+        // Skip optional modal callbacks during saves or while the Render Queue is rendering.
         try { if (app && app.isSaving) return null; } catch (eSkipS) {}
         try { if (app && app.project && app.project.renderQueue && app.project.renderQueue.rendering) return null; } catch (eSkipR) {}
         try { $.global.__ST_MODAL_DEPTH__ = 1; } catch (eDepth1) {}
-        __ST_pauseBackgroundTasks__();
         try {
             return fn();
         } finally {
-            __ST_resumeBackgroundTasks__();
             try { $.global.__ST_MODAL_DEPTH__ = 0; } catch (eDepth2) {}
-            try { if ($.global && $.global.__ST_SetUICooldown__) $.global.__ST_SetUICooldown__(2500); } catch (eCool) {}
-            try { if (typeof _stRecoverAfterHostModal === "function") _stRecoverAfterHostModal(); } catch (eRecover) {}
         }
     });
 }
 
 function __ST_promptSafe__(question, defaultText){
-    return $.global.__ST_withModalSafety__(function(){
+    return __ST_withModalSafety__(function(){
         return prompt(question, defaultText);
     });
 }
 
 function __ST_confirmSafe__(question){
-    return $.global.__ST_withModalSafety__(function(){
+    return __ST_withModalSafety__(function(){
         return confirm(question);
     });
 }
 
 function __ST_openDialogSafe__(title, filter, multiSelect){
-    return $.global.__ST_withModalSafety__(function(){
+    return __ST_withModalSafety__(function(){
         return File.openDialog(title, filter, multiSelect);
     });
 }
 
 function __ST_selectDialogSafe__(title){
-    return $.global.__ST_withModalSafety__(function(){
+    return __ST_withModalSafety__(function(){
         return Folder.selectDialog(title);
     });
 }
 
 function __ST_saveDialogSafe__(title, filter){
-    return $.global.__ST_withModalSafety__(function(){
+    return __ST_withModalSafety__(function(){
         return File.saveDialog(title, filter);
     });
 }
@@ -8828,9 +7831,6 @@ function __ST_saveDialogSafe__(title, filter){
 // If an older loaded copy patched them, restore the native functions now.
 try{
     if (!$.global) $.global = {};
-    // Ensure the global alias points at the latest implementation
-    $.global.__ST_withModalSafety__ = __ST_withModalSafety__;
-
     if ($.global.__ST_ModalFnsPatched__) {
         try { if ($.global.__ST_alertOriginal__) alert = $.global.__ST_alertOriginal__; } catch (eRestoreA) {}
         try { if ($.global.__ST_confirmOriginal__) confirm = $.global.__ST_confirmOriginal__; } catch (eRestoreC) {}
@@ -8840,8 +7840,7 @@ try{
     $.global.__ST_ModalFnsPatched__ = false;
 }catch(ePatch){}
 
-// Runs after a short delay (scheduled) so any in-flight scheduled tasks can finish
-// before we open a modal dialog.
+// Runs the Offset Layers modal using the captured selection state.
 function __ST_RunOffsetLayersModal__(){
     var pending = null;
     try { pending = $.global.__ST_PendingOffsetLayers__; } catch(e0) {}
@@ -8896,11 +7895,9 @@ function __ST_RunOffsetLayersModal__(){
         }
     }catch(e){
         try{ alert("Offset Layers failed:\n\n" + e.toString()); }catch(ea){}
-    }finally{
-        __ST_resumeBackgroundTasks__();
     }
 }
-// Expose modal runner for app.scheduleTask (runs in global scope)
+// Expose modal runner in the shared ExtendScript scope
 try { $.global.__ST_RunOffsetLayersModal__ = __ST_RunOffsetLayersModal__; } catch(e) {}
 
 function offsetSelectedLayers_ShineTools(useCurveOverride){
@@ -8910,20 +7907,16 @@ function offsetSelectedLayers_ShineTools(useCurveOverride){
     var layers = _stFrameOffset_getSelectedLayersInUserOrder(comp);
     if (!layers || layers.length < 2) return alert("Select 2+ layers.");
 
-    // Pause any repeating scheduleTask loops BEFORE showing a modal dialog.
-    __ST_pauseBackgroundTasks__();
-
-    // Snapshot selection so we can open the dialog slightly later (lets any already-scheduled tasks finish)
+    // Snapshot the selection before opening the modal dialog
     var idxs = [];
     try { for (var i=0; i<layers.length; i++) idxs.push(layers[i].index); } catch(e0) {}
 
     $.global.__ST_PendingOffsetLayers__ = {
         compId: comp.id,
         layerIdxs: idxs,
-        useCurve: (useCurveOverride === true) ? true : ((useCurveOverride === false) ? false : (isOptionDown() ? true : false))
+        useCurve: (useCurveOverride === true) ? true : ((useCurveOverride === false) ? false : (_isOptDown() ? true : false))
     };
 
-    // Open directly (scheduleTask removed by request).
     try { ($.global.__ST_RunOffsetLayersModal__ || __ST_RunOffsetLayersModal__)(); } catch (e2) {}
 }
 
@@ -8932,20 +7925,7 @@ function buildUI(thisObj) {
         var pal = (thisObj instanceof Panel)
             ? thisObj
             : new Window("palette", "ShineTools_v" + SHINE_VERSION, undefined, { resizeable: true });
-
-        // Install hover label hooks; modifier flips are also handled by hover-only polling
-        try { _stHoverInstallMouseHook(pal); } catch(eHook) {}
-
-        // Also try key hooks for instant modifier flips (best-effort fallback).
-        try { _stHoverInstallKeyHook(pal); } catch(eKey) {}
-        // Do not attach blank-panel click/focus handlers.
-        // Do not attach root mousedown/focus/activate handlers to the palette/panel;
-        // the user's lockup is triggered by clicking empty panel space after render.
-        // Button-level hover/click features remain intact.
-        // NO-EVENT-HOOK DIAGNOSTIC:
-        // Do not attach root activate/deactivate handlers. The freeze still happened after
-        // scheduleTask removal, so this build avoids touching ScriptUI/app state merely
-        // because the user clicks back into the panel after a render/import.
+        // Keep root panel focus handling native; only button actions attach event callbacks.
         try { pal.onDeactivate = null; pal.onActivate = null; } catch(e) {}
 
         // Focus sink (used to kill blue focus ring on buttons after click)
@@ -9008,7 +7988,7 @@ function buildUI(thisObj) {
             tabBarGap.maximumSize = [10000, 10000];
             tabBarGap.alignment   = ["fill","fill"];
 
-            // Right (HELP/REQUESTS + UPDATES pinned far right)
+            // Right (UPDATES + HELP pinned far right; REQUESTS disabled by feature flag)
             var tabBarRight = tabBar.add("group");
             tabBarRight.orientation   = "row";
             tabBarRight.alignChildren = ["right", "center"];
@@ -9072,8 +8052,9 @@ function buildUI(thisObj) {
             var tabLblMain = _makeTopTabLabel("MAIN", tabBarLeft);
             var tabLblText = _makeTopTabLabel("TEXT", tabBarLeft);
 
-            // Pinned (right) tabs: REQUESTS / UPDATES / HELP (HELP far right)
-            var tabLblRequests = _makeTopTabLabel("REQUESTS", tabBarRight);
+            // Pinned (right) tabs: UPDATES / HELP (REQUESTS disabled by feature flag)
+            var tabLblRequests = null;
+            try { if (ST.FEATURE_REQUESTS_ENABLED === true) tabLblRequests = _makeTopTabLabel("REQUESTS", tabBarRight); } catch (eReqTabBuild) { tabLblRequests = null; }
             var tabLblUpdates  = _makeTopTabLabel("UPDATES", tabBarRight);
             var tabLblHelp     = _makeTopTabLabel("HELP", tabBarRight);
 
@@ -9120,19 +8101,17 @@ function buildUI(thisObj) {
                 ulRight.margins = 0;
                 ulRight.spacing = 14;
 
-                __stTabUnderline.REQUESTS = __makeNativeTabUnderline(ulRight, tabLblRequests);
+                if (tabLblRequests) __stTabUnderline.REQUESTS = __makeNativeTabUnderline(ulRight, tabLblRequests);
                 __stTabUnderline.UPDATES  = __makeNativeTabUnderline(ulRight, tabLblUpdates);
                 __stTabUnderline.HELP     = __makeNativeTabUnderline(ulRight, tabLblHelp);
             } catch (eULBuild) {}
 
-            try {
-                } catch (e) {}
             var TAB_LABEL_ACTIVE = [1.0, 0.82, 0.0, 1];  // Shine yellow
             var TAB_LABEL_IDLE   = [0.85, 0.85, 0.85, 1];
 
             function __stSetNativeTabUnderline(activeName) {
                 try {
-                    var keys = ["MAIN", "TEXT", "REQUESTS", "UPDATES", "HELP"];
+                    var keys = (ST.FEATURE_REQUESTS_ENABLED === true) ? ["MAIN", "TEXT", "REQUESTS", "UPDATES", "HELP"] : ["MAIN", "TEXT", "UPDATES", "HELP"];
                     for (var i = 0; i < keys.length; i++) {
                         var k = keys[i];
                         if (__stTabUnderline && __stTabUnderline[k]) {
@@ -9149,8 +8128,6 @@ function buildUI(thisObj) {
             }
 
             // Tab underlines use native statictext characters via __stSetNativeTabUnderline().
-            function _drawTopTabUnderline(g, st, underlineEl) { return; }
-
 try { __stSetNativeTabUnderline("MAIN"); } catch (eNativeUL0) {}
 
             return {
@@ -9192,6 +8169,7 @@ try { __stSetNativeTabUnderline("MAIN"); } catch (eNativeUL0) {}
             var tabWorkspaceManager = tabStack.add("group");
 
             tabRequests.visible         = false;
+            try { if (ST.FEATURE_REQUESTS_ENABLED !== true) { tabRequests.minimumSize = [0, 0]; tabRequests.preferredSize = [0, 0]; } } catch (eReqTabZero) {}
             tabUpdates.visible          = false;
             tabHelp.visible             = false;
             tabWorkspaceManager.visible = false;
@@ -9206,9 +8184,6 @@ try { __stSetNativeTabUnderline("MAIN"); } catch (eNativeUL0) {}
                 tabWorkspaceManager: tabWorkspaceManager,
             };
         }
-        // -------------------------
-        // -------------------------
-
         // -------------------------
         // TOP TAB LABELS + ACTIVE UNDERLINE
         // -------------------------
@@ -9585,11 +8560,6 @@ try { _stSetGlobalFooterCompactMode(false); } catch (eCompactFooterInit) {}
                 }catch(e2){ return ""; }
               }
 
-              function addListItem(list, rawText){
-                var it = list.add("item", prettyText(rawText));
-                it.rawName = rawText;
-                return it;
-              }
 
             function setBold(st, size){
                 try{
@@ -9936,9 +8906,7 @@ var home = getHomeDir();
               auditBtn.preferredSize = [0, hFA];
               auditBtn.minimumSize   = [110, hFA];
               auditBtn.maximumSize   = [10000, hFA];
-              defocusButtonBestEffort(auditBtn);
-
-              var totalTxt = top.add("statictext", undefined, "Total: 0");
+var totalTxt = top.add("statictext", undefined, "Total: 0");
 
               var spacerTop = win.add("group");
               spacerTop.preferredSize = [0, 14];
@@ -10044,8 +9012,7 @@ try {
         b.minimumSize = [__dlgMinW + 40, __dlgBtnH];
     }
 } catch (ePad) {}
-                try { defocusButtonBestEffort(b); } catch (eDF) {}
-                return { cell: cell, btn: b };
+return { cell: cell, btn: b };
               }
 
               var __export = __makeDialogCellButton__(btns, ST_LABELS.EXPORT_FONT_LIST);
@@ -10337,90 +9304,6 @@ try {
               // - This UI shows a list you can edit. For macOS SMB shares, most are mounted under /Volumes/<ShareName>.
               // - When you pick a machine, we attempt to locate its Fonts folders under a mounted root. If not found, you'll be prompted to choose the mounted folder.
 
-              function guessMountedRootForComputer(name){
-                if(!isMac()) return "";
-                // common pattern: /Volumes/<ComputerName> or /Volumes/<ShareName>
-                var p = "/Volumes/" + name;
-                try{ if(new Folder(p).exists) return p; }catch(e){}
-                return "";
-              }
-
-              function buildRemoteIndexFromRoot(rootFs){
-                // Build a candidate list of font roots under the remote root, then collect font files.
-                // We reuse collectFontFiles from the local scan code.
-                var roots = [];
-
-                function add(p, rec){
-                  try{
-                    var f = new Folder(p);
-                    if(f.exists) roots.push({p:p, r:rec});
-                  }catch(e){}
-                }
-
-                // If user selects a Mac root, it might be the entire disk or a share containing Users/Library
-                add(rootFs + "/Library/Fonts", true);
-                add(rootFs + "/System/Library/Fonts", true);
-                add(rootFs + "/System/Library/Fonts/Supplemental", true);
-
-                // User fonts: attempt common share layouts
-                add(rootFs + "/Users/Shared", true);
-
-                // If the share is a user home share, these may exist
-                add(rootFs + "/Library/Application Support/Adobe/Fonts", true);
-                add(rootFs + "/Library/Application Support/Adobe/CoreSync/plugins/livetype/r", true);
-                add(rootFs + "/Library/Application Support/Adobe/TypeSupport", true);
-
-                // If share contains "Users/<user>/Library/Fonts"
-                try{
-                  var usersFolder = new Folder(rootFs + "/Users");
-                  if(usersFolder.exists){
-                    var kids = usersFolder.getFiles();
-                    for(var i=0;i<kids.length;i++){
-                      var k = kids[i];
-                      if(k instanceof Folder){
-                        add(k.fsName + "/Library/Fonts", true);
-                        add(k.fsName + "/Library/Application Support/Adobe/Fonts", true);
-                        add(k.fsName + "/Library/Application Support/Adobe/CoreSync/plugins/livetype/r", true);
-                        add(k.fsName + "/Library/Application Support/Adobe/TypeSupport", true);
-                      }
-                    }
-                  }
-                }catch(eU){}
-
-                // Also allow if the root itself IS a Fonts folder
-                add(rootFs, true);
-
-                var files = [];
-                for(var r=0;r<roots.length;r++){
-                  collectFontFiles(roots[r].p, roots[r].r, files);
-                }
-                return {files: files, roots: roots};
-              }
-
-              function resolveMissingFontsFromRemote(indexFiles, remoteLabel){
-                // Only re-check rows that are MISSING or WARN.
-                for(var i=0;i<currentRows.length;i++){
-                  var row = currentRows[i];
-                  if(row.status === "OK") continue;
-
-                  var c = findByScan(row.name, indexFiles);
-                  if(c && c.length === 1){
-                    row.path = c[0].file.fsName;
-                    row.status = "OK";
-                    row.note = "Resolved (remote: " + remoteLabel + "). (" + prettyFileName(row.path) + ")";
-                  }else if(c && c.length > 1){
-                    row.status = "WARN";
-                    row.note = "Ambiguous (remote: " + remoteLabel + ").";
-                  }else{
-                    // keep existing
-                    if(!row.note || row.note === "Font not found.") row.note = "Font not found (remote checked: " + remoteLabel + ").";
-                  }
-                }
-                sortRows(currentRows);
-                clearList();
-                for(var r=0;r<currentRows.length;r++) addRowUI(currentRows[r]);
-                win.layout.layout(true);
-              }
 
               getFontsBtn.onClick = function(){
                 try{ copyFoundFontsToProjectFonts(); } catch(e){ alert("COPY FOUND FONTS error:\n" + e.toString()); }
@@ -10440,7 +9323,6 @@ try {
               };
 
               $.global.__FontAuditQuickWin__ = win;
-        try { _primeUpdatesOnLaunch(); } catch (e) {}
 
               // Auto-run audit on open
               try{ runAudit(); }catch(eAuto){ /* ignore */ }
@@ -10539,9 +9421,11 @@ try {
                         animDDCol.spacing = 2;
 
                         var animDDHdr = addDropdownHeader(animDDCol, "Select Animation…", TOPROW_HDR_INSET);
+                        var animDDHdrDefaultText = "Select Animation…";
                         animDDHdr.justify = "left";
                         animDDHdr.alignment = ["fill","top"];
                         try { _setLabelColor(animDDHdr, [0.55, 0.55, 0.55, 1]); } catch(eH) {}
+                        try { _stAttachAddStatusClose(animDDHdr, animDDHdrDefaultText); } catch(eHdrX) {}
 
                         var animDD = animDDCol.add("dropdownlist", undefined, []);
                         animDD.alignment     = ["fill", "bottom"];
@@ -10551,8 +9435,6 @@ try {
                         animDD.preferredSize = [_ddMinText, UI.btnH];
                         animDD.__shineNoTruncate = true; // keep full labels in popup (no manual ellipsis)
                         animDD.maximumSize   = [_ddMaxTop, UI.btnH]; // soft max (control can grow up to this)
-        _lockDropdownPopupWidth(animDD, 12);
-
         // Right-edge alignment: reserve a small spacer so the dropdown's right edge lines up with the button grid below
         var animRightPad = animRow.add("group");
         animRightPad.minimumSize = [TOPROW_DD_RIGHT_TRIM, 1];
@@ -10567,10 +9449,8 @@ try {
                                 var ANIM_ACTION_CLEAR = "Clear Added Animations";
 
                                 function animRebuildDropdown() {
-                                    try { animDD.removeAll(); } catch (e0) {}
-
-                                    var blank0 = animDD.add("item", String(animDD.__stFlashBlankText || " "));
-                                    blank0._isBlank = true;
+                                    _stDropdownRebuild(animDD, function () {
+                                    _stDropdownAddBlank(animDD);
                                     var __animIndent = "    ";
 
                                     var bundled = [];
@@ -10614,9 +9494,7 @@ try {
                                         if (!uv) continue;
 
                                         if (_animIsDividerToken(uv)) {
-                                            var divItem = animDD.add("item", _animDividerDisplay(_animDividerLabelFromToken(uv)));
-                                            divItem._isDivider = true;
-                                            try { divItem.enabled = false; } catch (eAnimDivDis) {}
+                                            _stDropdownAddDivider(animDD, _animDividerDisplay(_animDividerLabelFromToken(uv)));
                                             continue;
                                         }
 
@@ -10626,11 +9504,7 @@ try {
                                             bundledSeen[bp] = true;
                                             var __bShowOrig = false; try { __bShowOrig = (__ST_SESSION_TEXT_FAVORITES_SHOW_ORIGINAL__ === true); } catch (eBShowOrig) {}
                                             var __bLabel = String((__bShowOrig ? _stPrettyFileLabel(bp) : (_animLabelGet("B::" + bp) || _stPrettyFileLabel(bp))) || "").replace(/^[\s\u00A0]+/, "");
-                                            var bItem = animDD.add("item", __animIndent + __bLabel);
-                                            bItem._fullText = __animIndent + __bLabel;
-                                            bItem.__path = bp;
-                                            bItem._isDefault = true;
-                                            try { bItem.helpTip = __bLabel; } catch (eTipBund) {}
+                                            _stDropdownAddPathItem(animDD, __animIndent + __bLabel, bp, "__path", true, __bLabel);
                                             continue;
                                         }
 
@@ -10640,20 +9514,13 @@ try {
                                         addedSeen[p] = true;
                                         var __uShowOrig = false; try { __uShowOrig = (__ST_SESSION_TEXT_FAVORITES_SHOW_ORIGINAL__ === true); } catch (eUShowOrig) {}
                                         var label = String((__uShowOrig ? _stPrettyFileLabel(p) : (_animLabelGet("U::" + p) || _stPrettyFileLabel(p))) || "").replace(/^[\s\u00A0]+/, "");
-                                        var it = animDD.add("item", __animIndent + label);
-                                        it._fullText = __animIndent + label;
-                                        it.__path = p;
-                                        try { it.helpTip = label; } catch (eTipAnim) {}
+                                        _stDropdownAddPathItem(animDD, __animIndent + label, p, "__path", false, label);
                                     }
 
                                     animDD.add("separator");
-                                    var clearIt = animDD.add("item", ANIM_ACTION_CLEAR);
-                                    clearIt.__action = "clear";
-                                    try { animDD.selection = 0; } catch (eSel) {}
-}
-
-                                    _applyDropdownLabelClamp(animDD);
-
+                                    _stDropdownAddAction(animDD, ANIM_ACTION_CLEAR, "clear");
+                                    });
+                                }
                                 try {
                                     var _openAnimReorder = function () {
                                         var bundledPaths = [];
@@ -10720,68 +9587,11 @@ try {
                                         var outAnim = _shineShowReorderListDialog(
                                             "Organize Text Animators",
                                             items,
-                                            ST.UI.Organize.buildConfig("text_animators", {
-                                                onAddFiles: function(lb, dlg, opts) {
-                                                    var picked = animOpenDialogFromDefaultFolder();
-                                                    if (!picked) return false;
-                                                    if (!(picked instanceof Array)) picked = [picked];
-
-                                                    var insertAt = lb.items.length;
-                                                    try {
-                                                        if (lb.selection) {
-                                                            var selId = String(lb.selection._id || "");
-                                                            for (var si = 0; si < lb.items.length; si++) {
-                                                                if (String(lb.items[si]._id || "") === selId) { insertAt = si + 1; break; }
-                                                            }
-                                                        }
-                                                    } catch (eAnimSelIns) {}
-
-                                                    var addedAny = false;
-                                                    for (var pi = 0; pi < picked.length; pi++) {
-                                                        var f = picked[pi];
-                                                        if (!f || !f.exists) continue;
-                                                        var presetPath = String(f.fsName || "");
-                                                        if (!presetPath || !/\.ffx$/i.test(presetPath)) continue;
-                                                        var itemId = "U::" + presetPath;
-
-                                                        var exists = false;
-                                                        for (var li = 0; li < lb.items.length; li++) {
-                                                            try { if (String(lb.items[li]._id || "") === itemId) { exists = true; break; } } catch (eAnimDup) {}
-                                                        }
-                                                        if (exists) continue;
-
-                                                        var addLabel = String(_stPrettyFileLabel(presetPath) || "").replace(/^[\s ]+/, "");
-                                                        var itAdded = lb.add("item", addLabel);
-                                                        try { itAdded._id = itemId; } catch (eAnimSet0) {}
-                                                        try { itAdded._label = addLabel; } catch (eAnimSet1) {}
-                                                        try { itAdded._isDivider = false; } catch (eAnimSet2) {}
-                                                        try { itAdded.helpTip = addLabel; } catch (eAnimSet3) {}
-                                                        try { itAdded.enabled = true; } catch (eAnimSet4) {}
-                                                        try { itAdded.selected = true; } catch (eAnimSet5) {}
-                                                        try {
-                                                            if (typeof insertAt === "number" && insertAt < (lb.items.length - 1)) {
-                                                                itAdded.index = insertAt;
-                                                                insertAt++;
-                                                            }
-                                                        } catch (eAnimReindex) {}
-                                                        addedAny = true;
-                                                    }
-                                                    return addedAny;
-                                                },
-                                                originalFilenameForId: function(id) {
-                                                    var cleanId = String(id || "");
-                                                    if (cleanId.indexOf("B::") === 0) cleanId = String(cleanId.substring(3) || "");
-                                                    else if (cleanId.indexOf("U::") === 0) cleanId = String(cleanId.substring(3) || "");
-                                                    return _stPrettyFileLabel(cleanId);
-                                                },
-                                                displayLabelForId: function(id, label, obj, showOriginalFilename) {
-                                                    if (obj && obj._isDivider) return label;
-                                                    var cleanId = String(id || "");
-                                                    if (cleanId.indexOf("B::") === 0) cleanId = String(cleanId.substring(3) || "");
-                                                    else if (cleanId.indexOf("U::") === 0) cleanId = String(cleanId.substring(3) || "");
-                                                    if (!showOriginalFilename && label) return String(label);
-                                                    return _stPrettyFileLabel(cleanId);
-                                                },
+                                            ST.UI.Organize.buildPathConfig("text_animators", {
+                                                openDialog: animOpenDialogFromDefaultFolder,
+                                                acceptPath: function(path) { return /\.ffx$/i.test(path); },
+                                                idForPath: function(path) { return "U::" + path; },
+                                                stripPrefixes: ["B::", "U::"],
                                                 sectionChoices: ANIM_SECTION_CHOICES,
                                                 sectionTokenForChoice: function(choice) { return _animDividerToken(choice); },
                                                 newDividerTokenForLabel: function(label) { return _animDividerToken(label); },
@@ -10818,29 +9628,21 @@ try {
                                         try { animUnifiedOrderSave(outUnified); } catch (eAnimUniSave) {}
                                         try { _animLabelMapReplace(outLabelMap); } catch (eAnimLblSave) {}
                                         animRebuildDropdown();
-                                        try { animDD.__shineProgrammatic = true; } catch (eAP0) {}
-                                        try { animDD.selection = 0; } catch (eAP1) {}
-                                        try { animDD.__shineProgrammatic = false; } catch (eAP2) {}
-                                        try { _applyDropdownLabelClamp(animDD); } catch (eClampAnim) {}
-                                        try { if (typeof relayout === "function") relayout(); } catch (eRelayoutAnim) {}
-                                        try { if (textContent && textContent.layout) { textContent.layout.layout(true); textContent.layout.resize(); } } catch (eTextLayoutAnim) {}
-                                        try { if (pal && pal.layout) { pal.layout.layout(true); pal.layout.resize(); } } catch (ePalLayoutAnim) {}
-                                        try { if (pal && pal.update) pal.update(); } catch (ePalUpdateAnim) {}
-                                        try { _applyDropdownLabelClamp(animDD); } catch (eClampAnim) {}
-                                        try { if (typeof relayout === "function") relayout(); } catch (eRelayoutAnim) {}
-                                        try { if (textContent && textContent.layout) { textContent.layout.layout(true); textContent.layout.resize(); } } catch (eTextLayoutAnim) {}
-                                        try { if (pal && pal.layout) { pal.layout.layout(true); pal.layout.resize(); } } catch (ePalLayoutAnim) {}
-                                        try { if (pal && pal.update) pal.update(); } catch (ePalUpdateAnim) {}
+
+                                        // Avoid repeated full-palette relayout/update immediately after the Organize dialog closes.
+                                        // The dropdown rebuild above is enough for the data change; this local paint is conservative.
+                                        try {
+                                            if (!$.global.__ST_isSafeToTouchUI__ || $.global.__ST_isSafeToTouchUI__()) {
+                                                try { if (textContent && textContent.layout) textContent.layout.layout(false); } catch (eTextLayoutAnim) {}
+                                                // Avoid forced pal.update() immediately after the Organize dialog closes.
+                                            }
+                                        } catch (eSafePostOrganizeAnim) {}
                                     };
-                                    var _animReorderMouse = function(){
-                                        var ks = null; try { ks = ScriptUI.environment.keyboardState; } catch (eKSA) {}
-                                        if (ks && ks.altKey) { _openAnimReorder(); }
-                                    };
-                                    animStar.addEventListener("mousedown", _animReorderMouse);
-                                    animLbl.addEventListener("mousedown", _animReorderMouse);
+                                    ST.UI.Organize.attachOptionOpen([animStar, animLbl], _openAnimReorder);
                                 } catch (eAnimReorder) {}
 
                                 (animAddBtn.__button || animAddBtn).onClick = function () {
+
                                     // TEXT tab (+): NORMAL click ONLY adds .ffx preset(s) to the dropdown list.
                                     // (No applying to layers and no layer creation on click.)
                                     var picked = animOpenDialogFromDefaultFolder(); // multi-select enabled
@@ -10851,6 +9653,7 @@ try {
 
                                     // Add all picked presets to the current list (top of list = first picked)
                                     var arr = animLoad();
+                                    var addedCount = 0;
                                     for (var i = picked.length - 1; i >= 0; i--) {
                                         var f = picked[i];
                                         if (!f) continue;
@@ -10860,61 +9663,55 @@ try {
                                         if (!/\.ffx$/i.test(p)) continue;
 
                                         arr.unshift(p);
+                                        addedCount++;
                                     }
                                     animSave(arr);
                                     try { animUnifiedOrderSave([]); } catch (eAnimAddU) {}
                                     animRebuildDropdown();
-                                try { _ddFlashAddedFrames(animDD, 26, animRebuildDropdown); } catch(eMsg) {}
+                                    try { _stSetAddStatusLabel(animDDHdr, addedCount, "preset", animDDHdrDefaultText); } catch(eStatusAnim) {}
                                 };
 
-                                                                animDD.onChange = function () {
+                                animDD.onChange = function () {
+                                    if (!_stDropdownBeginChange(animDD)) return;
                                     try {
-                                        try {
-                                            if (animDD.__stShowingAddedFlash === true) return;
-                                            if (animDD.__stSuppressOnChangeUntil && (new Date()).getTime() < animDD.__stSuppressOnChangeUntil) return;
-                                        } catch (eAnimFlashGuard) {}
-                                        if (animDD.__shineProgrammatic) {
-                                            animDD.__shineProgrammatic = false;
-                                            return;
-                                        }
                                         if (!animDD.selection) return;
                                         var sel = animDD.selection;
 
-                                        // Divider / blank rows are non-actions.
                                         if (sel && (sel._isDivider || sel._isBlank)) {
-                                            ST.UI.Dropdown.reset(animDD, 1);
+                                            _stDropdownResetToBlank(animDD);
                                             return;
                                         }
 
-                                        // Cmd+click removes the item from the current list (TEXT tab parity with MAIN).
                                         if (sel && sel.__path && _isCmdDown() && !sel._isDefault) {
                                             try {
                                                 animRemovePath(sel.__path);
                                                 animRebuildDropdown();
                                                 try { if (typeof relayout === "function") relayout(); } catch (eRL) {}
                                             } catch (eR) {}
-                                            ST.UI.Dropdown.reset(animDD, 1);
+                                            _stDropdownResetToBlank(animDD);
                                             return;
                                         }
                                         if (sel.__action === "clear") {
                                             animClear();
                                             animRebuildDropdown();
-                                            ST.UI.Dropdown.reset(animDD, 1);
+                                            _stDropdownResetToBlank(animDD);
                                             return;
                                         }
 
                                         var presetPath = String(sel.__path || "");
                                         if (!presetPath) {
-                                            ST.UI.Dropdown.reset(animDD, 1);
+                                            _stDropdownResetToBlank(animDD);
                                             return;
                                         }
 
                                         try { $.global._shineToolsApplyFFXPreset(presetPath); } catch (eApply) {
                                             try { alert("Animation preset apply failed:\n" + eApply.toString()); } catch (eApply2) {}
                                         }
-                                        ST.UI.Dropdown.reset(animDD, 1);
+                                        _stDropdownResetToBlank(animDD);
                                     } catch (eAnimSel) {
                                         try { alert("Animation dropdown error:\n" + eAnimSel.toString()); } catch (eAnimSel2) {}
+                                    } finally {
+                                        _stDropdownEndChange(animDD);
                                     }
                                 };
 
@@ -10952,58 +9749,6 @@ try {
 
 textAcc.defineSection("NUMBER COUNTERS", function(body){
     // Built-in AE counter presets shipped with ShineTools (relative to this script)
-    function _stResolveShineToolsRoot() {
-        try {
-            var sf = File($.fileName);
-
-            // Candidate roots to try (in priority order)
-            var candidates = [];
-
-            // 1) Folder containing this script (works when panel is installed normally)
-            if (sf && sf.exists) {
-                candidates.push(sf.parent);
-            }
-
-            // 2) After Effects "startup" folder derived install paths (covers when user runs a copy from Desktop)
-            // Folder.startup typically points at the AE install folder (platform dependent).
-            try {
-                if (Folder.startup) {
-                    candidates.push(Folder(Folder.startup.fsName + "/Scripts/ScriptUI Panels/ShineTools"));
-                    candidates.push(Folder(Folder.startup.fsName + "/../Scripts/ScriptUI Panels/ShineTools"));
-                }
-            } catch (e2) {}
-
-            // 3) macOS Applications fallback search (covers odd Folder.startup values)
-            try {
-                var appsRoot = new Folder("/Applications");
-                if (appsRoot.exists) {
-                    var aeFolders = appsRoot.getFiles("Adobe After Effects*");
-                    for (var ai = 0; ai < aeFolders.length; ai++) {
-                        var af = aeFolders[ai];
-                        if (!(af instanceof Folder)) continue;
-
-                        var st1 = new Folder(af.fsName + "/Scripts/ScriptUI Panels/ShineTools");
-                        if (st1.exists) candidates.push(st1);
-
-                        // Some installs have a "Support Files" subfolder—try stepping into it too
-                        var st2 = new Folder(af.fsName + "/Support Files/Scripts/ScriptUI Panels/ShineTools");
-                        if (st2.exists) candidates.push(st2);
-                    }
-                }
-            } catch (e2b) {}
-            // Validate candidates by checking for expected preset folder
-            for (var i = 0; i < candidates.length; i++) {
-                var c = candidates[i];
-                try {
-                    if (c && c.exists) {
-                        var presetFolder = Folder(c.fsName + "/presets/text");
-                        if (presetFolder.exists) return c;
-                    }
-                } catch (e3) {}
-            }
-        } catch (e) {}
-        return null;
-    }
 
     // Resolve a preset File from a relative path inside the ShineTools folder
 
@@ -11228,8 +9973,7 @@ function _stShowModernExpressionWarningDialog() {
 
         var okBtn = buttonRow.add("button", undefined, "OK", { name: "ok" });
         try { okBtn.preferredSize = [112, 28]; } catch (eBtn) {}
-        try { if (typeof defocusButtonBestEffort === "function") defocusButtonBestEffort(okBtn); } catch (eDF1) {}
-        try {
+try {
             if (typeof _stFrameOffset_defocus === "function") {
                 okBtn.addEventListener("mousedown", function(){ try { _stFrameOffset_defocus(okBtn, sink); } catch (_e1) {} });
                 okBtn.addEventListener("mouseup", function(){ try { _stFrameOffset_defocus(okBtn, sink); } catch (_e2) {} });
@@ -11276,7 +10020,7 @@ function _stEnsureModernExpressionsForCounters(comp) {
 //   - Click: Linear frame offset (prompts for frames; can be negative)
 //   - Option+Click: Exponential offset (curve + invert preview)
 // ============================================================
-var ST_OFFSETLAYERS_EXP_TOTAL_SPREAD_FRAMES = 24; // total spread for Exponential mode
+// total spread for Exponential mode
 
 function _stApplyCounterPreset(fileName, newLayerName) {
     // Guard: counters rely on Modern JavaScript expressions
@@ -11442,12 +10186,10 @@ function _buildTextTabIfNeeded() {
 
         function _stCommitWorkspaceSelectionUI(name, options) {
             try {
-                var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
+                var wanted = _stCleanWorkspaceName(name);
                 if (!wanted) return;
 
-                try { pal.__stCurrentWorkspaceName = wanted; } catch (e0) {}
-                try { pal.__stPendingWorkspaceName = wanted; } catch (e1) {}
-                try { pal.__stWorkspaceStatusName = wanted; } catch (e2) {}
+                try { _stSetWorkspaceNameState(wanted, { startup: false }); } catch (e0) {}
 
                 try { _syncWorkspaceDropdownToActiveName(); } catch (e3) {}
                 try { _updateWorkspaceStatusLabel({ suppressLayout: true }); } catch (e4) {}
@@ -11459,28 +10201,12 @@ function _buildTextTabIfNeeded() {
         }
 
         function _stSetActiveWorkspaceNameState(name, options) {
-            try {
-                var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
-                try { pal.__stCurrentWorkspaceName = wanted; } catch (e0) {}
-                try { pal.__stPendingWorkspaceName = wanted; } catch (e1) {}
-                try { pal.__stStartupAppliedWorkspaceName = wanted; } catch (e2) {}
-                try { pal.__stWorkspaceStatusName = wanted; } catch (e3) {}
-                try {
-                    if (!(options && options.skipPersist)) _stWriteLastUsedWorkspaceName(wanted);
-                } catch (e4) {}
-            } catch (e) {}
+            options = options || {};
+            return _stSetWorkspaceNameState(name, { persist: !options.skipPersist });
         }
 
         function _stApplyWorkspaceStatusText(name) {
-            try {
-                var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
-                var statusText = wanted ? ("Workspace: " + wanted) : "Workspace:";
-                try { if (pal.__stWorkspaceStatusNameLabel_MAIN) pal.__stWorkspaceStatusNameLabel_MAIN.text = statusText; } catch (e0) {}
-                try { if (pal.__stWorkspaceStatusNameLabel_TEXT) pal.__stWorkspaceStatusNameLabel_TEXT.text = statusText; } catch (e1) {}
-                try { if (pal.__stWorkspaceStatusNameLabel) pal.__stWorkspaceStatusNameLabel.text = statusText; } catch (e2) {}
-                return statusText;
-            } catch (e) {}
-            return "Workspace:";
+            return _stRenderWorkspaceStatus(name);
         }
 
         function _stPublishWorkspaceApi() {
@@ -11523,11 +10249,14 @@ function _buildTextTabIfNeeded() {
         }
 
         function _selectTopTab(which) {
+
+            try { if (which === "REQUESTS" && ST.FEATURE_REQUESTS_ENABLED !== true) which = "MAIN"; } catch (eReqDisabled0) {}
+
             try { pal.__activeTopTab = which; } catch(eAT) {}
             var isMain = (which === "MAIN");
             var isText = (which === "TEXT");
             var isUpdates = (which === "UPDATES");
-            var isRequests = (which === "REQUESTS");
+            var isRequests = (ST.FEATURE_REQUESTS_ENABLED === true && which === "REQUESTS");
             var isHelp = (which === "HELP");
             var isWorkspaceManager = (which === "WORKSPACE_MANAGER");
             tabMain.visible = isMain;
@@ -11547,7 +10276,7 @@ function _buildTextTabIfNeeded() {
             _setTopTabLabelColor(tabLblMain, isMain ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
             _setTopTabLabelColor(tabLblText, isText ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
             _setTopTabLabelColor(tabLblUpdates, isUpdates ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
-            _setTopTabLabelColor(tabLblRequests, isRequests ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
+            try { if (tabLblRequests) _setTopTabLabelColor(tabLblRequests, isRequests ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE); } catch (eReqColor) {}
             _setTopTabLabelColor(tabLblHelp, isHelp ? TAB_LABEL_ACTIVE : TAB_LABEL_IDLE);
             try {
                 if (_topTabs && _topTabs.setNativeTabUnderline) {
@@ -11577,9 +10306,8 @@ function _buildTextTabIfNeeded() {
                 try { pal.layout.resize(); } catch (e1b) {}
                 try { if ($.global.__ShineToolsCenterLogoHeaders__) $.global.__ShineToolsCenterLogoHeaders__(); } catch (eLogoTab1b) {}
             }
-            try { pal.update(); } catch (e2) {}
             try { if ($.global.__ShineToolsCenterLogoHeaders__) $.global.__ShineToolsCenterLogoHeaders__(); } catch (eLogoTab2) {}
-            try { if (pal && pal.update) pal.update(); } catch (e2b) {}
+            try { if ((!$.global.__ST_isSafeToTouchUI__ || $.global.__ST_isSafeToTouchUI__()) && pal && pal.update) pal.update(); } catch (e2) {}
             try { _stKickFooterStableLayout(); } catch (e3) {}
         }
 
@@ -11602,7 +10330,7 @@ function _buildTextTabIfNeeded() {
                 _selectTopTab("TEXT");
             });
             tabLblUpdates.addEventListener("mousedown", function(){ _selectTopTab("UPDATES"); });
-            tabLblRequests.addEventListener("mousedown", function(){ _selectTopTab("REQUESTS"); });
+            try { if (tabLblRequests) tabLblRequests.addEventListener("mousedown", function(){ _selectTopTab("REQUESTS"); }); } catch (eReqEvt) {}
             tabLblHelp.addEventListener("mousedown", function(){ _selectTopTab("HELP"); });
 } catch (eEvt) {}
 
@@ -11651,7 +10379,7 @@ function _buildTextTabIfNeeded() {
 
         function _stWorkspaceFileByName(name) {
             try {
-                name = String(name || "").replace(/^\s+|\s+$/g, "");
+                name = _stCleanWorkspaceName(name);
                 if (!name) return null;
                 name = name.replace(/[\\\/:*?"<>|]/g, "_");
                 return new File(_stWorkspaceFolder().fsName + "/" + name + ".json");
@@ -11665,7 +10393,7 @@ function _buildTextTabIfNeeded() {
 
         function _stIsProtectedWorkspaceName(name) {
             try {
-                return String(name || "").replace(/^\s+|\s+$/g, "") === _stDefaultWorkspaceName();
+                return _stCleanWorkspaceName(name) === _stDefaultWorkspaceName();
             } catch (e) {}
             return false;
         }
@@ -11716,7 +10444,7 @@ function _buildTextTabIfNeeded() {
             try {
                 var target = null;
                 try {
-                    var cleanName = String(name || "").replace(/^\s+|\s+$/g, "");
+                    var cleanName = _stCleanWorkspaceName(name);
                     if (cleanName) {
                         var workspaceFile = _stWorkspaceFileByName(cleanName);
                         if (workspaceFile && workspaceFile.exists) target = workspaceFile;
@@ -11866,22 +10594,15 @@ function _buildTextTabIfNeeded() {
         }
 
         function _stReadWorkspaceByName(name) {
-            var f = null;
             try {
-                f = _stWorkspaceFileByName(name);
-                if (!f || !f.exists) return null;
-                f.encoding = "UTF-8";
-                if (!f.open("r")) return null;
-                var raw = f.read();
-                f.close();
-                return _stJsonParse(raw);
-            } catch (e) {
-                try { if (f && f.opened) f.close(); } catch (e2) {}
-            }
+                var f = _stWorkspaceFileByName(name);
+                var raw = _stReadTextFile(f, "UTF-8");
+                return (raw === null) ? null : _stJsonParse(raw);
+            } catch (e) {}
             return null;
         }
 
-        
+
         function _stWorkspaceJsonOpenFilter(item) {
             // File.openDialog on macOS needs a FILE dialog, not Folder.selectDialog.
             // Returning true for folders lets the user navigate; .json files stay selectable.
@@ -11894,7 +10615,7 @@ function _buildTextTabIfNeeded() {
 
         function _stOpenWorkspaceJsonFile() {
             var picked = null;
-            return $.global.__ST_withModalSafety__(function(){
+            return __ST_withModalSafety__(function(){
                 try {
                     var startFolder = null;
                     try { startFolder = _stWorkspaceFolder(); } catch (eStart) { startFolder = null; }
@@ -11924,14 +10645,8 @@ function _buildTextTabIfNeeded() {
                 f = File(f);
                 if (!f.exists) { alert("Selected workspace file could not be found."); return false; }
 
-                var raw = "";
-                try {
-                    f.encoding = "UTF-8";
-                    if (!f.open("r")) { alert("Could not open workspace file."); return false; }
-                    raw = String(f.read() || "");
-                    f.close();
-                } catch (eRead) {
-                    try { if (f && f.opened) f.close(); } catch (eRead2) {}
+                var raw = _stReadTextFile(f, "UTF-8");
+                if (raw === null) {
                     alert("Could not read workspace file.");
                     return false;
                 }
@@ -11956,7 +10671,7 @@ function _buildTextTabIfNeeded() {
                 try { name = __ST_promptSafe__("Load workspace as:", defaultName); } catch (ePrompt0) { name = prompt("Load workspace as:", defaultName); }
                 if (name === null || name === undefined) return false;
 
-                name = String(name || "").replace(/^\s+|\s+$/g, "");
+                name = _stCleanWorkspaceName(name);
                 if (!name) { alert("Workspace name cannot be blank."); return false; }
 
                 var existing = null;
@@ -11977,11 +10692,7 @@ function _buildTextTabIfNeeded() {
                     return false;
                 }
 
-                try { pal.__stCurrentWorkspaceName = name; } catch (e3a) {}
-                try { pal.__stPendingWorkspaceName = name; } catch (e3b) {}
-                try { pal.__stStartupAppliedWorkspaceName = name; } catch (e3c) {}
-                try { pal.__stWorkspaceStatusName = name; } catch (e3d) {}
-                try { _stWriteLastUsedWorkspaceName(name); } catch (e3e) {}
+                try { _stSetWorkspaceNameState(name, { persist: true }); } catch (e3a) {}
                 try { _wmRefreshDropdown(name); } catch (e3f) {}
                 try {
                     if (wmDropdown && wmDropdown.selection && String(wmDropdown.selection.text || "") === name) {
@@ -12039,23 +10750,28 @@ function _stLockFooterDuringWorkspaceSwitch() {
 
 
 function _stSettleProtectedDefaultWorkspaceLayoutNow() {
-            // ALL_WORKSPACES_CLIP_FIX_2026-05-05:
             // Any workspace can rebuild/reorder accordions or lazy-build newly expanded sections.
             // Give the affected workspace tab areas one contained, synchronous layout pass.
-            // Do NOT use app.scheduleTask here and do NOT kick a delayed full-panel startup settle.
             try {
                 try { if ($.global.__ShineToolsClosing__ === true) return false; } catch (e0) {}
                 try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return false; } catch (e1) { return false; }
 
                 var targets = [];
-                try { if (pal && pal.__stMainAccordionHost) targets.push(pal.__stMainAccordionHost); } catch (e2a) {}
-                try { if (pal && pal.__stMainContentRoot) targets.push(pal.__stMainContentRoot); } catch (e2b) {}
-                try { if (pal && pal.__stMainTabRoot) targets.push(pal.__stMainTabRoot); } catch (e2c) {}
-                try { if (pal && pal.__stTabMain) targets.push(pal.__stTabMain); } catch (e2d) {}
-                try { if (pal && pal.__stTextAccordionHost) targets.push(pal.__stTextAccordionHost); } catch (e2e) {}
-                try { if (pal && pal.__stTextContentRoot) targets.push(pal.__stTextContentRoot); } catch (e2f) {}
-                try { if (pal && pal.__stTextTabRoot) targets.push(pal.__stTextTabRoot); } catch (e2g) {}
-                try { if (pal && pal.__stTabText) targets.push(pal.__stTabText); } catch (e2h) {}
+                // Only settle the visible top tab. Laying out both MAIN and TEXT immediately after
+                // workspace load adds hidden-tab ScriptUI churn and can contribute to random AE panel stalls.
+                var __activeTop = "MAIN";
+                try { __activeTop = String(pal.__activeTopTab || "MAIN"); } catch (eATop) { __activeTop = "MAIN"; }
+                if (__activeTop === "TEXT") {
+                    try { if (pal && pal.__stTextAccordionHost) targets.push(pal.__stTextAccordionHost); } catch (e2e) {}
+                    try { if (pal && pal.__stTextContentRoot) targets.push(pal.__stTextContentRoot); } catch (e2f) {}
+                    try { if (pal && pal.__stTextTabRoot) targets.push(pal.__stTextTabRoot); } catch (e2g) {}
+                    try { if (pal && pal.__stTabText) targets.push(pal.__stTabText); } catch (e2h) {}
+                } else {
+                    try { if (pal && pal.__stMainAccordionHost) targets.push(pal.__stMainAccordionHost); } catch (e2a) {}
+                    try { if (pal && pal.__stMainContentRoot) targets.push(pal.__stMainContentRoot); } catch (e2b) {}
+                    try { if (pal && pal.__stMainTabRoot) targets.push(pal.__stMainTabRoot); } catch (e2c) {}
+                    try { if (pal && pal.__stTabMain) targets.push(pal.__stTabMain); } catch (e2d) {}
+                }
 
                 for (var i = 0; i < targets.length; i++) {
                     try {
@@ -12066,8 +10782,7 @@ function _stSettleProtectedDefaultWorkspaceLayoutNow() {
                     } catch (eEach) {}
                 }
 
-                // Paint only. Avoid pal.layout.layout(true) / pal.layout.resize() here.
-                try { if (pal && pal.update) pal.update(); } catch (eUpd) {}
+                // Avoid forcing a palette update here; AE will repaint after the click/load handler returns.
                 return true;
             } catch (e) {}
             return false;
@@ -12075,7 +10790,7 @@ function _stSettleProtectedDefaultWorkspaceLayoutNow() {
 
 function _stLoadWorkspaceByName(name, options) {
             try {
-                var wanted = String(name || "").replace(/^\s+|\s+$/g, "");
+                var wanted = _stCleanWorkspaceName(name);
                 if (!wanted) return false;
 
                 var data = null;
@@ -12087,7 +10802,7 @@ function _stLoadWorkspaceByName(name, options) {
 
                 try { if (typeof _buildTextTabIfNeeded === "function") _buildTextTabIfNeeded(); } catch (e1) {}
 
-                // Set active-name state immediately so the status line updates before the heavier workspace apply.
+                // Set active state and status before the heavier workspace apply.
                 try { _stSetActiveWorkspaceNameState(wanted); } catch (e2a) {}
                 try { _stApplyWorkspaceStatusText(wanted); } catch (e2b) {}
 
@@ -12117,18 +10832,18 @@ function _stLoadWorkspaceByName(name, options) {
                 // Keep redraws minimal to avoid the visible "jump" after workspace switches.
                 // Refresh the manager surface only; avoid a second footer/apply-surface settle here.
                 try { _stRefreshWorkspaceManagerSurface(); } catch (e8a) {}
-                try { if (pal.update) pal.update(); } catch (e10) {}
+                // FINAL STABILITY PASS: avoid extra forced pal.update() immediately after workspace load.
                 // Docked AE panels sometimes report their final bounds one tick after a workspace loads.
                 // Queue a one-shot settle pass so Default/workspace accordions do not clip until the user resizes.
-                try { if ($.global.__ShineToolsQueueLayoutSettle__) $.global.__ShineToolsQueueLayoutSettle__(120); } catch (eSettleWS) {}
+
                 return true;
-            } catch (e11) {}
+            } catch (e11) {  }
             return false;
         }
         function _stSaveWorkspaceByName(name, explicitPayload, options) {
             var f = null;
             try {
-                name = String(name || "").replace(/^\s+|\s+$/g, "");
+                name = _stCleanWorkspaceName(name);
                 if (!name) return false;
                 options = options || {};
                 if (_stIsProtectedWorkspaceName(name) && !options.allowProtectedOverwrite) return false;
@@ -12139,14 +10854,9 @@ function _stLoadWorkspaceByName(name, options) {
                 if (!payload || typeof payload !== "object") payload = {};
                 payload.name = String(name || "");
                 var raw = _stJsonStringify(payload);
-                f.encoding = "UTF-8";
-                if (!f.open("w")) return false;
-                f.write(raw);
-                f.close();
+                if (!_stWriteTextFile(f, raw, "UTF-8")) return false;
                 if (!options.skipActiveState) {
-                    try { pal.__stCurrentWorkspaceName = String(name || ""); } catch (e0) {}
-                    try { pal.__stPendingWorkspaceName = String(name || ""); } catch (e0a) {}
-                    try { pal.__stWorkspaceStatusName = String(name || ""); } catch (e0b) {}
+                    try { _stSetWorkspaceNameState(name, { startup: false }); } catch (e0) {}
                     try { _updateWorkspaceStatusLabel({ suppressLayout: true }); } catch (eUpd) {}
                 }
                 return true;
@@ -12160,7 +10870,7 @@ function _stLoadWorkspaceByName(name, options) {
         }
         function _stDeleteWorkspaceByName(name) {
             try {
-                name = String(name || "").replace(/^\s+|\s+$/g, "");
+                name = _stCleanWorkspaceName(name);
                 if (!name || _stIsProtectedWorkspaceName(name)) return false;
                 var f = _stWorkspaceFileByName(name);
                 if (!f || !f.exists) return false;
@@ -12174,20 +10884,26 @@ function _stLoadWorkspaceByName(name, options) {
         try { _stPublishWorkspaceApi(); } catch (ePublishWS) {}
 
         function _openWorkspaceManager(fromTabName) {
+
             try { pal.__stWorkspaceReturnTab = String(fromTabName || pal.__activeTopTab || "MAIN"); } catch (e0) {}
-            try { pal.__stPendingWorkspaceName = String(pal.__stCurrentWorkspaceName || pal.__stPendingWorkspaceName || ""); } catch (e0a) {}
+            try {
+                _stSetWorkspaceNameState(_stResolveWorkspaceName(["current", "pending"]), {
+                    current: false, startup: false, status: false
+                });
+            } catch (e0a) {}
             try {
                 if (!pal.__stWorkspaceManagerBuilt) _buildWorkspaceManagerShell();
             } catch (e1) { try { alert("Workspace Manager build error:\n" + String(e1)); } catch (e1a) {} return; }
             try { _syncWorkspaceDropdownToActiveName(); } catch (e1b) {}
             try { if (pal.__stWorkspaceManagerUpdateActionStates) pal.__stWorkspaceManagerUpdateActionStates(); } catch (e1c) {}
             try { _selectTopTab("WORKSPACE_MANAGER"); } catch (e2) {}
-            try { _stCommitWorkspaceSelectionUI(pal.__stCurrentWorkspaceName || pal.__stPendingWorkspaceName || "", { skipUpdate: true }); } catch (e2a) {}
+            try { _stCommitWorkspaceSelectionUI(_stResolveWorkspaceName(["current", "pending"]), { skipUpdate: true }); } catch (e2a) {}
             try { _stSettleWorkspaceManagerInitialWidths(); } catch (e3) {}
             try { if (pal.update) pal.update(); } catch (e4) {}
         }
 
         function _closeWorkspaceManager() {
+
             var target = "MAIN";
             try { target = String(pal.__stWorkspaceReturnTab || "MAIN"); } catch (e0) {}
             if (target !== "TEXT") target = "MAIN";
@@ -12219,9 +10935,7 @@ function _stLoadWorkspaceByName(name, options) {
             try { btn.maximumSize = [w, h]; } catch (eB1) {}
             try { btn.preferredSize = [w, h]; } catch (eB2) {}
             try { btn.helpTip = helpTip || ""; } catch (eTip0) {}
-            try { defocusButtonBestEffort(btn); } catch (eDF) {}
-
-            if (__isWorkspaceLauncher) {
+if (__isWorkspaceLauncher) {
                 try { btn.text = "\u25B6"; } catch (eT0) {}
                 try { btn.justify = "center"; } catch (eT1) {}
                 try { btn.alignment = ["right", "center"]; } catch (eT2) {}
@@ -12260,12 +10974,10 @@ function _stLoadWorkspaceByName(name, options) {
                 __statusSeedHasWorkspaces = !!(__statusSeedNames && __statusSeedNames.length);
             } catch (eLblSeedHas) { __statusSeedHasWorkspaces = false; }
             if (__statusSeedHasWorkspaces) {
-                try { __statusSeedName = String(pal.__stWorkspaceStatusName || ""); } catch (eLblSeed0) {}
-                try { if (!__statusSeedName) __statusSeedName = String(_stReadLastUsedWorkspaceName() || ""); } catch (eLblSeed1) {}
-                try { if (!__statusSeedName) __statusSeedName = String(pal.__stCurrentWorkspaceName || pal.__stStartupAppliedWorkspaceName || pal.__stPendingWorkspaceName || ""); } catch (eLblSeed2) {}
+                try { __statusSeedName = _stResolveWorkspaceName(["status", "persisted", "current", "startup", "pending"]); } catch (eLblSeed0) {}
             }
 
-            var __statusSeedText = (__statusSeedName && String(__statusSeedName).replace(/^\s+|\s+$/g, "")) ? ("Workspace: " + __statusSeedName) : "Workspace:";
+            var __statusSeedText = _stWorkspaceStatusText(__statusSeedName);
             var statusLbl = lane.add("statictext", undefined, __statusSeedText);
             statusLbl.alignment = ["right", "center"];
             try { statusLbl.justify = "right"; } catch (eLbl0) {}
@@ -12405,8 +11117,7 @@ function _stLoadWorkspaceByName(name, options) {
                 var b = row.add("button", undefined, labelText);
                 b.alignment = ["fill", "center"];
                 try { b.preferredSize.height = 24; } catch (eH) {}
-                try { defocusButtonBestEffort(b); } catch (eDF) {}
-                b.onClick = onClickFn;
+b.onClick = onClickFn;
                 return b;
             }
 
@@ -12430,14 +11141,10 @@ function _stLoadWorkspaceByName(name, options) {
                 try { proposed = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) {}
                 var name = "";
                 try { name = __ST_promptSafe__("Name the new workspace:", proposed || "New Workspace"); } catch (e1) { name = prompt("Name the new workspace:", proposed || "New Workspace"); }
-                try { name = String(name || "").replace(/^\s+|\s+$/g, ""); } catch (e2) {}
+                try { name = _stCleanWorkspaceName(name); } catch (e2) {}
                 if (!name) return;
                 if (_stSaveWorkspaceByName(name)) {
-                    try { pal.__stCurrentWorkspaceName = name; } catch (e3a) {}
-                    try { pal.__stPendingWorkspaceName = name; } catch (e3b) {}
-                    try { pal.__stStartupAppliedWorkspaceName = name; } catch (e3c) {}
-                    try { pal.__stWorkspaceStatusName = name; } catch (e3d) {}
-                    try { _stWriteLastUsedWorkspaceName(name); } catch (e3e) {}
+                    try { _stSetWorkspaceNameState(name, { persist: true }); } catch (e3a) {}
                     try { _wmRefreshDropdown(name); } catch (e3) {}
                     try {
                         if (wmDropdown && wmDropdown.selection && String(wmDropdown.selection.text || "") === name) {
@@ -12448,7 +11155,7 @@ function _stLoadWorkspaceByName(name, options) {
                 }
             });
 
-            
+
             var btnLoadWorkspace = _wmMakeActionButton("Load Workspace...", function () {
                 try { _stImportWorkspaceFromJsonFile(); } catch (eLoadBtn) { alert("Load Workspace failed: " + String(eLoadBtn)); }
             });
@@ -12482,18 +11189,10 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
                     try { names = _stListWorkspaceNames() || []; } catch (e0b) { names = []; }
 
                     if (!names || !names.length) {
-                        try { pal.__stCurrentWorkspaceName = ""; } catch (e1a) {}
-                        try { pal.__stPendingWorkspaceName = ""; } catch (e1b) {}
-                        try { pal.__stStartupAppliedWorkspaceName = ""; } catch (e1c) {}
-                        try { pal.__stWorkspaceStatusName = ""; } catch (e1d) {}
-                        try { _stWriteLastUsedWorkspaceName(""); } catch (e1e) {}
+                        try { _stSetWorkspaceNameState("", { persist: true }); } catch (e1a) {}
                         try { if (wmDropdown) wmDropdown.selection = null; } catch (e1f) {}
 
-                        var fallback = "Workspace:";
-                        try { if (pal.__stWorkspaceStatusNameLabel_MAIN) pal.__stWorkspaceStatusNameLabel_MAIN.text = fallback; } catch (e1g) {}
-                        try { if (pal.__stWorkspaceStatusNameLabel_TEXT) pal.__stWorkspaceStatusNameLabel_TEXT.text = fallback; } catch (e1h) {}
-                        try { if (pal.__stWorkspaceStatusNameLabel) pal.__stWorkspaceStatusNameLabel.text = fallback; } catch (e1i) {}
-
+                        try { _stRenderWorkspaceStatus(""); } catch (e1g) {}
                         try { _updateWorkspaceStatusLabel(); } catch (e1j) {}
                     } else {
                         var __nextName = "";
@@ -12517,16 +11216,9 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
                         }
 
                         if (__nextName) {
-                            try { pal.__stCurrentWorkspaceName = __nextName; } catch (e3a) {}
-                            try { pal.__stPendingWorkspaceName = __nextName; } catch (e3b) {}
-                            try { pal.__stStartupAppliedWorkspaceName = __nextName; } catch (e3c) {}
-                            try { pal.__stWorkspaceStatusName = __nextName; } catch (e3d) {}
+                            try { _stSetWorkspaceNameState(__nextName); } catch (e3a) {}
 
-                            var __statusText = "Workspace: " + __nextName;
-                            try { if (pal.__stWorkspaceStatusNameLabel_MAIN) pal.__stWorkspaceStatusNameLabel_MAIN.text = __statusText; } catch (e3f) {}
-                            try { if (pal.__stWorkspaceStatusNameLabel_TEXT) pal.__stWorkspaceStatusNameLabel_TEXT.text = __statusText; } catch (e3g) {}
-                            try { if (pal.__stWorkspaceStatusNameLabel) pal.__stWorkspaceStatusNameLabel.text = __statusText; } catch (e3h) {}
-
+                            try { _stRenderWorkspaceStatus(__nextName); } catch (e3f) {}
                             try { _stLoadWorkspaceByName(__nextName, { syncDropdown: false }); } catch (e3i) {}
                         } else {
                             try { _updateWorkspaceStatusLabel(); } catch (e3j) {}
@@ -12541,7 +11233,7 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
             function _wmGetSelectedWorkspaceName() {
                 var name = "";
                 try { name = (wmDropdown.selection && wmDropdown.selection.text) ? String(wmDropdown.selection.text) : ""; } catch (e0) { name = ""; }
-                try { name = String(name || "").replace(/^\s+|\s+$/g, ""); } catch (e1) { name = ""; }
+                try { name = _stCleanWorkspaceName(name); } catch (e1) { name = ""; }
                 return name;
             }
 
@@ -12569,17 +11261,15 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
                     // Do not clear current/pending/startup workspace state here.
                     // The dropdown can refresh before the list is repopulated, and we still want
                     // the saved active workspace to survive that rebuild.
-                    try { pal.__stWorkspaceStatusName = ""; } catch (eEmpty3) {}
+                    try {
+                        _stSetWorkspaceNameState("", {
+                            current: false, pending: false, startup: false
+                        });
+                    } catch (eEmpty3) {}
                 }
 
-                var wanted = String(selectName || "");
-                if (!wanted) {
-                    try { wanted = String(pal.__stCurrentWorkspaceName || pal.__stStartupAppliedWorkspaceName || pal.__stPendingWorkspaceName || ""); } catch (e1a) { wanted = ""; }
-                }
-                if (!wanted) {
-                    try { wanted = String(_stReadLastUsedWorkspaceName() || ""); } catch (e1b) { wanted = ""; }
-                }
-                wanted = String(wanted || "").replace(/^\s+|\s+$/g, "");
+                var wanted = _stCleanWorkspaceName(selectName);
+                if (!wanted) wanted = _stResolveWorkspaceName(["current", "startup", "pending", "persisted"]);
 
                 var idxSel = -1;
                 if (wanted) {
@@ -12599,16 +11289,19 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
 
                 if (wmDropdown.selection) {
                     try {
-                        var __selName = String(wmDropdown.selection.text || "");
-                        // Mirror the visible dropdown selection into the status text only.
-                        // Do NOT commit current/pending/startup workspace state here; that happens only
-                        // after a workspace is actually loaded/applied.
-                        pal.__stWorkspaceStatusName = __selName;
+                        // Mirror the visible dropdown selection into status only.
+                        _stSetWorkspaceNameState(wmDropdown.selection.text, {
+                            current: false, pending: false, startup: false
+                        });
                     } catch (eSelSync) {}
                 }
 
                 if ((!names || !names.length) || !wmDropdown.selection) {
-                    try { pal.__stWorkspaceStatusName = ""; } catch (eClr0) {}
+                    try {
+                        _stSetWorkspaceNameState("", {
+                            current: false, pending: false, startup: false
+                        });
+                    } catch (eClr0) {}
                     try { _updateWorkspaceStatusLabel(); } catch (eClr1) {}
                 } else {
                     try { _updateWorkspaceStatusLabel(); } catch (eClr2) {}
@@ -12625,11 +11318,7 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
                 if (!name) return;
 
                 // Update the status line immediately so the UI feels responsive.
-                try { pal.__stCurrentWorkspaceName = name; } catch (e0a) {}
-                try { pal.__stPendingWorkspaceName = name; } catch (e0b) {}
-                try { pal.__stStartupAppliedWorkspaceName = name; } catch (e0c) {}
-                try { pal.__stWorkspaceStatusName = name; } catch (e0d) {}
-                try { _stWriteLastUsedWorkspaceName(name); } catch (e0dd) {}
+                try { _stSetWorkspaceNameState(name, { persist: true }); } catch (e0a) {}
                 try { _updateWorkspaceStatusLabel(); } catch (e0e) {}
 
                 if (!_stLoadWorkspaceByName(name, { syncDropdown: false })) {
@@ -12641,9 +11330,7 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
             };
 
             try {
-                var __stInitialWanted = "";
-                try { __stInitialWanted = String(_stReadLastUsedWorkspaceName() || ""); } catch (eR0) { __stInitialWanted = ""; }
-                try { if (!__stInitialWanted) __stInitialWanted = String(_resolveActiveWorkspaceStatusName() || ""); } catch (eR1) {}
+                var __stInitialWanted = _stResolveWorkspaceName(["persisted", "current", "dropdown", "pending"]);
                 _wmRefreshDropdown(__stInitialWanted);
             } catch (eR) {}
 
@@ -12660,7 +11347,7 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
         }
         function _buildUpdatesTab(tabUpdates) {
             // -------------------------
-            // UPDATES TAB CONTENT (UI only for now)
+            // UPDATES TAB CONTENT
             // Centralized labels/status strings (reduce repeated literals)
             var __UPD_LABELS = {
                 BTN_CHECK: ST_LABELS.CHECK_FOR_UPDATES,
@@ -12707,9 +11394,6 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
             updatesMeta.margins       = 0;
             updatesMeta.spacing       = 4;
 
-            // NOTE: Version is centralized near the top as SHINE_VERSION.
-            // (SHINE_TOOLS_VERSION remains as a derived "vX.Y" display string.)
-            var SHINE_TOOLS_VERSION = "v" + SHINE_VERSION;
 
             function _makeKVRow(k, v) {
                 var r = updatesMeta.add("group");
@@ -12726,7 +11410,6 @@ var btnDelete = _wmMakeActionButton("Delete Workspace", function () {
                 vst.alignment = ["fill", "center"];
                 return {row:r, key:kst, val:vst};
             }
-            var kvCurrent = _makeKVRow("Current version:", ((typeof SHINETOOLS_VERSION !== "undefined" && SHINETOOLS_VERSION) ? String(SHINETOOLS_VERSION) : ("v" + SHINE_VERSION)));
 var kvLatest = _makeKVRow("Latest version:", "—");
     var kvLast   = _makeKVRow("Last checked:", "—");
     var kvStatus = _makeKVRow("Status:", "Not checked yet");
@@ -12766,9 +11449,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             checkCell.margins       = 0;
 
             var btnCheckUpdates = checkCell.add("button", undefined, __UPD_LABELS.BTN_CHECK);
-            try { defocusButtonBestEffort(btnCheckUpdates); } catch(eDFu1) {}
-
-                        _setHelpTipBestEffort(btnCheckUpdates, "Check GitHub for a newer ShineTools version. If an update is found, INSTALL UPDATE will appear below.");
+_setHelpTipBestEffort(btnCheckUpdates, "Check GitHub for a newer ShineTools version. If an update is found, INSTALL UPDATE will appear below.");
             // Auto-check toggle
             var autoChkGrp = updatesControlsRow.add("group");
             autoChkGrp.orientation   = "row";
@@ -12796,8 +11477,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             installCell.margins       = 0;
 
             var btnInstallUpdate = installCell.add("button", undefined, __UPD_LABELS.BTN_INSTALL);
-            try { defocusButtonBestEffort(btnInstallUpdate); } catch(eDFu2) {}
-                        _setHelpTipBestEffort(btnInstallUpdate, "Install the downloaded update (only available after a newer version is detected).");
+_setHelpTipBestEffort(btnInstallUpdate, "Install the downloaded update (only available after a newer version is detected).");
             // Start hidden (only CHECK is visible on load).
             btnInstallUpdate.visible = false;
             btnInstallUpdate.enabled = false;
@@ -12826,7 +11506,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             try { cbAutoCheck.value = false; } catch (eAutoInit) {}
             cbAutoCheck.onClick = function(){};
 
-            // GitHub update check
+            // GitHub updater
             var GITHUB_VERSION_JSON_URL = "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/version.json";
 
     // --- version.json format (single source of truth) ---
@@ -12850,113 +11530,71 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             // Where to install (handled by the PKG payload):
             //   /Applications/Adobe After Effects 2025/Scripts/ScriptUI Panels
 
-            // Simple in-memory update state so CHECK does not INSTALL.
+            // In-memory state: checking never installs automatically.
             var __UPDATE_STATE = {
                 checked: false,
                 available: false,
                 latest: null,
                 jsxUrl: null,
-                pkgUrl: null,
-                notes: null
+                pkgUrl: null
             };
-            // Updates-tab caching removed.
-            function _cacheChangelogTextSafe(t) {}
-            function _cacheUpdatesPayloadSafe(obj) {}
-            function _loadCachedPayloadSafe() { return null; }
-
             function _normalizeUpdateUrl(url) {
-                // Normalize update URLs (GitHub raw only).
-                // Tolerate "/refs/heads/" URLs by converting to canonical raw path.
                 try {
                     if (!url) return url;
                     var s = String(url);
-
                     if (s.indexOf("raw.githubusercontent.com") !== -1 && s.indexOf("/refs/heads/") !== -1) {
-                        // https://raw.githubusercontent.com/ORG/REPO/refs/heads/main/file
-                        // -> https://raw.githubusercontent.com/ORG/REPO/main/file
                         s = s.replace(/\/refs\/heads\//, "/");
                     }
-
                     return s;
                 } catch (e) {
                     return url;
                 }
             }
 
-            function _appendCacheBuster(url) {
-                // Add a cache-buster query param to avoid GitHub edge caching / HTML interstitials.
+            function _withFreshCacheBuster(url) {
                 try {
                     if (!url) return url;
-                    var s = String(url);
-                    var cb = (new Date()).getTime();
-                    // If already has cb=, don't add again.
-                    if (s.indexOf("cb=") !== -1) return s;
-                    return s + (s.indexOf("?") === -1 ? "?" : "&") + "cb=" + cb;
-                } catch (e2) {
+                    var s = String(_normalizeUpdateUrl(url));
+                    s = s.replace(/([?&])cb=\d+/g, "$1").replace(/[?&]$/, "");
+                    s = s.replace(/\?&/g, "?").replace(/&&/g, "&");
+                    return s + (s.indexOf("?") === -1 ? "?" : "&") + "cb=" + (new Date()).getTime();
+                } catch (e) {
                     return url;
                 }
             }
 
-    function _toJsDelivrRaw(url) {
-                // Convert a raw.githubusercontent.com URL to a jsDelivr GitHub CDN URL.
-                // raw: https://raw.githubusercontent.com/ORG/REPO/BRANCH/path/to/file
-                // cdn: https://cdn.jsdelivr.net/gh/ORG/REPO@BRANCH/path/to/file
+            function _toJsDelivrRaw(url) {
                 try {
                     if (!url) return "";
-                    var s = String(url);
-                    var m = s.match(/^https?:\/\/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)$/i);
+                    var m = String(url).match(/^https?:\/\/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)$/i);
                     if (!m) return "";
                     return "https://cdn.jsdelivr.net/gh/" + m[1] + "/" + m[2] + "@" + m[3] + "/" + m[4];
                 } catch (e) {
                     return "";
                 }
+            }
 
             function _toMediaGithubusercontent(url) {
-                // Convert raw.githubusercontent.com URL to media.githubusercontent.com (sometimes more reliable than raw/cdn).
-                // raw:   https://raw.githubusercontent.com/ORG/REPO/BRANCH/path/to/file
-                // media: https://media.githubusercontent.com/media/ORG/REPO/BRANCH/path/to/file
                 try {
                     if (!url) return "";
-                    var s = String(url);
-                    var mm = s.match(/^https?:\/\/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)$/i);
-                    if (!mm) return "";
-                    return "https://media.githubusercontent.com/media/" + mm[1] + "/" + mm[2] + "/" + mm[3] + "/" + mm[4];
+                    var m = String(url).match(/^https?:\/\/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)$/i);
+                    if (!m) return "";
+                    return "https://media.githubusercontent.com/media/" + m[1] + "/" + m[2] + "/" + m[3] + "/" + m[4];
                 } catch (e) {
                     return "";
                 }
             }
 
-            function _headPreview(s, maxChars) {
+            function _headPreview(value, maxChars) {
                 try {
-                    maxChars = maxChars || 160;
-                    if (!s) return "";
-                    var t = String(s);
-                    t = t.replace(/\r\n/g, "\n");
-                    t = t.replace(/[\t\x00-\x08\x0B\x0C\x0E-\x1F]+/g, " ");
-                    t = t.replace(/\s+/g, " ");
-                    if (t.length > maxChars) t = t.substring(0, maxChars) + "…";
-                    return t;
-                } catch (e2) {
+                    var text = String(value || "").replace(/\r\n/g, "\n");
+                    text = text.replace(/[\t\x00-\x08\x0B\x0C\x0E-\x1F]+/g, " ").replace(/\s+/g, " ");
+                    var limit = maxChars || 160;
+                    return (text.length > limit) ? (text.substring(0, limit) + "…") : text;
+                } catch (e) {
                     return "";
                 }
             }
-            }
-
-    // ------------------ Updater Hardening Helpers ------------------
-    function _sleepMs(ms){ try{ $.sleep(ms); }catch(e){} }
-
-    function _freshCacheBuster(url){
-        try{
-            if(!url) return url;
-            var s = String(url);
-            // Remove existing cb= parameter if present
-            s = s.replace(/([?&])cb=\d+/g, '$1').replace(/[?&]$/,'');
-            // Clean up possible double && or ?&
-            s = s.replace(/\?&/g,'?').replace(/&&/g,'&');
-            // Add fresh
-            return _appendCacheBuster(s);
-        }catch(e){ return _appendCacheBuster(url); }
-    }
 
     function _classifyDownloadBody(raw){
         // returns {isHtml:boolean, reason:string}
@@ -12985,11 +11623,9 @@ var kvLatest = _makeKVRow("Latest version:", "—");
     function _downloadWithRetries(url, outPath, tries){
         // Returns {ok:boolean, msg:string, attempts:int}
         tries = tries || 3;
-        var delays = [0, 1200, 3200, 8000]; // ms
         var last = {ok:false, msg:""};
         for (var i=0; i<tries; i++){
-            if (i>0) _sleepMs(delays[Math.min(i, delays.length-1)]);
-            var u = _freshCacheBuster(url); // cache-bust each attempt
+            var u = _withFreshCacheBuster(url);
             last = _curlDownload(u, outPath);
             if (last && last.ok) return {ok:true, msg:last.msg||"", attempts:(i+1)};
         }
@@ -13037,15 +11673,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
         }catch(e){}
     }
 
-    function _looksLikeHtml(s){
-                try{
-                    if(!s) return false;
-                    var t = String(s);
-                    // only treat as HTML if it starts like a document
-                    return (/^\s*(?:<!doctype\b|<html\b|<head\b)/i).test(t);
-                }catch(e){ return false; }
-            }
-
             function _curlDownload(url, outPath) {
                 // Returns { ok:boolean, msg:string }
                 // macOS-only: uses curl with redirects enabled (GitHub).
@@ -13077,22 +11704,11 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     // Verify file written
                     if (f.exists && f.length > 0) {
 
-                        // Detect HTML / 404 bodies (GitHub page, proxy login page, etc.)
                         try {
                             var probe = _readTextFile(outPath);
                             if (probe) {
-                                var p = String(probe);
-                                var head = p.substr(0, 600);
-                                // Only treat as HTML if it *starts* like a webpage (avoid false positives if the JSX contains "<html" text).
-                                if (/^\s*<!doctype/i.test(head) || /^\s*<html/i.test(head) || /^\s*<head/i.test(head)) {
-                                    return { ok:false, msg:"Got HTML instead of a file. Use a direct RAW (raw.githubusercontent.com) link." };
-                                }
-                                if (/^\s*404\s*:|^\s*404\s+not\s+found/i.test(p) || /Not\s+Found\s*\(404\)/i.test(p)) {
-                                    return { ok:false, msg:"Got 404 Not Found. Check that the RAW URL path is correct." };
-                                }
-                                if (/rate\s*limit/i.test(p) && /github/i.test(p)) {
-                                    return { ok:false, msg:"GitHub rate-limit response. Try again later." };
-                                }
+                                var bodyInfo = _classifyDownloadBody(probe);
+                                if (bodyInfo.isHtml) return { ok:false, msg:bodyInfo.reason || "Invalid download response." };
                             }
                         } catch (eProbe) {}
 
@@ -13118,20 +11734,8 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             }
 
             function _readTextFile(pathOrFile) {
-                // Reads a text file and returns a string (best-effort).
-                // Used only for light probing (e.g., detecting HTML instead of JSON/JSX).
-                var f = null;
-                try {
-                    f = (pathOrFile instanceof File) ? pathOrFile : new File(String(pathOrFile));
-                    if (!f.exists) return "";
-                    if (!f.open("r")) return "";
-                    var s = f.read();
-                    try { f.close(); } catch (e0) {}
-                    return s || "";
-                } catch (e) {
-                    try { if (f) f.close(); } catch (e1) {}
-                    return "";
-                }
+                var raw = _stReadTextFile(pathOrFile, "UTF-8");
+                return (raw === null) ? "" : raw;
             }
 
             function _extractJsonValue(jsonText, key) {
@@ -13215,7 +11819,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             function _setUpdatesLastChecked(d) {
                 try {
                     kvLast.val.text = _formatStamp(d || new Date());
-                    
+
                 } catch (e) {}
             }
 
@@ -13242,29 +11846,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 //   CURRENT VERSION first when installed version is current.
                 //   Older versions continue directly below.
                 try {
-                    function _notesToCleanArray(v) {
-                        var out = [];
-                        try {
-                            if (v === null || v === undefined) return out;
-                            if (typeof v === "string") return [v];
-                            if (v.length !== undefined && typeof v !== "string") {
-                                for (var ai = 0; ai < v.length; ai++) {
-                                    var item = v[ai];
-                                    if (item === null || item === undefined) continue;
-                                    if (typeof item === "string") out.push(item);
-                                    else if (item.text !== undefined) out.push(String(item.text));
-                                    else if (item.note !== undefined) out.push(String(item.note));
-                                    else if (item.title !== undefined) out.push(String(item.title));
-                                }
-                                return out;
-                            }
-                            if (v.notes !== undefined) return _notesToCleanArray(v.notes);
-                            if (v.changes !== undefined) return _notesToCleanArray(v.changes);
-                            if (v.items !== undefined) return _notesToCleanArray(v.items);
-                        } catch (eA) {}
-                        return out;
-                    }
-
                     var s = "";
                     var vLatest = String(latestVer || "").replace(/^v\s*/i, "");
                     var today = _formatStamp(new Date());
@@ -13276,7 +11857,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                         s += topLabel + " — " + today + "\n";
                     }
 
-                    var cn = _notesToCleanArray(currentNotes);
+                    var cn = _stNotesArrayForUpdates(currentNotes);
 
                     if (cn && cn.length) {
                         for (var i=0; i<cn.length; i++) {
@@ -13300,7 +11881,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                             if (d) s += _stFormatVersionLabel(v) + " — " + d + "\n";
                             else   s += _stFormatVersionLabel(v) + "\n";
 
-                            var notes = _notesToCleanArray(it.notes || it.changes || it.items || []);
+                            var notes = _stNotesArrayForUpdates(it.notes || it.changes || it.items || []);
 
                             if (notes && notes.length) {
                                 for (var n = 0; n < notes.length; n++) {
@@ -13315,7 +11896,6 @@ var kvLatest = _makeKVRow("Latest version:", "—");
 
                     s = s.replace(/\n+$/, "");
                     chBox.text = s || "—";
-                    _cacheChangelogTextSafe(chBox.text);
                 } catch (e) {
                     try { chBox.text = "—"; } catch(_e) {}
                 }
@@ -13464,6 +12044,57 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 return result;
             }
 
+            function _getUpdaterCacheFolder() {
+                var folder = _ensureFolder(Folder.userData.fsName + "/ShineTools");
+                if (!folder) folder = _ensureFolder(Folder.temp.fsName + "/ShineTools");
+                return folder;
+            }
+
+            function _parseUpdatePayload(raw) {
+                var result = { data:null, clean:"" };
+                try {
+                    if (!raw) return result;
+                    result.clean = String(raw).replace(/^\uFEFF/, "").replace(/^\s+|\s+$/g, "");
+                    var data = _stJsonParse(result.clean);
+                    if (!data || typeof data !== "object") data = null;
+
+                    if (!data || !(data.latest || data.version)) {
+                        data = data || {};
+                        data.latest = _extractJsonValue(result.clean, "latest") || _extractJsonValue(result.clean, "version");
+                        data.jsxUrl = _extractJsonValue(result.clean, "jsxUrl");
+                        data.pkgUrl = _extractJsonValue(result.clean, "pkgUrl");
+                        data.notes = _extractJsonStringArray(result.clean, "notes");
+                        if (!data.notes || !data.notes.length) data.notes = _extractJsonStringArray(result.clean, "changelog");
+                    }
+                    if (data && !data.latest && data.version) data.latest = data.version;
+                    result.data = data;
+                } catch (e) {}
+                return result;
+            }
+
+            function _setInstallButtonAvailable(available) {
+                try { btnInstallUpdate.enabled = !!available; } catch (e0) {}
+                try { btnInstallUpdate.visible = !!available; } catch (e1) {}
+                try { relayoutScoped(tabUpdates); } catch (e2) {}
+            }
+
+            function _applyCheckedUpdateState(data, available) {
+                __UPDATE_STATE.checked = true;
+                __UPDATE_STATE.available = !!available;
+                __UPDATE_STATE.latest = String(data.latest || "");
+                __UPDATE_STATE.jsxUrl = available ? (data.jsxUrl || data.jsxURL || data.jsx || null) : null;
+                __UPDATE_STATE.pkgUrl = available ? (data.pkgUrl || null) : null;
+                _setInstallButtonAvailable(available);
+                _setFooterUpdateIndicator(!available);
+            }
+
+            function _completeUpdateInstall() {
+                __UPDATE_STATE.available = false;
+                _setInstallButtonAvailable(false);
+                _setFooterUpdateIndicator(true);
+                _setUpdatesStatus(__UPD_STATUS.SUCCESS_RESTART);
+            }
+
             function _getCurrentVersionString() {
                 // Single source of truth: prefer SHINETOOLS_VERSION when available.
                 try { if (typeof SHINETOOLS_VERSION !== "undefined" && SHINETOOLS_VERSION) return String(SHINETOOLS_VERSION); } catch (eV) {}
@@ -13476,12 +12107,16 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 return "1.0";
             }
 
-            
+
             function _setInitialUpdatesChangelogFromBundledNotes() {
                 // No network check is needed just to show the built-in release notes on launch.
                 // CHECK FOR UPDATES still refreshes this from version.json.
                 try {
                     var bundled = {
+                        "1.2": [
+                            "Added safer confirmation text for added files/presets with a refined circled-X clear icon.",
+                            "Kept the stability fix that avoids dropdown item swapping, timers, and sleep-based UI feedback."
+                        ],
                         "1.1": [
                             "Added new Save Workspace/Favorites Manager.",
                             "Added new Organize Library Elements dialog with custom section dividers, custom filenames, and reordering.",
@@ -13514,27 +12149,19 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             }
 
             function _doCheckForUpdates() {
-                var cacheRoot = Folder.userData.fsName + "/ShineTools";
-                var cacheDir = _ensureFolder(cacheRoot);
-                if (!cacheDir) cacheDir = _ensureFolder(Folder.temp.fsName + "/ShineTools");
+                var cacheDir = _getUpdaterCacheFolder();
                 if (!cacheDir) {
                     _setUpdatesStatus(__UPD_STATUS.MKDIR_FAIL);
                     return;
                 }
 
                 _setUpdatesLastChecked(new Date());
-
                 _setUpdatesStatus(__UPD_STATUS.CHECKING);
 
-                // IMPORTANT: GITHUB_VERSION_JSON_URL must ultimately point to a *file* direct link for version.json.
-                // If it's a folder link, GitHub will return HTML if the URL isn't raw and JSON.parse will fail.
-                var versionUrl = _normalizeUpdateUrl(GITHUB_VERSION_JSON_URL);
                 var versionPath = cacheDir.fsName + "/version.json";
-
-                var dl = _downloadWithRetries(versionUrl, versionPath, 3);
+                var dl = _downloadWithRetries(GITHUB_VERSION_JSON_URL, versionPath, 3);
                 if (!dl.ok) {
                     _setUpdatesStatus("Update check failed: could not download version.json. " + (dl.msg ? ("(" + dl.msg + ")") : ""));
-                    try { if (ST && ST.Log) ST.Log.e("updates", "Download version.json failed", dl.msg || ""); } catch(eLg) {}
                     return;
                 }
 
@@ -13544,52 +12171,10 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     return;
                 }
 
-                var data = null;
-
-                // Harden parsing across different ExtendScript builds:
-                // - strip UTF-8 BOM
-                // - trim whitespace
-                // - attempt JSON.parse when available
-                // - fallback to regex extraction for the keys we need
-                var clean = String(raw).replace(/^\uFEFF/, "").replace(/^\s+|\s+$/g, "");
-
-                try {
-                    if (typeof JSON !== "undefined" && JSON && JSON.parse) {
-                        data = JSON.parse(clean);
-                    }
-                } catch (eJSON) {
-                    data = null;
-                }
-
-                // ExtendScript on some AE builds can be flaky with JSON.parse (or missing altogether).
-                // As a controlled fallback (our own GitHub JSON), eval can correctly parse arrays/objects (incl. history).
-                if (!data) {
-                    try {
-                        // Ensure we eval a single expression object
-                        data = eval("(" + clean + ")");
-                    } catch (eEVAL) {
-                        data = null;
-                    }
-                }
-
-                // Minimal fallback if parsing isn't available / fails (notes only)
-
-                if (!data) {
-                    try { if (ST && ST.Log) ST.Log.e("updates", "Failed to parse version.json; using minimal fallback", ""); } catch(eLgP) {}
-
-                    data = {};
-                    data.latest = _extractJsonValue(clean, "latest") || _extractJsonValue(clean, "version");
-                    data.jsxUrl  = _extractJsonValue(clean, "jsxUrl");
-                    data.pkgUrl  = _extractJsonValue(clean, "pkgUrl");
-                    // notes/changelog optional; extract from JSON text when possible
-                    data.notes = _extractJsonStringArray(clean, "notes");
-                    if (!data.notes || !data.notes.length) data.notes = _extractJsonStringArray(clean, "changelog");
-                }
-
+                var parsed = _parseUpdatePayload(raw);
+                var data = parsed.data;
                 if (!data || !data.latest) {
-                    var prev = clean;
-                    if (prev.length > 140) prev = prev.substring(0, 140);
-                    _setUpdatesStatus("version.json could not be parsed or is missing 'latest'. Preview: " + prev);
+                    _setUpdatesStatus("version.json could not be parsed or is missing 'latest'. Preview: " + _headPreview(parsed.clean, 140));
                     return;
                 }
 
@@ -13599,42 +12184,11 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 var changelogPayload = _normalizeUpdateChangelogPayload(data);
                 var notes = changelogPayload.notes || [];
                 var historyArr = changelogPayload.history || null;
-                var cmp = _compareVersions(String(data.latest), String(currentVer));
-                _setUpdatesChangelogStructured(data.latest, notes, historyArr, (cmp > 0 ? "latest" : "current"));
-                _cacheUpdatesPayloadSafe(data);
-                _cacheChangelogTextSafe(chBox.text);
-                if (cmp <= 0) {
-                    // Checked and up-to-date
-                    __UPDATE_STATE.checked = true;
-                    __UPDATE_STATE.available = false;
-                    __UPDATE_STATE.latest = String(data.latest);
-                    __UPDATE_STATE.jsxUrl = null;
-                    __UPDATE_STATE.notes = notes;
-                    __UPDATE_STATE.pkgUrl = null;
+                var available = (_compareVersions(String(data.latest), String(currentVer)) > 0);
 
-                    btnInstallUpdate.enabled = false;
-                        try { btnInstallUpdate.visible = false; } catch (eV0) {}
-
-                        try { relayoutScoped(tabUpdates); } catch (eRL0) {}
-                        _setFooterUpdateIndicator(true);
-                    _setUpdatesStatus(__UPD_STATUS.UP_TO_DATE);
-                    return;
-                }
-
-                // Update available (but do not install from CHECK)
-                __UPDATE_STATE.checked = true;
-                __UPDATE_STATE.available = true;
-                __UPDATE_STATE.latest = String(data.latest);
-                __UPDATE_STATE.jsxUrl = (data.jsxUrl || data.jsxURL || data.jsx || null);
-                __UPDATE_STATE.pkgUrl = (data.pkgUrl || null);
-                __UPDATE_STATE.notes = notes;
-
-                btnInstallUpdate.enabled = true;
-                try { btnInstallUpdate.visible = true; } catch (eV2) {}
-    try { relayoutScoped(tabUpdates); } catch (eRL1) {}
-                _setFooterUpdateIndicator(false);
-                _setUpdatesStatus(__UPD_STATUS.UPDATE_AVAILABLE);
-                return;
+                _setUpdatesChangelogStructured(data.latest, notes, historyArr, available ? "latest" : "current");
+                _applyCheckedUpdateState(data, available);
+                _setUpdatesStatus(available ? __UPD_STATUS.UPDATE_AVAILABLE : __UPD_STATUS.UP_TO_DATE);
             }
 
             function _doInstallUpdate() {
@@ -13645,9 +12199,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                         return;
                     }
 
-                    var cacheRoot = Folder.userData.fsName + "/ShineTools";
-                    var cacheDir = _ensureFolder(cacheRoot);
-                    if (!cacheDir) cacheDir = _ensureFolder(Folder.temp.fsName + "/ShineTools");
+                    var cacheDir = _getUpdaterCacheFolder();
                     if (!cacheDir) {
                         _setUpdatesStatus(__UPD_STATUS.MKDIR_FAIL);
                         return;
@@ -13659,7 +12211,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                     var jsxUrl = __UPDATE_STATE.jsxUrl;
                     if (jsxUrl) {
                         var baseJsxUrl = _normalizeUpdateUrl(String(jsxUrl));
-                        jsxUrl = _appendCacheBuster(baseJsxUrl);
+                        jsxUrl = _withFreshCacheBuster(baseJsxUrl);
                         var jsxName = "ShineTools_" + latest.replace(/[^\w\.\-]/g, "_") + ".jsx";
                         var jsxPath = cacheDir.fsName + "/" + jsxName;
 
@@ -13671,7 +12223,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                         }
 
                         var newRaw = _readTextFile(jsxPath);
-                        if (!newRaw || _looksLikeHtml(newRaw)) {
+                        if (!newRaw || _classifyDownloadBody(newRaw).isHtml) {
 
                             // GitHub RAW can occasionally return HTML (rate-limit / cached edge / interstitial).
                             // We'll retry through alternate endpoints.
@@ -13682,36 +12234,34 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                                 var alt1 = _toJsDelivrRaw(baseJsxUrl);
                                 if (alt1) {
                                     _setUpdatesStatus(__UPD_STATUS.HTML_RETRY_CDN);
-                                    try { $.sleep(1200); } catch (_sl1) {}
-                                    alt1 = _appendCacheBuster(alt1);
+                                    alt1 = _withFreshCacheBuster(alt1);
                                     var dlAlt1 = _curlDownload(alt1, jsxPath);
                                     if (dlAlt1.ok) {
                                         newRaw = _readTextFile(jsxPath);
-                                        if (!_looksLikeHtml(newRaw)) lastPreview = "";
+                                        if (!_classifyDownloadBody(newRaw).isHtml) lastPreview = "";
                                         else lastPreview = _headPreview(newRaw, 180);
                                     }
                                 }
                             } catch (eAlt1) {}
 
                             // Retry #2: media.githubusercontent.com
-                            if (!newRaw || _looksLikeHtml(newRaw)) {
+                            if (!newRaw || _classifyDownloadBody(newRaw).isHtml) {
                                 try {
                                     var alt2 = _toMediaGithubusercontent(baseJsxUrl);
                                     if (alt2) {
                                         _setUpdatesStatus(__UPD_STATUS.HTML_RETRY_MEDIA);
-                                        try { $.sleep(1200); } catch (_sl2) {}
-                                        alt2 = _appendCacheBuster(alt2);
+                                        alt2 = _withFreshCacheBuster(alt2);
                                         var dlAlt2 = _curlDownload(alt2, jsxPath);
                                         if (dlAlt2.ok) {
                                             newRaw = _readTextFile(jsxPath);
-                                            if (!_looksLikeHtml(newRaw)) lastPreview = "";
+                                            if (!_classifyDownloadBody(newRaw).isHtml) lastPreview = "";
                                             else lastPreview = _headPreview(newRaw, 180);
                                         }
                                     }
                                 } catch (eAlt2) {}
                             }
 
-                            if (!newRaw || _looksLikeHtml(newRaw)) {
+                            if (!newRaw || _classifyDownloadBody(newRaw).isHtml) {
                                 var pv = lastPreview ? (" Preview: " + lastPreview) : "";
                                 _setUpdatesStatus("Downloaded file does not look like a .jsx (got HTML). Try again in a minute (GitHub can rate-limit scripted downloads)." + pv);
                                 return;
@@ -13721,15 +12271,14 @@ var kvLatest = _makeKVRow("Latest version:", "—");
     // Validate downloaded script looks like ShineTools (signature check)
     if (!newRaw || !_looksLikeShineToolsJsx(newRaw)) {
         var why = _classifyDownloadBody(newRaw);
-        _setUpdatesStatus("Install failed: downloaded file does not look like ShineTools_v1.0.jsx. " + (why.reason ? ("(" + why.reason + ")") : ""));
+        _setUpdatesStatus("Install failed: downloaded file does not look like a ShineTools .jsx. " + (why.reason ? ("(" + why.reason + ")") : ""));
         return;
     }
 
     // Prevent reinstall loops (downloaded version matches installed)
     var downloadedVer = _extractShineVersionFromJsx(newRaw);
-    var installedVer = "";
-    try { installedVer = String(SHINE_VERSION || ""); } catch(eIV){ installedVer=""; }
-    if (downloadedVer && installedVer && (downloadedVer === installedVer)) {
+    var installedVer = _getCurrentVersionString();
+    if (downloadedVer && installedVer && _compareVersions(downloadedVer, installedVer) === 0) {
         _setUpdatesStatus("Downloaded version matches installed (" + installedVer + "). No install needed.");
         return;
     }
@@ -13824,14 +12373,8 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                         }
 
                         // Mark as installed (still requires restart for the UI to show new version)
-                        __UPDATE_STATE.available = false;
-                        btnInstallUpdate.enabled = false;
-                        try { btnInstallUpdate.visible = false; } catch (eV0) {}
-
-                        try { relayoutScoped(tabUpdates); } catch (eRL0) {}
-                        _setFooterUpdateIndicator(true);
-                        _setUpdatesStatus(__UPD_STATUS.SUCCESS_RESTART);
-    return;
+                        _completeUpdateInstall();
+                        return;
                     }
 
                     // Optional PKG path (future)
@@ -13854,19 +12397,12 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                             return;
                         }
 
-                        __UPDATE_STATE.available = false;
-                        btnInstallUpdate.enabled = false;
-                        try { btnInstallUpdate.visible = false; } catch (eV0) {}
-
-                        try { relayoutScoped(tabUpdates); } catch (eRL0) {}
-                        _setFooterUpdateIndicator(true);
-                        _setUpdatesStatus(__UPD_STATUS.SUCCESS_RESTART);
-    return;
+                        _completeUpdateInstall();
+                        return;
                     }
 
                     _setUpdatesStatus(__UPD_STATUS.NO_URL);
                 } catch (e) {
-                    try { if (ST && ST.Log) ST.Log.e("updates", "Install failed", e); } catch(eLgI) {}
                     _setUpdatesStatus("Install failed: " + String(e));
                 }
             }
@@ -13886,69 +12422,13 @@ var kvLatest = _makeKVRow("Latest version:", "—");
                 }, false);
             };
 
-            function _primeUpdatesOnLaunch() {
-                // Populate changelog from version.json on panel load (no last-checked stamp, no status changes).
-                try {
-                    var cacheRoot = Folder.userData.fsName + "/ShineTools";
-                    var cacheDir = _ensureFolder(cacheRoot);
-                    if (!cacheDir) cacheDir = _ensureFolder(Folder.temp.fsName + "/ShineTools");
-                    if (!cacheDir) return;
 
-                    var versionUrl = _normalizeUpdateUrl(GITHUB_VERSION_JSON_URL);
-                    var versionPath = cacheDir.fsName + "/version.json";
-
-                    var dl = _downloadWithRetries(versionUrl, versionPath, 2);
-                    if (!dl.ok) return;
-
-                    var raw = _readTextFile(versionPath);
-                    if (!raw) return;
-
-                    var clean = String(raw).replace(/^\uFEFF/, "").replace(/^\s+|\s+$/g, "");
-
-                    var data = null;
-                    try {
-                        if (typeof JSON !== "undefined" && JSON && JSON.parse) data = JSON.parse(clean);
-                    } catch (eJSON) { data = null; }
-
-                    if (!data) return;
-
-                    if (data.latest) _setUpdatesVersion(String(data.latest));
-
-                    var changelogPayload = _normalizeUpdateChangelogPayload(data);
-                    var notes = changelogPayload.notes || [];
-                    var historyArr = changelogPayload.history || null;
-                    _setUpdatesChangelogStructured(data.latest, notes, historyArr);
-                } catch (e) {}
-            }
-
-            
             try { _setInitialUpdatesChangelogFromBundledNotes(); } catch (eInitChangelog) {}
 
             btnCheckUpdates.onClick = function () {
-                _safeRun("updates", "Check for updates", function () {
-                    _doCheckForUpdates();
-                }, false) || (function(){})();
-
-                // Preserve prior user-facing error messaging if something bubbles outside _safeRun
+                _safeRun("updates", "Check for updates", _doCheckForUpdates, false);
             };
 
-            // Auto-check on panel launch (when enabled): check for updates and auto-open the UPDATES tab if needed.
-            try {
-                $.global.__ShineToolsUpdateAutoCheck = function(){
-                    try {
-                        _doCheckForUpdates();
-                        if (__UPDATE_STATE && __UPDATE_STATE.available) {
-                            try { _selectTopTab("UPDATES"); } catch (eT) {}
-                        }
-                    } catch (e) {}
-                };
-            } catch (eG) {}
-
-            try {
-                if (__autoCheckEnabled) {
-                    try { $.global.__ShineToolsUpdateAutoCheck(); } catch (eNow) {}
-                }
-            } catch (eS) {}
 
         }
 
@@ -14054,9 +12534,7 @@ var kvLatest = _makeKVRow("Latest version:", "—");
             submitCell.margins       = 0;
 
             var btnSaveReq = submitCell.add("button", undefined, "SUBMIT");
-            try { defocusButtonBestEffort(btnSaveReq); } catch(eDF) {}
-
-            var reqSpacer  = reqBtns.add("group"); reqSpacer.alignment=["fill","fill"]; reqSpacer.minimumSize=[0,0]; reqSpacer.maximumSize=[10000,10000];
+var reqSpacer  = reqBtns.add("group"); reqSpacer.alignment=["fill","fill"]; reqSpacer.minimumSize=[0,0]; reqSpacer.maximumSize=[10000,10000];
 
             var reqStatus = reqWrap.add("statictext", undefined, " ");
             reqStatus.justify = "left";
@@ -14343,18 +12821,7 @@ line2.alignment = ["fill", "top"];
                     }
 
                     function __st_readFileText(fileObj) {
-                        if (!fileObj || !fileObj.exists) return null;
-                        var txt = null;
-                        try {
-                            fileObj.encoding = "UTF-8";
-                            fileObj.open("r");
-                            txt = fileObj.read();
-                            fileObj.close();
-                        } catch (e) {
-                            try { if (fileObj.opened) fileObj.close(); } catch (e2) {}
-                            return null;
-                        }
-                        return txt;
+                        return _stReadTextFile(fileObj, "UTF-8");
                     }
 
                     function __st_extractPayload(rawText) {
@@ -14467,7 +12934,7 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
             try {
                 (function _ST_ShineTrackerLaunchRow_inHelp(parent) {
 
-                    // Button Row: Launch ShineTracker (icon + label, hover swap)
+                    // Button Row: Launch ShineTracker (icon + reserved label area)
                     var launchRow = parent.add("group");
                     launchRow.name = "__ST_LAUNCH_TRACKER_ROW__";
                     launchRow.orientation = "column";
@@ -14481,8 +12948,6 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
                     // Clickable icon + label (no ScriptUI button chrome)
                     var launchTrackerIconCtl, launchTrackerLabel, launchClickGroup;
                     var __stLaunchImgNormal = null;
-                    var __stLaunchImgHover  = null;
-
                     function _stLaunchShineTracker() {
                         try {
                             var trackerPath = "/Applications/ShineTracker.app";
@@ -14496,16 +12961,6 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
                         }
                     }
 
-                    function _stSetLaunchIcon(isHover) {
-                        try {
-                            if (!launchTrackerIconCtl) return;
-                            if (isHover && __stLaunchImgHover) {
-                                launchTrackerIconCtl.image = __stLaunchImgHover;
-                            } else if (__stLaunchImgNormal) {
-                                launchTrackerIconCtl.image = __stLaunchImgNormal;
-                            }
-                        } catch (e) {}
-                    }
 
                     try {
                         var _stRoot = _stGetSharedRootFolder();
@@ -14513,15 +12968,12 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
                         // Prefer shared root icons folder, fallback to system path
                         var _iconNormal = (_stRoot && _stRoot.exists) ? new File(_stRoot.fsName + "/icons/launch_tracker_normal_32.png")
                                                                       : new File("/Library/Application Support/ShineTools/icons/launch_tracker_normal_32.png");
-
-                        var _iconHover  = (_stRoot && _stRoot.exists) ? new File(_stRoot.fsName + "/icons/launch_tracker_hover_32.png")
-                                                                      : new File("/Library/Application Support/ShineTools/icons/launch_tracker_hover_32.png");
-
                         if (_iconNormal && _iconNormal.exists) {
 
-                            __stLaunchImgNormal = ScriptUI.newImage(_iconNormal);
-                            if (_iconHover && _iconHover.exists) __stLaunchImgHover = ScriptUI.newImage(_iconHover);
-
+                            // AE can throw "invalid image data" if a PNG is missing, corrupted,
+                            // quarantined, or in a format ScriptUI dislikes. Keep the panel loading
+                            // and simply fall back to text if the icon cannot be decoded.
+                            try { __stLaunchImgNormal = ScriptUI.newImage(_iconNormal); } catch (eImgNormal) { __stLaunchImgNormal = null; }
                             // Group that holds icon + text (left-justified and non-stretching)
                             launchClickGroup = launchRow.add("group");
                             launchClickGroup.orientation = "column";
@@ -14531,23 +12983,28 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
                             launchClickGroup.spacing = 4;
                             launchClickGroup.helpTip = "Launch ShineTracker";
 
-                            // Image control: no border / no button chrome
-                            launchTrackerIconCtl = launchClickGroup.add("image", undefined, __stLaunchImgNormal);
+                            // Image control: no border / no button chrome.
+                            // If the image failed to decode, skip the image control entirely.
+                            if (__stLaunchImgNormal) {
+                                try { launchTrackerIconCtl = launchClickGroup.add("image", undefined, __stLaunchImgNormal); } catch (eAddImg) { launchTrackerIconCtl = null; }
+                            }
 
-                            try { launchTrackerIconCtl.alignment = ["center","top"]; } catch(eAl) {}
+                            if (launchTrackerIconCtl) {
+                                try { launchTrackerIconCtl.alignment = ["center","top"]; } catch(eAl) {}
 
-                            // Control box size (use a 28x28 render here to align with text)
-                            launchTrackerIconCtl.preferredSize = [28, 28];
-                            launchTrackerIconCtl.minimumSize   = [28, 28];
-                            launchTrackerIconCtl.maximumSize   = [28, 28];
+                                // Control box size (use a 28x28 render here to align with text)
+                                try { launchTrackerIconCtl.preferredSize = [28, 28]; } catch (eSz1) {}
+                                try { launchTrackerIconCtl.minimumSize   = [28, 28]; } catch (eSz2) {}
+                                try { launchTrackerIconCtl.maximumSize   = [28, 28]; } catch (eSz3) {}
+                            }
 
                             // Label to the right
                             launchTrackerLabel = launchClickGroup.add("statictext", undefined, "Launch ShineTracker");
                             launchTrackerLabel.justify = "center";
                             launchTrackerLabel.alignment = ["center","top"];
 
-                            // Hide label by default; reveal on hover over the icon (no tooltip/popup).
-                            // Use fixed character width so layout doesn't jump when toggling text.
+                            // Keep the reserved label blank in the production build.
+                            // Fixed character width preserves the established row layout.
                             try {
                                 launchTrackerLabel.characters = 22;
                                 launchTrackerLabel.text = "";
@@ -14558,14 +13015,8 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
                             launchTrackerLabel.addEventListener("mousedown",   function () { _stLaunchShineTracker(); });
                             launchClickGroup.addEventListener("mousedown",     function () { _stLaunchShineTracker(); });
 
-                            // Stability cleanup: hover-driven icon/label swapping disabled.
-                            // Click behavior remains intact; avoids mouseover/mouseout ScriptUI layout churn.
-                            function _stSetLaunchLabel(show) {
-                                try {
-                                    if (!launchTrackerLabel) return;
-                                    launchTrackerLabel.text = "";
-                                } catch (e) {}
-                            }
+                            // Dynamic icon/label swapping is intentionally disabled.
+                            // Click behavior remains intact without mouseover/mouseout UI mutation.
                         }
 
                     } catch (eIcon) {}
@@ -14580,8 +13031,7 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
 
                         var launchTrackerBtnFallback = launchCell.add("button", undefined, "Launch ShineTracker");
                         launchTrackerBtnFallback.minimumSize.height = 28;
-                        try { defocusButtonBestEffort(launchTrackerBtnFallback); } catch (eDF) {}
-                        launchTrackerBtnFallback.onClick = function () { _stLaunchShineTracker(); };
+launchTrackerBtnFallback.onClick = _stActionWrap("Launch ShineTracker", function () { _stLaunchShineTracker(); });
                     }
 
                     try { if(parent && parent.layout) { parent.layout.layout(true); parent.layout.resize(); } } catch(e) {}
@@ -14592,7 +13042,7 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
 
         _buildUpdatesTab(tabUpdates);
 
-        _buildRequestsTab(tabRequests);
+        try { if (ST.FEATURE_REQUESTS_ENABLED === true) _buildRequestsTab(tabRequests); } catch (eBuildReqDisabled) {}
 
         _buildHelpTab(tabHelp);
 
@@ -14617,7 +13067,6 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
         };
 
         // Top-row alignment constants (keep identical across tabs)
-                // Top-row alignment constants (keep identical across tabs)
         var TOPROW_LABEL_W    = 105; // LIB. ELEMENTS / TEXT ANIMATORS label width
         var TOPROW_PLUS_W     = 62;  // ADD button width in true section-button style
         var TOPROW_PLUS_H     = UI.btnH; // match dropdown height for perfect vertical centering
@@ -14631,14 +13080,10 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
         // (Keeps both MAIN and TEXT dropdowns visually aligned.)
         var TOPROW_DD_RIGHT_TRIM = 3;
 
-        // Chevron colors (reorder arrows)
-
-        // Section label blink feedback (5-frame-ish flash)
         var SECTION_LABEL_COLOR_IDLE  = [0.90, 0.90, 0.90, 1];
         var SECTION_LABEL_COLOR_EXPANDED = [1.00, 0.82, 0.00, 1]; // Shine yellow (expanded)
-        var SECTION_LABEL_COLOR_BLINK = [1.00, 0.82, 0.00, 1]; // Shine yellow
-        var BLINK_FRAME_MS = 33; // ~30fps
-        var BLINK_FRAMES   = 10;
+// Shine yellow
+// ~30fps
 
         function _setLabelColor(st, rgba) {
             try {
@@ -14650,244 +13095,7 @@ try { if (parent && parent.layout) { parent.layout.layout(true); parent.layout.r
             } catch (e) {}
         }
 
-        // Force dropdown popup list width to match the closed control width (ScriptUI quirk fix).
-        // Safe: does not change selection behavior; only clamps the popup list width.
-        function _lockDropdownPopupWidth(dd, maxVisibleItems) {
-            // NO-EVENT-HOOK DIAGNOSTIC: avoid dropdown activate/mouseover/focus handlers and list-size mutation.
-            // This may allow wider/taller native dropdown popups, but it removes another post-modal ScriptUI touch path.
-            return;
-            if (!dd) return;
-
-            if (dd.__shineNoTruncate === true) return;
-            // Track all dropdowns so we can re-clamp item labels on resize.
-            try {
-                if (!$.global.__ShineToolsAllDropdowns) $.global.__ShineToolsAllDropdowns = [];
-                var list = $.global.__ShineToolsAllDropdowns;
-                var exists = false;
-                for (var i = 0; i < list.length; i++) { if (list[i] === dd) { exists = true; break; } }
-                if (!exists) list.push(dd);
-            } catch (eReg) {}
-
-            // the native control rendering, making the dropdown "box" disappear.
-            // Instead, clamp the popup list width/height right when the menu is about to open.
-
-            var MAX_ITEMS = (maxVisibleItems != null) ? Math.max(4, maxVisibleItems) : 12;
-
-            function _clamp() {
-                try {
-                    var w = null;
-try {
-    // Always match the *current* closed control width (docked panels can resize).
-    if (dd.size && dd.size.width) w = dd.size.width;
-    else if (dd.bounds && dd.bounds.length === 4) w = (dd.bounds[2] - dd.bounds[0]);
-    else if (dd.preferredSize && dd.preferredSize.width) w = dd.preferredSize.width;
-    else if (dd.maximumSize && dd.maximumSize.width && dd.maximumSize.width < 9000) w = dd.maximumSize.width;
-
-    // Guard against nonsense values
-    if (w && w < 50) w = 50;
-} catch (eW0) {}
-
-if (w && dd.list) {
-                        if (dd.list.size) dd.list.size.width = w;
-                        if (dd.list.minimumSize) dd.list.minimumSize.width = w;
-                        if (dd.list.maximumSize) dd.list.maximumSize.width = w;
-                    }
-                } catch (eW) {}
-
-                // macOS tends to show an overly tall dropdown popup when there are many items.
-                // dd.list is a ListBox; we can cap its height to a reasonable number of rows.
-                try {
-                    if (dd.list && dd.list.size) {
-                        var itemH = 16;
-                        try {
-                            if (dd.list.itemSize && dd.list.itemSize.height) itemH = dd.list.itemSize.height;
-                        } catch (eIH) {}
-                        var maxH = (itemH * MAX_ITEMS) + 10; // small padding
-                        if (dd.list.size.height > maxH) dd.list.size.height = maxH;
-                    }
-                } catch (eH) {}
-            }
-
-            var _prevActivate = dd.onActivate;
-            dd.onActivate = function () {
-                try { _stMarkDropdownInteraction(dd, 5000); } catch (eMarkA) {}
-                if (_prevActivate) { try { _prevActivate(); } catch (ePrev) {} }
-                _clamp();
-            };
-
-            var _prevDeactivate = dd.onDeactivate;
-            dd.onDeactivate = function () {
-                if (_prevDeactivate) { try { _prevDeactivate(); } catch (ePrevD) {} }
-                try { _stClearDropdownInteraction(dd, 1200); } catch (eMarkD) {}
-            };
-
-            // Extra safety: some hosts don't fire onActivate reliably for dropdowns.
-            try {
-                dd.addEventListener('mousedown', function () { try { _stMarkDropdownInteraction(dd, 5000); } catch (eMD) {} _clamp(); });
-                try { dd.addEventListener('mouseup', function () { _stMarkDropdownInteraction(dd, 1500); }); } catch (eMU) {}
-                // Stability cleanup: no hover-driven dropdown clamp. Clamp on mousedown/focus only.
-                try { dd.addEventListener('focus', function () { try { _stMarkDropdownInteraction(dd, 5000); } catch (eF) {} _clamp(); }); } catch (e5) {}
-                try { dd.addEventListener('blur', function () { _stClearDropdownInteraction(dd, 1200); }); } catch (e6) {}
-            } catch (e3) {}
-        }
-
-        // Popup width helper: clamp the dropdown popup list to the content width (not the closed control width).
-        // Useful when the CLOSED dropdown is wide (fills the row) but we want a tighter POPUP like the TEXT tab.
-
-        // Keep dropdown popup width from ballooning by ensuring item labels
-        // never exceed the *current* closed-control width.
-        // (ScriptUI dropdown popup width is driven by the widest item label.)
-        function _truncateDropdownLabel(dd, label) {
-            try {
-                label = String(label == null ? "" : label);
-
-                if (dd && dd.__shineNoTruncate === true) return label;
-
-                // Determine current control width (fallback to preferred sizes)
-                var w = 0;
-                try { if (dd.size && dd.size.width) w = dd.size.width; } catch (e0) {}
-                if (!w) { try { if (dd.bounds && dd.bounds.length === 4) w = (dd.bounds[2] - dd.bounds[0]); } catch (e1) {} }
-                if (!w) { try { if (dd.preferredSize && dd.preferredSize.width) w = dd.preferredSize.width; } catch (e2) {} }
-                if (!w) w = 220;
-
-                // If the popup list is wider than the closed control (common in some layouts),
-                // prefer the popup width so we don't manually ellipsis too early.
-                try {
-                    var lw = 0;
-                    if (dd.list) {
-                        try { if (dd.list.size && dd.list.size.width) lw = dd.list.size.width; } catch (eL0) {}
-                        if (!lw) { try { if (dd.list.bounds && dd.list.bounds.length === 4) lw = (dd.list.bounds[2] - dd.list.bounds[0]); } catch (eL1) {} }
-                    }
-                    if (lw && lw > w) w = lw;
-                } catch (eL) {}
-
-                // Leave room for arrow + insets (empirical; keeps popup from expanding wider than control)
-                var usable = Math.max(50, w - 28);
-
-                // Prefer real text measurement when available (much more reliable than char-width guessing)
-                var g = null;
-                try { g = dd.graphics; } catch (eg) {}
-                var meas = function (s) {
-                    try {
-                        if (g && g.measureString) {
-                            var ms = g.measureString(s);
-                            if (ms && ms.length) return ms[0];
-                            if (ms && typeof ms.width === "number") return ms.width;
-                        }
-                    } catch (eM) {}
-                    // Fallback estimate
-                    return s.length * 7;
-                };
-
-                if (meas(label) <= usable) return label;
-
-                // Binary search best fit
-                var ell = "…";
-                var lo = 0, hi = label.length;
-                while (lo < hi) {
-                    var mid = Math.ceil((lo + hi) / 2);
-                    var cand = label.substring(0, Math.max(1, mid)) + ell;
-                    if (meas(cand) <= usable) lo = mid;
-                    else hi = mid - 1;
-                }
-                var cut = Math.max(1, lo);
-                return label.substring(0, cut) + ell;
-            } catch (e) {}
-            return label;
-        }
-
         // Normalize file/path labels for display in dropdowns (decode URI, fix %20, prefer filename when possible).
-        function _stPrettyFileLabel(pathOrLabel) {
-            var s = pathOrLabel;
-            try {
-                if (s && typeof s === "object" && !(s instanceof File)) {
-                    var lbl = _favEntryLabel(s);
-                    if (lbl) return String(lbl);
-                    s = _favEntryPath(s);
-                }
-            } catch (eObj) {}
-            try {
-                if (s instanceof File) {
-                    if (s && s.name) return String(s.name);
-                }
-            } catch (e0) {}
-            try {
-                if (typeof s === "string") {
-                    var f = new File(s);
-                    if (f && f.name) s = f.name;
-                }
-            } catch (e1) {}
-            s = String(s == null ? "" : s);
-            try { s = decodeURIComponent(s); } catch (e2) {}
-            try { s = s.replace(/%20/g, " "); } catch (e3) {}
-            return s;
-        }
-
-        function _applyDropdownLabelClamp(dd) {
-            try {
-                if (!dd || !dd.items) return;
-                // Some dropdowns (e.g., MAIN tab Library Elements) should never be manually ellipsed.
-                if (dd.__shineNoTruncate) return;
-                for (var i = 0; i < dd.items.length; i++) {
-                    var it = dd.items[i];
-                    if (!it || it._isBlank || it.text === "(No files)" || it.text === "(No presets)" || it.type === "separator") continue;
-                    var full = it._fullText || it._pathName || it._name || it.text;
-                    it._fullText = full;
-                    it.text = _truncateDropdownLabel(dd, full);
-                }
-            } catch (e) {}
-        }
-
-        // Fit dropdown popup list width to content (keeps collapsed control unchanged).
-        // Used for MAIN tab "LIB. ELEMENTS" dropdown to avoid excessive empty space on the right.
-        function _fitDropdownPopupToContent(dd, opts) {
-            try {
-                if (!dd || !dd.items || dd.items.length === 0) return;
-
-                opts = opts || {};
-                var minW = (opts.minW != null) ? opts.minW : 140;
-                var maxW = (opts.maxW != null) ? opts.maxW : 520;
-                var padW = (opts.padW != null) ? opts.padW : 44; // scrollbar + padding
-                var MAX_ITEMS = (opts.maxVisibleItems != null) ? Math.max(4, opts.maxVisibleItems) : 12;
-
-                // Prefer list graphics for accurate font metrics when available
-                var gfx = null;
-                try { gfx = (dd.list && dd.list.graphics) ? dd.list.graphics : dd.graphics; } catch (eG) { gfx = dd.graphics; }
-                if (!gfx || !gfx.measureString) return;
-
-                var maxTextW = 0;
-                for (var i = 0; i < dd.items.length; i++) {
-                    var it = dd.items[i];
-                    if (!it || it.type === "separator" || it._isBlank) continue;
-                    var label = it._fullText || it.text || "";
-                    if (!label) continue;
-                    var w = 0;
-                    try { w = gfx.measureString(label)[0]; } catch (eM) { w = 0; }
-                    if (w > maxTextW) maxTextW = w;
-                }
-
-                var targetW = Math.round(maxTextW + padW);
-                if (targetW < minW) targetW = minW;
-                if (targetW > maxW) targetW = maxW;
-
-                // Apply to popup list only (dd.list). This should not affect the collapsed control.
-                if (dd.list) {
-                    try { dd.list.minimumSize = [targetW, dd.list.minimumSize ? dd.list.minimumSize[1] : 0]; } catch (e1) {}
-                    try { dd.list.preferredSize = [targetW, dd.list.preferredSize ? dd.list.preferredSize[1] : 0]; } catch (e2) {}
-                    try { dd.list.maximumSize = [targetW, dd.list.maximumSize ? dd.list.maximumSize[1] : 10000]; } catch (e3) {}
-
-                    // Height clamp: keep macOS from showing a monitor-tall popup when there are many items.
-                    try {
-                        if (dd.list.size) {
-                            var itemH = 16;
-                            try { if (dd.list.itemSize && dd.list.itemSize.height) itemH = dd.list.itemSize.height; } catch (eIH) {}
-                            var maxH = (itemH * MAX_ITEMS) + 10;
-                            if (dd.list.size.height > maxH) dd.list.size.height = maxH;
-                        }
-                    } catch (eH) {}
-                }
-            } catch (e) {}
-        }
 
         // Chain a small Y-shift to a parent group's onLayout without breaking existing handlers.
         // Useful for pixel-perfect alignment nudges (e.g., the ★ icon).
@@ -14903,8 +13111,8 @@ if (w && dd.list) {
             };
         }
 
-        var ARROW_COLOR_IDLE  = [0.35, 0.35, 0.35, 1]; // dark gray
-        var ARROW_COLOR_HOVER = [1.00, 0.82, 0.00, 1]; // Shine yellow
+// dark gray
+// Shine yellow
 
         function clippedBtnH() { return Math.max(18, UI.btnH + UI.clipHDelta); }
 
@@ -14916,15 +13124,8 @@ if (w && dd.list) {
 // (We still do a full relayout once at the end of buildUI.)
 // --------------------------------------------------
 
-function __stNoForceRelayoutDiagnosticActive() {
-    try { return ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true); } catch (e) {}
-    return false;
-}
-
 function relayoutScoped(scopeGroup) {
-    // Optional emergency bypass for forced relayout.
-    try { if (__stNoForceRelayoutDiagnosticActive()) return; } catch (eDiag) { return; }
-    try {
+        try {
         if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return;
     } catch (eSafe0) { return; }
     try {
@@ -14939,22 +13140,16 @@ function relayoutScoped(scopeGroup) {
 }
 
 function relayout() {
-    try { if (__stNoForceRelayoutDiagnosticActive()) return; } catch (eDiag) { return; }
     relayoutScoped(pal);
 }
 
-// ---- Render/modal-safe helpers (avoid ScriptUI layout during Render Queue or native modal transitions) ----
-function _stIsRendering() {
-    try { return !!(app && app.project && app.project.renderQueue && app.project.renderQueue.rendering); } catch (e) { return false; }
-}
-
+// ---- Guarded UI relayout helpers ----
 function _stCanTouchUI() {
     try { return !($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()); } catch(e) {}
     return false;
 }
 
 function requestRelayoutSoon(scopeGroup, delayMs) {
-    try { if (__stNoForceRelayoutDiagnosticActive()) return; } catch (eDiag) { return; }
     try { if (!_stCanTouchUI()) return; } catch (eSafe) { return; }
     try {
         // Lightweight accordion refresh: only relayout the requested scope.
@@ -15018,12 +13213,8 @@ function requestRelayoutSoon(scopeGroup, delayMs) {
         var tips = {
             "CHECK FOR UPDATES": "Check GitHub for a newer ShineTools version. If an update is found, INSTALL UPDATE will appear below.",
             "INSTALL UPDATE": "Install the downloaded update (only available after a newer version is detected).",
-            "COPY DEBUG INFO": "Copies a short system/version snapshot + last error to the clipboard (for troubleshooting).",
-            "UNIQUE COMP": "Duplicate the selected comp and any nested comps so edits are isolated from the original.",
-            "EXTEND COMP": "Extend the duration of the active comp (and optionally its layers) without rebuilding your timeline.",
             "EXTEND PRECOMP": "Extend a selected precomp and its contents so it matches your active comp timing.",
             "TRIM LAYER": "Trim the selected layer(s) to the work area or comp bounds (depending on tool options).",
-            "CREATE TEXT BOX": "Create a styled text box (text + shape background) using ShineTools defaults.",
             "BREAK APART TEXT": "Split text into separate layers (chars/words/lines) for animation.",
             "FONT AUDIT": "Scan project fonts and highlight missing/invalid fonts across the project.",
             "CLEAN UP": "Run project cleanup utilities (remove unused, tidy folders, etc.)."
@@ -15046,12 +13237,6 @@ function requestRelayoutSoon(scopeGroup, delayMs) {
             } catch (e) {}
         });
     }
-
-function defocusButtonBestEffort(btn) {
-            // NO-EVENT-HOOK DIAGNOSTIC: do not add extra mouse handlers just to clear focus rings.
-            // Keep button behavior native for this freeze test.
-            return;
-        }
 
 // -------------------------
 // - Keeps the visual idea of a floating PLUS sign.
@@ -15078,8 +13263,7 @@ function addPlusGlyphButton(parent, w, h, helpTip, handler) {
     b.maximumSize   = [__btnW, __btnH];
     try { b.helpTip = helpTip || "Add"; } catch (eTip) {}
     try { b.justify = "center"; } catch (eJ) {}
-    try { defocusButtonBestEffort(b); } catch (eDF) {}
-    try { b.graphics.font = ScriptUI.newFont("Helvetica", "BOLD", 11); } catch (eF) { try { b.graphics.font = ScriptUI.newFont(b.graphics.font.name, "Bold", 11); } catch (eF2) {} }
+try { b.graphics.font = ScriptUI.newFont("Helvetica", "BOLD", 11); } catch (eF) { try { b.graphics.font = ScriptUI.newFont(b.graphics.font.name, "Bold", 11); } catch (eF2) {} }
     if (typeof handler === "function") b.onClick = handler;
 
     try { cell.__button = b; } catch (eB) {}
@@ -15113,271 +13297,15 @@ function addDropdownHeader(col, text, insetPx) {
 
         // The real button is slightly wider than the wrapper; the wrapper's fixed width crops the ring.
 
-        // Hover + Option label engine (3-state)
-        // ==========================================================
-        // Hover label helpers (Modifier-aware) — tiny hover-only tick
-        // ----------------------------------------------------------
-        // While a button is actively hovered, run a lightweight scheduleTask
-        // so Option/Shift label changes update immediately without requiring
-        // mouse movement. The tick stops on mouseout / modal cancel.
-        // ==========================================================
-
-        var _hoverBtn = null;
-        var _hoverText = "";
-        var _hoverOptionText = "";
-        var _hoverShiftText = "";
-        var _hoverLastAlt = null;
-        var _hoverLastShift = null;
-
-// =================================================================================================
-// UTILITIES: HOVER SYSTEM: instant modifier hover labels
-// =================================================================================================
-        function _hoverClearInternal() {
-            _hoverBtn = null;
-            _hoverLastAlt = null;
-            _hoverLastShift = null;
-        }
-
-        // Expose a global canceller so we can pause hover state when a modal dialog is shown
-        $.global.__ShineTools_CancelHoverPoll__ = function () {
-            try { _hoverClearInternal(); } catch (e) {}
-            try { _stHoverSetRunning(false); } catch (e2) {}
-            try { _stHoverCancelTask(); } catch (e3) {}
-        };
-
-        function _hoverSafeSetText(btn, t) { try { btn.text = t; } catch (e) {} }
-
-        function _hoverComputeText() {
-            var altNow = isOptionDown();
-            var shiftNow = isShiftDown();
-            var next = shiftNow ? (_hoverShiftText || _hoverText) : (altNow ? _hoverOptionText : _hoverText);
-            return { alt: altNow, shift: shiftNow, text: next };
-        }
-
-        function _hoverUpdateIfChanged() {
-            if (!_hoverBtn) return;
-            var st = _hoverComputeText();
-            if (_hoverLastAlt === null || _hoverLastShift === null || st.alt !== _hoverLastAlt || st.shift !== _hoverLastShift) {
-                _hoverLastAlt = st.alt;
-                _hoverLastShift = st.shift;
-                _hoverSafeSetText(_hoverBtn, st.text);
-            }
-        }
-
-        function _hoverStart(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            // DISABLED FOR AE STABILITY:
-            // Do not change ScriptUI button labels on hover, and do not start hover polling.
-            // Real-world testing showed multi-label hover buttons can freeze AE after render/project modal states.
-            try { _hoverClearInternal(); } catch (e0) {}
-            try { _stHoverSetRunning(false); } catch (e1) {}
-            try { _stHoverCancelTask(); } catch (e2) {}
-            return;
-        }
-
-        function _hoverStop(btn, baseText) {
-            // DISABLED FOR AE STABILITY:
-            // Do not reset/touch button text on mouseout. Buttons keep their static base label.
-            try { if (_hoverBtn === btn) _hoverClearInternal(); } catch (e0) {}
-            try { _stHoverSetRunning(false); } catch (e1) {}
-            try { _stHoverCancelTask(); } catch (e2) {}
-            return;
-}
-        // ------------------------------------------------------------
-        // Modifier-hover label update via tiny hover-only tick
-        // ------------------------------------------------------------
-        // ScriptUI doesn't reliably emit events for modifier key changes.
-        // This tick runs ONLY while a button is hovered, so pressing/releasing
-        // Option or Shift flips the visible button label without mouse movement.
-        // It is intentionally allowed even when ST.SAFE_MODE is true; SAFE_MODE
-        // still disables heavier/background UI polish elsewhere.
-var _stHoverRunning = false;
-var _stHoverTaskId  = null;
-var _stHoverTaskDueMs = 0;
-var _stHoverStartedMs = 0;
-var _stHoverIntervalMs = 90; // Poll only while a button is actively hovered; allows modifier-only label flips.
-var _stHoverMaxOverdueMs = 260; // If AE holds a hover tick through an Import/Render modal, cancel it before it touches UI.
-
-function _stHoverNowMs(){ try { return (new Date()).getTime(); } catch(e) { return 0; } }
-
-// Expose a callable for scheduleTask (string-based) to invoke our closure safely.
-$.global.__ST_HoverTick__ = function () {
-    // Hover label flipping is disabled; no scheduled hover UI work should run.
-    return;
-};
-
-function _stHoverIsRunning(){ return _stHoverRunning; }
-function _stHoverSetRunning(v){ _stHoverRunning = v ? true : false; }
-
-function _stHoverCancelTask(){
-    try {
-        if (_stHoverTaskId !== null) {
-            app.cancelTask(_stHoverTaskId);
-        }
-    } catch (e) {}
-    _stHoverTaskId = null;
-    _stHoverTaskDueMs = 0;
-}
-
-function _stHoverEnsureTick(){
-    // DISABLED FOR AE STABILITY: never schedule hover polling for label flipping.
-    try { _hoverClearInternal(); } catch (e0) {}
-    try { _stHoverSetRunning(false); } catch (e1) {}
-    try { _stHoverCancelTask(); } catch (e2) {}
-    return;
-}
-
-function _stHoverScheduleNext(){
-    // DISABLED FOR AE STABILITY: no hover label scheduleTask should ever be queued.
-    try { _stHoverSetRunning(false); } catch (e0) {}
-    try { _stHoverCancelTask(); } catch (e1) {}
-    return;
-}
-
-function _stHoverStopTickIfIdle(){
-    // Stop if no hover target (or the palette loses focus).
-    if (_hoverBtn) return;
-    _stHoverRunning = false;
-    _stHoverCancelTask();
-}
-
-function _stHoverTickInternal(){
-    // DISABLED FOR AE STABILITY: no hover label UI mutation should occur from a scheduled tick.
-    try { _hoverClearInternal(); } catch (e0) {}
-    try { _stHoverSetRunning(false); } catch (e1) {}
-    try { _stHoverCancelTask(); } catch (e2) {}
-    return;
-}
-
-function _stRecoverAfterHostModal(){
-    try {
-        if ($.global && $.global.__ST_BUSY__ === true) {
-            var started = 0;
-            try { started = $.global.__ST_BUSY_STARTED_MS__ || 0; } catch(eB0) { started = 0; }
-            var now = 0;
-            try { now = (new Date()).getTime(); } catch(eB1) { now = 0; }
-            if (!started || !now || (now - started) > 10000) {
-                $.global.__ST_BUSY__ = false;
-                $.global.__ST_BUSY_STARTED_MS__ = 0;
-            }
-        }
-    } catch(e2) {}
-    try {
-        if ($.global && $.global.__ST_LONGOP__ === true) {
-            var stillSaving = false;
-            var stillRendering = false;
-            try { stillSaving = !!(app && app.isSaving); } catch(eS) { stillSaving = false; }
-            try { stillRendering = !!(app && app.project && app.project.renderQueue && app.project.renderQueue.rendering); } catch(eR) { stillRendering = false; }
-            if (!stillSaving && !stillRendering) $.global.__ST_LONGOP__ = false;
-        }
-    } catch(e3) {}
-}
-
-// Install a single mousemove listener on the palette/panel to refresh hovered button label.
-function _stHoverInstallMouseHook(root){
-    // NO-EVENT-HOOK DIAGNOSTIC: do not install root mousemove/mouseover/mousedown hooks.
-    return;
-}
-
-// Best-effort: key hooks (not reliable in all AE ScriptUI builds), but when they fire they give instant updates.
-function _stHoverInstallKeyHook(root){
-    // NO-EVENT-HOOK DIAGNOSTIC: do not install root keydown/keyup hooks.
-    return;
-}
-
-function _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            // Hover label flipping is disabled, but preserve the alternate-action info in the tooltip.
-            try {
-                if (!btn) return;
-                var existing = "";
-                try { existing = String(btn.helpTip || ""); } catch (eTip0) { existing = ""; }
-                var parts = [];
-                try { if (existing) parts.push(existing); } catch (e0) {}
-                try {
-                    var altInfo = [];
-                    if (hoverText && String(hoverText) !== String(baseText)) altInfo.push("Click: " + String(hoverText));
-                    if (optionHoverText) altInfo.push("Option-click: " + String(optionHoverText));
-                    if (shiftHoverText) altInfo.push("Shift-click: " + String(shiftHoverText));
-                    if (altInfo.length) parts.push(altInfo.join("\n"));
-                } catch (e1) {}
-                try { btn.helpTip = parts.join(parts.length > 1 ? "\n\n" : ""); } catch (eSet) {}
-            } catch (e) {}
-        }
-
-function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
-            // DISABLED FOR AE STABILITY:
-            // Do not attach mouseover/mouseout/mousemove handlers and do not change button text on hover.
-            try { if (btn) btn.text = baseText; } catch (eTxt) {}
-            try { _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, ""); } catch (eTip) {}
-            return;
-        }
-
-        function enableHoverModifierLabel(btn, baseText, hoverText, optionHoverText, shiftHoverText) {
-            // DISABLED FOR AE STABILITY:
-            // Do not attach mouseover/mouseout/mousemove handlers and do not change button text on hover.
-            try { if (btn) btn.text = baseText; } catch (eTxt) {}
-            try { _stAppendHoverHelpTip(btn, baseText, hoverText, optionHoverText, shiftHoverText); } catch (eTip) {}
-            return;
-        }
+        // Modifier alternate-action names are exposed through static tooltips.
 
 // -------------------------
         // Per-section button registry for live reorder dialogs
         // -------------------------
-        var __ST_BTN_ORDER_SECTION = "ShineTools";
-        var __ST_BTN_ORDER_PREFIX  = "";
         var __ST_SECTION_BUTTONS   = {}; // { accordionKey: { sectionTitle: [ String label, ... ] } }
 
         function _stBO_safeStr(v){ try{ return String(v==null?"":v); }catch(e){ return ""; } }
 
-        function _stBO_parseArray(raw){
-            if (!raw) return null;
-            // Try strict JSON first
-            try { if (typeof JSON !== 'undefined' && JSON && JSON.parse) return JSON.parse(raw); } catch (eJSON) {}
-            // Then a safe-ish eval fallback (ExtendScript)
-            try { return eval('(' + raw + ')'); } catch (eEval) {}
-            // Finally handle legacy comma-separated strings ("a,b,c")
-            try {
-                if (typeof raw === 'string' && raw.indexOf(',') >= 0 && raw.indexOf('[') === -1) {
-                    var parts = raw.split(',');
-                    var out = [];
-                    for (var i=0; i<parts.length; i++) {
-                        var p = String(parts[i]);
-                        // Trim
-                        p = p.replace(/^\s+/, '').replace(/\s+$/, '');
-                        if (p) out.push(p);
-                    }
-                    return out;
-                }
-            } catch (eSplit) {}
-            return null;
-        }
-
-        function _stBO_escapeStr(s) {
-            try {
-                s = String(s);
-                s = s.replace(/\\/g, "\\\\").replace(/\"/g, "\\\"").replace(/\r/g, "\\r").replace(/\n/g, "\\n");
-                return s;
-            } catch (e) { return ""; }
-        }
-
-        function _stBO_stringifyArray(arr) {
-            // Always produce a JSON array string, even if JSON.stringify is missing.
-            try { if (typeof JSON !== 'undefined' && JSON && JSON.stringify) return JSON.stringify(arr); } catch (eJSON) {}
-            var out = '[';
-            for (var i=0; i<(arr?arr.length:0); i++) {
-                out += '"' + _stBO_escapeStr(arr[i]) + '"';
-                if (i < arr.length - 1) out += ',';
-            }
-            out += ']';
-            return out;
-        }
-
-        function _stBO_clearRegistry(accordionKey, sectionTitle){
-            try {
-                if (!accordionKey || !sectionTitle) return;
-                if (!__ST_SECTION_BUTTONS[accordionKey]) __ST_SECTION_BUTTONS[accordionKey] = {};
-                __ST_SECTION_BUTTONS[accordionKey][sectionTitle] = [];
-            } catch (e) {}
-        }
 
         function _stBO_getRegistry(accordionKey, sectionTitle){
             try {
@@ -15389,10 +13317,8 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
         }
 
         function _stBO_itemLabel(item){
-            try {
-                if (item && item.hoverLabels && item.hoverLabels.base) return _stBO_safeStr(item.hoverLabels.base);
-                if (item && item.text) return _stBO_safeStr(item.text);
-            } catch (e) {}
+            try { if (item && item.text) return _stBO_safeStr(item.text); }
+            catch (e) {}
             return '';
         }
 
@@ -15491,15 +13417,9 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
                 btn.maximumSize   = [10000, h];
 
                 if (item.helpTip) btn.helpTip = item.helpTip;
-                if (item.onClick) btn.onClick = item.onClick;
-
-                if (item.hoverLabels && item.hoverLabels.base && item.hoverLabels.hover && item.hoverLabels.optionHover) {
-                    btn.text = item.hoverLabels.base;
-                    if (item.hoverLabels.shiftHover) {
-                        enableHoverModifierLabel(btn, item.hoverLabels.base, item.hoverLabels.hover, item.hoverLabels.optionHover, item.hoverLabels.shiftHover);
-                    } else {
-                        enableHoverOptionLabel(btn, item.hoverLabels.base, item.hoverLabels.hover, item.hoverLabels.optionHover);
-                    }
+                if (item.onClick) {
+                    var __stBtnLabel = "MAIN/TEXT button: " + String(item.text || item.helpTip || "button");
+                    btn.onClick = _stActionWrap(__stBtnLabel, item.onClick);
                 }
 
                 if (item.badgeDot) {
@@ -15525,9 +13445,7 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
                         try { line.onClick = function () { try { if (btn && typeof btn.onClick === "function") btn.onClick(); } catch (eLineClick2) {} }; } catch (eOC) {}
                     }
                 }
-
-                defocusButtonBestEffort(btn);
-                return btn;
+return btn;
             }
 
             for (var i = 0; i < items.length; i += 2) {
@@ -15597,14 +13515,24 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
             try { centerLane.maximumSize = [LOGO_W, LOGO_H]; } catch (eCL3) {}
 
             var logoFile = findShineLogoFileLocal();
+            var __stLogoAddedOK = false;
             if (logoFile && logoFile.exists) {
-                var img = centerLane.add("image", undefined, logoFile);
-                img.alignment     = ["center", "center"];
-                img.preferredSize = [LOGO_W, LOGO_H];
-                img.minimumSize   = [LOGO_W, LOGO_H];
-                img.maximumSize   = [LOGO_W, LOGO_H];
-            } else {
-                var fb = centerLane.add("statictext", undefined, "SHINE TOOLS (logo missing)");
+                try {
+                    var img = centerLane.add("image", undefined, logoFile);
+                    img.alignment     = ["center", "center"];
+                    img.preferredSize = [LOGO_W, LOGO_H];
+                    img.minimumSize   = [LOGO_W, LOGO_H];
+                    img.maximumSize   = [LOGO_W, LOGO_H];
+                    __stLogoAddedOK = true;
+                } catch (eLogoBadData) {
+                    // Keep ShineTools loading even if the installed PNG is damaged or ScriptUI
+                    // rejects the image data. The panel can run without the logo.
+                    __stLogoAddedOK = false;
+                }
+            }
+
+            if (!__stLogoAddedOK) {
+                var fb = centerLane.add("statictext", undefined, "SHINE TOOLS");
                 fb.alignment = ["center", "center"];
                 fb.justify   = "center";
                 fb.preferredSize = [260, LOGO_H];
@@ -15682,8 +13610,7 @@ function enableHoverOptionLabel(btn, baseText, hoverText, optionHoverText) {
 // -------------------------
 function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, accordionKeyOrNull) {
 
-    // Relayout can get called a lot during accordion toggles/reorders.
-    // Guard against re-entrant layout calls (can freeze ScriptUI over time).
+    // Guard against re-entrant layout calls during accordion toggles and reorders.
     var _stIsRelayouting = false;
     function safeRelayout() {
         if (!relayoutFn) return;
@@ -15717,9 +13644,28 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, acco
         var sections = []; // array of state objects in built order
 
         function collapseOthers(keepState) {
-            for (var i = 0; i < sections.length; i++) {
-                if (sections[i] !== keepState) sections[i].setCollapsed(true, true);
-            }
+            // BATCHED AUTO-COLLAPSE:
+            // Close only sibling sections that are actually open. Each change is silent,
+            // and the caller performs one single safeRelayout() after the full batch.
+            // Keeps one-section-open behavior without repeated sibling layout calls.
+            var changed = 0;
+            try {
+                for (var i = 0; i < sections.length; i++) {
+                    var other = sections[i];
+                    if (!other || other === keepState) continue;
+
+                    var isOpen = false;
+                    try { isOpen = (other.collapsed === false); } catch (eState) { isOpen = false; }
+                    if (!isOpen) continue;
+
+                    try {
+                        other.setCollapsed(true, true);
+                        changed++;
+                    } catch (eCollapseOne) {}
+                }
+            } catch (eBatchCollapse) {}
+
+
         }
 
         // finalize current live order list
@@ -15819,6 +13765,13 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, acco
             }
 
             function setCollapsed(v, silent) {
+                // Avoid redundant ScriptUI property churn during silent batch collapses.
+                try {
+                    if (state && state.collapsed === v && twirlBox && twirlBox._collapsed === v) {
+                        if (silent) return;
+                    }
+                } catch (eAlready) {}
+
                 state.collapsed = v;
                 twirlBox._collapsed = v;
                 try { if (twirlBox._stUpdateText) twirlBox._stUpdateText(); } catch (eTwirlUpdate) {}
@@ -15836,15 +13789,6 @@ function createAccordion(container, autoCollapseCheckboxOrNull, relayoutFn, acco
                                 try { bodyWrap.preferredSize = undefined; } catch (ePS) {}
 try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                 try { bodyWrap.maximumSize = v ? [10000, 0] : [10000, 200000]; } catch (eMax) {}
-
-                // Lightweight no-clipping nudge: when opening a section, ask only this section
-                // and its accordion container to recalculate before the normal scoped relayout.
-                // This avoids the heavier all-workspace settle that made toggles feel laggy.
-                if (!v) {
-                    try { if (body && body.layout) body.layout.layout(true); } catch (eLL1) {}
-                    try { if (bodyWrap && bodyWrap.layout) bodyWrap.layout.layout(true); } catch (eLL2) {}
-                    try { if (container && container.layout) container.layout.layout(true); } catch (eLL3) {}
-                }
 
                 if (!silent) safeRelayout();
 }
@@ -15947,8 +13891,7 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                         try { btn.graphics.font = ScriptUI.newFont('Helvetica', 'BOLD', 13); } catch (eF) {
                             try { btn.graphics.font = ScriptUI.newFont(btn.graphics.font.name, 'Bold', 13); } catch (eF2) {}
                         }
-                        try { defocusButtonBestEffort(btn); } catch (eDF) {}
-                        btn.onClick = function(){
+btn.onClick = function(){
                             try { btn.active = false; } catch (eA0) {}
                             try { if (typeof wrap.__onActivate === 'function') wrap.__onActivate(); } catch (eAct) {}
                             try { btn.active = false; } catch (eA1) {}
@@ -16003,10 +13946,7 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                         b.minimumSize   = [minW || __dlgMinW2, __dlgBtnH2];
 
                         b.maximumSize   = [10000, __dlgBtnH2];
-
-                        try { defocusButtonBestEffort(b); } catch (eDF2) {}
-
-                        return { cell: cell, btn: b };
+return { cell: cell, btn: b };
 
                     }
 
@@ -16120,10 +14060,6 @@ try { bodyWrap.minimumSize = v ? [0, 0] : [0, 0]; } catch (eMin) {}
                 }
 
             }
-
-            // Pass 4.8: expose Button Reorder dialog helper
-
-            try { ST.UI.showReorderButtonsDialog = _showReorderButtonsDialog; } catch (e) {}
 
             function toggle() {
                 // Debounce: prevent accidental double-toggles from overlapping mouse handlers
@@ -16337,9 +14273,6 @@ state.setCollapsed = setCollapsed;
     return api;
 }
 
-// Pass 4.7: expose accordion builder on ST.UI namespace (no behavior change)
-try { ST.UI.createAccordion = createAccordion; } catch (e) {}
-
 // =========================================================
         // MAIN TAB UI
         // =========================================================
@@ -16426,9 +14359,11 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
         favDDCol.spacing = 2;
 
         var favDDHdr = addDropdownHeader(favDDCol, "Select Element…", TOPROW_HDR_INSET);
+        var favDDHdrDefaultText = "Select Element…";
         favDDHdr.justify = "left";
         favDDHdr.alignment = ["fill","top"];
         try { _setLabelColor(favDDHdr, [0.55, 0.55, 0.55, 1]); } catch(eH) {}
+        try { _stAttachAddStatusClose(favDDHdr, favDDHdrDefaultText); } catch(eHdrX) {}
 
         var favDD = favDDCol.add("dropdownlist", undefined, []);
         // Keep the collapsed (closed) dropdown compact; the popup list can be wider.
@@ -16458,10 +14393,8 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                 var FAV_ACTION_CLEAR = "Clear Favorites";
 
                 function favRebuildDropdown() {
-
-                    try { favDD.removeAll(); } catch (e0) {}
-                    var blank = favDD.add("item", String(favDD.__stFlashBlankText || " "));
-                    blank._isBlank = true;
+                    _stDropdownRebuild(favDD, function () {
+                    _stDropdownAddBlank(favDD);
                     var __favIndent = "    ";
                     var favs = favLoad();
                     if (favs.length === 0) {
@@ -16475,30 +14408,22 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
 
                             if (_favIsDividerToken(rawFav)) {
                                 var divLabel = _favDividerDisplay(_favDividerLabelFromToken(rawFav));
-                                var divItem = favDD.add("item", divLabel);
-                                divItem._isDivider = true;
-                                divItem._fullText = divLabel;
-                                try { divItem.enabled = false; } catch (eDivDis) {}
+                                _stDropdownAddDivider(favDD, divLabel);
                                 continue;
                             }
 
                             var __favShowOrig = false; try { __favShowOrig = (__ST_SESSION_MAIN_FAVORITES_SHOW_ORIGINAL__ === true); } catch (eFavShowOrig) {}
                             var displayName = String((__favShowOrig ? _stPrettyFileLabel(rawFav) : (_favEntryLabel(favEntry) || _stPrettyFileLabel(rawFav))) || "").replace(/^[\s\u00A0]+/, "");
-                            var it = favDD.add("item", __favIndent + displayName);
-                            it._fullText = __favIndent + displayName;
-                            it._path = rawFav;
-                            try { it.helpTip = displayName; } catch (eTip) {}
+                            _stDropdownAddPathItem(favDD, __favIndent + displayName, rawFav, "_path", false, displayName);
                         }
                     }
 
                     favDD.add("separator");
-                    favDD.add("item", FAV_ACTION_CLEAR);
-                    try { favDD.selection = 0; } catch (eSel) {}
+                    _stDropdownAddAction(favDD, FAV_ACTION_CLEAR, "clear");
+                    });
                 }
 
                     // Ensure popup width never exceeds control width
-                    _applyDropdownLabelClamp(favDD);
-
                 favRebuildDropdown();
                 try { pal.__stFavRebuildDropdown = favRebuildDropdown; } catch (eFavHook) {}
 
@@ -16521,59 +14446,8 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                         var outFav = _shineShowReorderListDialog(
                             "Organize Library Elements",
                             items,
-                            ST.UI.Organize.buildConfig("library_elements", {
-                                onAddFiles: function(lb, dlg, opts) {
-                                    var picked = favOpenDialogFromDefaultFolder();
-                                    if (!picked) return false;
-                                    if (!(picked instanceof Array)) picked = [picked];
-
-                                    var insertAt = lb.items.length;
-                                    try {
-                                        if (lb.selection) {
-                                            var selId = String(lb.selection._id || "");
-                                            for (var si = 0; si < lb.items.length; si++) {
-                                                if (String(lb.items[si]._id || "") === selId) { insertAt = si + 1; break; }
-                                            }
-                                        }
-                                    } catch (eFavSelIns) {}
-
-                                    var addedAny = false;
-                                    for (var pi = 0; pi < picked.length; pi++) {
-                                        var f = picked[pi];
-                                        if (!f || !f.exists) continue;
-                                        var favPath = String(f.fsName || "");
-                                        if (!favPath) continue;
-
-                                        var exists = false;
-                                        for (var li = 0; li < lb.items.length; li++) {
-                                            try { if (String(lb.items[li]._id || "") === favPath) { exists = true; break; } } catch (eFavDup) {}
-                                        }
-                                        if (exists) continue;
-
-                                        var addLabel = String(_stPrettyFileLabel(favPath) || "").replace(/^[\s ]+/, "");
-                                        var itAdded = lb.add("item", addLabel);
-                                        try { itAdded._id = favPath; } catch (eFavSet0) {}
-                                        try { itAdded._label = addLabel; } catch (eFavSet1) {}
-                                        try { itAdded._isDivider = false; } catch (eFavSet2) {}
-                                        try { itAdded.helpTip = addLabel; } catch (eFavSet3) {}
-                                        try { itAdded.enabled = true; } catch (eFavSet4) {}
-                                        try { itAdded.selected = true; } catch (eFavSet5) {}
-                                        try {
-                                            if (typeof insertAt === "number" && insertAt < (lb.items.length - 1)) {
-                                                itAdded.index = insertAt;
-                                                insertAt++;
-                                            }
-                                        } catch (eFavReindex) {}
-                                        addedAny = true;
-                                    }
-                                    return addedAny;
-                                },
-                                originalFilenameForId: function(id) { return _stPrettyFileLabel(id); },
-                                displayLabelForId: function(id, label, obj, showOriginalFilename) {
-                                    if (obj && obj._isDivider) return label;
-                                    if (!showOriginalFilename && label) return String(label);
-                                    return _stPrettyFileLabel(id);
-                                },
+                            ST.UI.Organize.buildPathConfig("library_elements", {
+                                openDialog: favOpenDialogFromDefaultFolder,
                                 sectionChoices: FAV_DEFAULT_DIVIDERS,
                                 sectionTokenForChoice: function(choice) { return _favDividerToken(choice); },
                                 newDividerTokenForLabel: function(label) { return _favDividerToken(label); },
@@ -16599,32 +14473,16 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                         try { outEntries = _favEnsureDefaultDividers(outEntries); } catch (eFavDivSave) {}
                         favSave(outEntries);
                         favRebuildDropdown();
-                        try { _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 900, padW: 44 }); } catch (eFit2) {}
-
                         try {
                             var __wsName = String((pal && pal.__stCurrentWorkspaceName) ? pal.__stCurrentWorkspaceName : "");
                             if (__wsName && typeof _stSaveWorkspaceByName === "function") _stSaveWorkspaceByName(__wsName);
                         } catch (eWSSave) {}
                     };
-                    var _favReorderMouse = function(){
-                        var ks = null; try { ks = ScriptUI.environment.keyboardState; } catch (eKSF) {}
-                        if (ks && ks.altKey) { _openFavReorder(); }
-                    };
-                    favStar.addEventListener("mousedown", _favReorderMouse);
-                    favLbl.addEventListener("mousedown", _favReorderMouse);
+                    ST.UI.Organize.attachOptionOpen([favStar, favLbl], _openFavReorder);
                 } catch (eFavReorder) {}
 
-                // Keep the popup list tight to content (no excessive empty space on the right)
-                _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 520, padW: 44 });
-                try {
-                    favDD.onActivate = function () {
-                        try { ST.UI.Dropdown.markInteraction(favDD, 5000); } catch (eMarkFav) {}
-                        _fitDropdownPopupToContent(favDD, { minW: 160, maxW: 520, padW: 44 });
-                    };
-                    favDD.onMouseDown = favDD.onActivate; // some builds fire mouse down earlier than activate
-                } catch (ePop) {}
-
                 (favAddBtn.__button || favAddBtn).onClick = function () {
+
                     if (!requireProject()) return;
 
                     var ks = null;
@@ -16639,14 +14497,28 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                     if (!(picked instanceof Array)) picked = [picked];
 
                     // Add to list (no import on normal click)
+                    var addedCount = 0;
+                    var beforeFavPaths = {};
+                    try {
+                        var beforeFavs = favLoad() || [];
+                        for (var bi = 0; bi < beforeFavs.length; bi++) {
+                            var beforePath = _favEntryPath(beforeFavs[bi]);
+                            if (beforePath) beforeFavPaths[String(beforePath)] = true;
+                        }
+                    } catch (eBeforeFavs) {}
+
                     for (var i = 0; i < picked.length; i++) {
                         var f = picked[i];
                         if (!f || !f.exists) continue;
-                        favAddPath(f.fsName);
+                        var favPath = String(f.fsName || "");
+                        if (!favPath) continue;
+                        favAddPath(favPath);
+                        try { if (!beforeFavPaths[favPath]) { addedCount++; beforeFavPaths[favPath] = true; } } catch (eCountFav) {}
                     }
+
                     favRebuildDropdown();
-                    try { relayout(); } catch (eRLAdded0) {}
-                    try { _ddFlashAddedFrames(favDD, 26, favRebuildDropdown); } catch(eMsg) {}
+                    // Rebuild the list and update the existing status label without forcing a relayout.
+                    try { _stSetAddStatusLabel(favDDHdr, addedCount, "file", favDDHdrDefaultText); } catch(eStatusFav) {}
                     // Cmd+click = add to list AND import into bin + active comp timeline.
                     if (doImport) {
                         for (var j = 0; j < picked.length; j++) {
@@ -16657,69 +14529,48 @@ try { ST.UI.createAccordion = createAccordion; } catch (e) {}
                     }
 
                     try { favAddBtn.visible = true; favAddBtn.enabled = true; } catch (eV) {}
-                    // Do not relayout after the flash is shown; a layout pass here can repaint
-                    // the closed dropdown back to blank before the 30-frame message is visible.
                 };
 
                 favDD.onChange = function () {
+                    if (!_stDropdownBeginChange(favDD)) return;
                     try {
-                        try {
-                            if (favDD.__stShowingAddedFlash === true) return;
-                            if (favDD.__stSuppressOnChangeUntil && (new Date()).getTime() < favDD.__stSuppressOnChangeUntil) return;
-                        } catch (eFavFlashGuard) {}
-                        if (favDD.__shineProgrammatic) {
-                            favDD.__shineProgrammatic = false;
-                            return;
-                        }
                         if (!favDD.selection) return;
-
                         var item = favDD.selection;
 
-                        // Cmd+click (modified selection) removes the item from the list.
                         if (item && item._path && _isCmdDown()) {
                             try {
                                 favRemovePath(item._path);
                                 favRebuildDropdown();
-                                relayout();
                             } catch (eR) {}
-                            ST.UI.Dropdown.reset(favDD, 1);
                             return;
                         }
-                        if (item && item._isBlank) {
-                            ST.UI.Dropdown.reset(favDD, 1);
-                            return;
-                        }
-                        var choice = item.text;
-
-                        if (choice === "(No files)") { ST.UI.Dropdown.reset(favDD, 1); return; }
-
-                        if (choice === FAV_ACTION_CLEAR) {
+                        if (item && (item._isBlank || item._isDivider)) return;
+                        if (item && item.__action === "clear") {
                             favClear();
                             favRebuildDropdown();
-                            relayout();
-                            ST.UI.Dropdown.reset(favDD, 1);
                             return;
                         }
 
-                        var path = String(item._path || "");
-                        if (!path) {
-                            ST.UI.Dropdown.reset(favDD, 1);
-                            return;
-                        }
+                        var path = String((item && item._path) || "");
+                        if (!path) return;
 
                         var fileObj = new File(path);
                         if (!fileObj.exists) {
                             alert("This file can’t be found:\n" + path + "\n\nIt will stay in Favorites until you Clear Favorites.");
-                            ST.UI.Dropdown.reset(favDD, 1);
                             return;
                         }
 
-                        try { favImportToBinAndTimeline(fileObj); } catch (eFavImp) {
+                        try {
+                            favImportToBinAndTimeline(fileObj);
+                        } catch (eFavImp) {
                             try { alert("Favorite import failed:\n" + eFavImp.toString()); } catch (eFavImp2) {}
                         }
-                        ST.UI.Dropdown.reset(favDD, 1);
+                        // Keep the selected item visible after import; resetting selection inside
+                        // this callback previously contributed to ScriptUI re-entry problems.
                     } catch (eFavSel) {
                         try { alert("Favorites dropdown error:\n" + eFavSel.toString()); } catch (eFavSel2) {}
+                    } finally {
+                        _stDropdownEndChange(favDD);
                     }
                 };
 
@@ -16830,8 +14681,8 @@ mainAcc.defineSection("CLEAN UP", function(body){
 
 mainAcc.defineSection("RENDER", function(body){
     addGrid2(body, [
-        { text: "PRORES 422", onClick: function () { renderPRORES422WithSaveDialog(false, false); },
-  helpTip: "Save + auto-render ProRes 422." },
+        { text: "PRORES 422", onClick: function () { renderPRORES422(_isOptDown()); },
+  helpTip: "Click: choose output and render ProRes 422. Option-click: add to Render Queue only (no save dialog)." },
         {
             text: "FRAME AS .PSD",
             onClick: function () { saveCurrentFramePSDOrJPG(true); },
@@ -16871,8 +14722,6 @@ var collapseGap = content.add("group");
             } catch (eDock) {}
             try { $.global.__ShineToolsClosing__ = true; } catch (e0) {}
             try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (e0a) {}
-            try { if (__resizeTask) app.cancelTask(__resizeTask); } catch (e1) {}
-            try { if (_stHoverTaskId !== null) app.cancelTask(_stHoverTaskId); } catch (e4) {}
             try { $.global.__ShineTools_pal = null; } catch (e6) {}
             try { $.global.__ShineToolsInitialized = false; } catch (e7) {}
         }
@@ -16880,71 +14729,16 @@ var collapseGap = content.add("group");
         // --------------------------------------------------
         // Resize / relayout (optimized + stable)
         // --------------------------------------------------
-        // ScriptUI can flicker if we call layout(true) repeatedly while dragging.
-        // Strategy:
-        //   - onResizing: lightweight resize() only (fast)
-        //   - onResize:   one debounced full layout(true) pass after mouse-up (stabilizes bounds)
-        var __resizeTask = 0;
-        var __RESIZE_TICK_FN = "__ShineTools_FullRelayoutTick__";
-
-        function _cancelResizeTask() {
-            if (__resizeTask) {
-                try { app.cancelTask(__resizeTask); } catch (e0) {}
-                __resizeTask = 0;
-            }
-        }
-
-        function _clampAllDropdowns() {
-            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeDD0) { return; }
-            try {
-                var dds = $.global.__ShineToolsAllDropdowns;
-                if (dds && dds.length) {
-                    for (var di = 0; di < dds.length; di++) {
-                        _applyDropdownLabelClamp(dds[di]);
-                    }
-                }
-            } catch (eDD) {}
-        }
-
-        var __lastLiveResizeMs = 0;
-        var __LIVE_RESIZE_INTERVAL_MS = 120;
-
-        function _stNowMsLocal() {
-            try { return (new Date()).getTime(); } catch (eNow) {}
-            return 0;
-        }
-
-        $.global[__RESIZE_TICK_FN] = function () {
-            __resizeTask = 0;
-            try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagResize) { return; }
-            try { if ($.global.__ShineToolsClosing__ === true) return; } catch (ePC5) {}
-            try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeResize) { return; }
-            try { pal.layout.layout(true); } catch (e1) {}
-            try { __stCenterLogoHeaders(); } catch (e1a) {}
-            try { pal.layout.resize(); } catch (e2) {}
-            try { __stCenterLogoHeaders(); } catch (e2a) {}
-            _clampAllDropdowns();
-            try { if (pal && pal.update) pal.update(); } catch (e3) {}
-        };
-
         function requestFullRelayoutSoon() {
-            try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagFull) { return; }
             try { if ($.global.__ShineToolsClosing__ === true) return; } catch (e0) {}
             try { if ($.global.__ST_isSafeToTouchUI__ && !$.global.__ST_isSafeToTouchUI__()) return; } catch (eSafeFull) { return; }
             try { if (pal && pal.layout) pal.layout.resize(); } catch (e5) {}
             try { __stCenterLogoHeaders(); } catch (e6) {}
-            try { _clampAllDropdowns(); } catch (e7) {}
             try { if (pal && pal.update) pal.update(); } catch (e8) {}
         }
 
         // Expose relayout request so long operations can refresh UI after blocking calls (render, etc.)
         try { $.global.__ShineTools_RequestFullRelayoutSoon__ = requestFullRelayoutSoon; } catch (eExp) {}
-
-        var __lastLiveResizeW = -1;
-        var __lastLiveResizeH = -1;
-        var __stLiveResizeChromeFrozen = false;
-        var __stLiveResizeFrozenCtrls = [];
-
         function __stCenterLogoHeaders() {
             try {
                 var arr = $.global.__ShineToolsLogoHeaders;
@@ -16977,64 +14771,9 @@ var collapseGap = content.add("group");
 
         try { $.global.__ShineToolsCenterLogoHeaders__ = __stCenterLogoHeaders; } catch (eExpLogo) {}
 
-        function __stFreezeCtrlSize(ctrl) {
-            try {
-                if (!ctrl || ctrl.__stFrozenByLiveResize) return;
-                var w = 0, h = 0;
-                try {
-                    if (ctrl.size) { w = ctrl.size[0]; h = ctrl.size[1]; }
-                    if ((!w && w !== 0) || (!h && h !== 0)) {
-                        w = ctrl.bounds[2] - ctrl.bounds[0];
-                        h = ctrl.bounds[3] - ctrl.bounds[1];
-                    }
-                } catch (eB) {}
-                if (w <= 0 || h <= 0) return;
-                ctrl.__stOldMinSize = ctrl.minimumSize;
-                ctrl.__stOldPrefSize = ctrl.preferredSize;
-                ctrl.__stOldMaxSize = ctrl.maximumSize;
-                try { ctrl.minimumSize = [w, h]; } catch (e0) {}
-                try { ctrl.preferredSize = [w, h]; } catch (e1) {}
-                try { ctrl.maximumSize = [w, h]; } catch (e2) {}
-                ctrl.__stFrozenByLiveResize = true;
-                __stLiveResizeFrozenCtrls.push(ctrl);
-            } catch (e) {}
-        }
-
-        function __stFreezeLiveResizeChrome() {
-            if (__stLiveResizeChromeFrozen) return;
-            __stLiveResizeChromeFrozen = true;
-            __stLiveResizeFrozenCtrls = [];
-            try { __stFreezeCtrlSize(tabBarLeft); } catch (e0) {}
-            try { __stFreezeCtrlSize(tabBarRight); } catch (e1) {}
-            try { __stFreezeCtrlSize(tabLblMain); } catch (e2) {}
-            try { __stFreezeCtrlSize(tabLblText); } catch (e3) {}
-            try { __stFreezeCtrlSize(tabLblRequests); } catch (e4) {}
-            try { __stFreezeCtrlSize(tabLblUpdates); } catch (e5) {}
-            try { __stFreezeCtrlSize(tabLblHelp); } catch (e6) {}
-            try { __stFreezeCtrlSize(wsMgrBackBtn); } catch (e9) {}
-            try { __stFreezeCtrlSize(wsMgrTitle); } catch (e10) {}
-        }
-
-        function __stUnfreezeLiveResizeChrome() {
-            var arr = __stLiveResizeFrozenCtrls || [];
-            for (var i = 0; i < arr.length; i++) {
-                var ctrl = arr[i];
-                try {
-                    if (!ctrl) continue;
-                    try { if (ctrl.__stOldMinSize !== undefined) ctrl.minimumSize = ctrl.__stOldMinSize; } catch (e0) {}
-                    try { if (ctrl.__stOldPrefSize !== undefined) ctrl.preferredSize = ctrl.__stOldPrefSize; } catch (e1) {}
-                    try { if (ctrl.__stOldMaxSize !== undefined) ctrl.maximumSize = ctrl.__stOldMaxSize; } catch (e2) {}
-                    try { ctrl.__stFrozenByLiveResize = false; } catch (e3) {}
-                } catch (e) {}
-            }
-            __stLiveResizeFrozenCtrls = [];
-            __stLiveResizeChromeFrozen = false;
-        }
 
         pal.onResizing = function () {
-            _cancelResizeTask();
             try { $.global.__ShineToolsIsLiveResizing__ = true; } catch (eFlag0) {}
-            try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagResizeA) { return; }
             try { if (pal && pal.layout) pal.layout.resize(); } catch (e0) {}
             try { __stCenterLogoHeaders(); } catch (e0a) {}
             try { if (pal && pal.update) pal.update(); } catch (e1) {}
@@ -17042,14 +14781,8 @@ var collapseGap = content.add("group");
 
         pal.onResize = function () {
             try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (eFlag1) {}
-            __lastLiveResizeW = -1;
-            __lastLiveResizeH = -1;
-            __lastLiveResizeMs = 0;
-            try { if ($.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ === true) return; } catch (eDiagResizeB) { return; }
-
             try { if (pal && pal.layout) pal.layout.resize(); } catch (e0) {}
             try { __stCenterLogoHeaders(); } catch (e1) {}
-            try { _clampAllDropdowns(); } catch (e2) {}
             try { if (pal && pal.update) pal.update(); } catch (e3) {}
         };
 
@@ -17061,11 +14794,7 @@ var collapseGap = content.add("group");
                 try { names = _stListWorkspaceNames() || []; } catch (eNames) { names = []; }
 
                 if (!names || !names.length) {
-                    try { pal.__stCurrentWorkspaceName = ""; } catch (e0a) {}
-                    try { pal.__stPendingWorkspaceName = ""; } catch (e0b) {}
-                    try { pal.__stStartupAppliedWorkspaceName = ""; } catch (e0c) {}
-                    try { pal.__stWorkspaceStatusName = ""; } catch (e0d) {}
-                    try { _stWriteLastUsedWorkspaceName(""); } catch (e0e) {}
+                    try { _stSetWorkspaceNameState("", { persist: true }); } catch (e0a) {}
                     try { _updateWorkspaceStatusLabel(); } catch (e0f) {}
                     return;
                 }
@@ -17097,9 +14826,8 @@ var collapseGap = content.add("group");
         relayout();
         try { __stCenterLogoHeaders(); } catch (eCen0) {}
                 try { _applyDefaultHelpTips(pal); } catch(eTT) {}
-        try { _updateWorkspaceStatusLabel(); } catch (eStat0) {}
-        try { if (pal.layout) pal.layout.layout(true); } catch (eStat1) {}
-        try { _updateWorkspaceStatusLabel(); } catch (eStat2) {}
+        // Avoid duplicate startup status relayouts; update the label text only after the initial relayout.
+        try { _updateWorkspaceStatusLabel({ suppressLayout: true }); } catch (eStat0) {}
 
         return pal;
     }
@@ -17110,36 +14838,10 @@ var collapseGap = content.add("group");
     var myPal = buildUI(thisObj);
 
     // ------------------------------------------------------------
-    // DEV SANITY CHECKS (no user-facing behavior changes)
-    // Helps catch missing helpers after refactors when ST.DEBUG = true.
-    // ------------------------------------------------------------
-    function ST_DEBUG_VALIDATE_SYNTAX() {
-        try {
-            var missing = [];
-            if (typeof isSolidFootageSafe !== "function") missing.push("isSolidFootageSafe");
-            if (typeof isSolidFootageItem !== "function") missing.push("isSolidFootageItem");
-            if (typeof _stGetOrCreateCanonicalSolidsFolderRoot !== "function") missing.push("_stGetOrCreateCanonicalSolidsFolderRoot");
-            if (typeof _stGetSharedRootFolder !== "function") missing.push("_stGetSharedRootFolder");
-            if (typeof _stFrameOffset_addFocusSink !== "function") missing.push("_stFrameOffset_addFocusSink");
-            if (typeof _stFrameOffset_defocus !== "function") missing.push("_stFrameOffset_defocus");
-            if (missing.length) {
-                try { $.writeln("[ShineTools][DEBUG] Missing helpers: " + missing.join(", ")); } catch (e0) {}
-            } else {
-                try { $.writeln("[ShineTools][DEBUG] Sanity check OK"); } catch (e1) {}
-            }
-        } catch (e) {
-            try { $.writeln("[ShineTools][DEBUG] Sanity check error: " + e.toString()); } catch (e2) {}
-        }
-    }
-
-    try { if (ST && ST.DEBUG === true) ST_DEBUG_VALIDATE_SYNTAX(); } catch (eDbg) {}
-
-    // ------------------------------------------------------------
     // Launch startup check: AE File/Network scripting permission only.
-    // 2026-05-05: Restored ONLY the check for:
+    // Check only:
     //   Preferences > Scripting & Expressions > Allow Scripts to Write Files and Access Network
-    // Kept removed: setup takeover panel, Modern JS launch check, write-permission probe cleanup,
-    // temp test-solid cleanup, and any resize hooks / delayed layout tasks.
+    // No setup takeover panel, launch-time network check, resize hook, or delayed layout task is used.
     // ------------------------------------------------------------
     function _stIsFileNetworkAccessAllowedAtLaunch() {
         try {
@@ -17273,38 +14975,12 @@ var collapseGap = content.add("group");
         }
     } catch (eLaunchNetworkCheck) {}
 
-// Expose pal globally, but disable startup force-relayout behavior for this stability test.
-// 2026-05-05: The remaining reported freeze appears to happen during AE/ShineTools startup.
-// For this build, do NOT perform the old startup "kick" layout pass and do NOT queue the
-// delayed docked-panel post-paint settle scheduleTask. Render/modal safety gates remain intact.
+// Publish the live panel reference for guarded host-state checks.
 try { $.global.__ShineTools_pal = myPal; } catch (e0) {}
 try { $.global.__ShineToolsClosing__ = false; } catch (e0a) {}
 try { $.global.__ShineToolsIsLiveResizing__ = false; } catch (e0aa) {}
 
 try { $.global.__ShineToolsInitialized = true; } catch (e0b) {}
-try {
-    $.global.__ShineToolsKickLayout = function () {
-        // Disabled intentionally for STARTUP_RELAYOUT_DISABLED_TEST_2026-05-05.
-        return;
-    };
-} catch (e6) {}
-
-// Startup/docked layout settle disabled for stability test.
-// Keep the globals defined as no-ops so older calls safely do nothing instead of queuing UI work.
-try {
-    try { if ($.global.__ShineToolsLayoutSettleTask__) app.cancelTask($.global.__ShineToolsLayoutSettleTask__); } catch (eCancelOldSettle) {}
-    $.global.__ShineToolsLayoutSettleTask__ = 0;
-    $.global.__ShineToolsDockedLayoutSettle__ = function () {
-        try { $.global.__ShineToolsLayoutSettleTask__ = 0; } catch (eT0) {}
-        return;
-    };
-    $.global.__ShineToolsQueueLayoutSettle__ = function (delayMs) {
-        try { if ($.global.__ShineToolsLayoutSettleTask__) app.cancelTask($.global.__ShineToolsLayoutSettleTask__); } catch (e1) {}
-        try { $.global.__ShineToolsLayoutSettleTask__ = 0; } catch (e2) {}
-        return;
-    };
-} catch (eSettleDef) {}
-
 try {
     if (myPal instanceof Window) {
         myPal.onClose = _stPanelCloseCleanup;
@@ -17318,13 +14994,8 @@ try {
 if (myPal instanceof Window) {
     myPal.center();
     myPal.show();
-
-    // Startup force-relayout disabled for stability test.
-} else {
-    // Docked startup force-relayout and delayed post-paint settle disabled for stability test.
 }
 
-try { $.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ = false; } catch (eRelayoutBypass) {}
 
 // Robust host-panel resolution (prevents "Object is invalid" when stale Panel refs exist)
 })( (function(){
@@ -17338,12 +15009,3 @@ try { $.global.__ST_NO_FORCE_RELAYOUT_DIAG_ACTIVE__ = false; } catch (eRelayoutB
     return this;
 })() );
 
-function _updateWorkspaceManagerLoadedStatus(name) {
-    try {
-        var nm = String(name || "").replace(/^\s+|\s+$/g, "");
-        if (!nm) return;
-        if (pal.__stWorkspaceManagerStatusLabel) {
-            pal.__stWorkspaceManagerStatusLabel.text = "Loaded Workspace: " + nm;
-        }
-    } catch (e) {}
-}
