@@ -3,6 +3,11 @@
   "jsxUrl": "https://raw.githubusercontent.com/ShineTools1333/ShineTools/main/ShineTools_Main.jsx",
 
   "changelog": {
+    "v1.2": [
+      "Fixed panel freeze!",
+      "Removed REQUESTS tab.",
+      "Bug fixes."
+    ],
     "v1.1": [
       "Added new Save Workspace/Favorites Manager.",
       "Added new Organize Library Elements dialog with custom section dividers, custom filenames, and reordering.",
